@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Invoice Ingester, Plan and Spec</title>
+<style>
+:root{
+  --bg:#f6f5f2; --panel:#fff; --ink:#15150f; --muted:#6b6b60; --line:#dedcd4;
+  --accent:#1f5c3d; --accent-soft:#e6efe9; --warn:#8a5a00; --warn-soft:#fdf3e0;
+  --wire:#f0efeb; --wire-line:#c9c7bd; --wire-fill:#e2e0d8;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --sans:ui-sans-serif,system-ui,"Segoe UI",Inter,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#131310; --panel:#1c1c18; --ink:#eceae2; --muted:#9a998c; --line:#2f2f29;
+    --accent:#6fc79a; --accent-soft:#1b2a22; --warn:#e0b45f; --warn-soft:#2b2317;
+    --wire:#232320; --wire-line:#3d3d36; --wire-fill:#2c2c27;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+  font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1000px;margin:0 auto;padding:0 20px 120px}
+header.top{padding:72px 0 40px;border-bottom:1px solid var(--line);margin-bottom:56px}
+h1{font-size:clamp(32px,5.5vw,52px);line-height:1.05;margin:0 0 16px;letter-spacing:-.025em;font-weight:660}
+.sub{font-size:19px;color:var(--muted);max-width:62ch;margin:0}
+.meta{margin-top:28px;font-family:var(--mono);font-size:12.5px;color:var(--muted);
+  display:flex;gap:10px;flex-wrap:wrap}
+.meta span{background:var(--panel);border:1px solid var(--line);padding:4px 10px;border-radius:20px}
+h2{font-size:15px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;
+  color:var(--accent);margin:72px 0 6px;font-weight:600}
+h2 .n{color:var(--muted);margin-right:10px}
+h2+.lede{font-size:26px;letter-spacing:-.015em;line-height:1.3;margin:0 0 28px;
+  font-weight:600;max-width:34ch}
+h3{font-size:18px;margin:40px 0 10px;letter-spacing:-.01em}
+h4{font-size:14px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.07em;
+  color:var(--muted);margin:28px 0 10px;font-weight:600}
+p{margin:0 0 16px;max-width:70ch}
+ul,ol{max-width:70ch;padding-left:22px;margin:0 0 16px}
+li{margin-bottom:7px}
+code{font-family:var(--mono);font-size:.87em;background:var(--wire);
+  padding:2px 6px;border-radius:4px;border:1px solid var(--line)}
+a{color:var(--accent)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:26px 28px;margin:24px 0}
+.callout{background:var(--accent-soft);border:1px solid transparent;
+  border-left:3px solid var(--accent);border-radius:8px;padding:18px 22px;margin:24px 0}
+.callout.warn{background:var(--warn-soft);border-left-color:var(--warn)}
+.callout p:last-child{margin-bottom:0}
+.callout .lbl{font-family:var(--mono);font-size:11px;text-transform:uppercase;
+  letter-spacing:.09em;color:var(--accent);display:block;margin-bottom:7px;font-weight:600}
+.callout.warn .lbl{color:var(--warn)}
+.grid{display:grid;gap:16px;margin:24px 0}
+.g2{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px}
+.card h5{margin:0 0 8px;font-size:15px}
+.card p{font-size:14.5px;color:var(--muted);margin:0}
+.scroll{overflow-x:auto;margin:24px 0;-webkit-overflow-scrolling:touch}
+table{border-collapse:collapse;width:100%;font-size:14.5px;min-width:520px}
+th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--mono);font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;
+  color:var(--muted);font-weight:600;border-bottom-width:2px}
+tbody tr:last-child td{border-bottom:none}
+pre{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:20px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.6;margin:20px 0}
+pre code{background:none;border:none;padding:0;font-size:inherit}
+svg{max-width:100%;height:auto;display:block}
+.figure{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:26px 20px;margin:26px 0;overflow-x:auto}
+.figure .cap{font-family:var(--mono);font-size:11.5px;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.08em;margin-bottom:20px;padding:0 6px}
+
+/* wireframes */
+.wf{background:var(--wire);border:1px solid var(--wire-line);border-radius:10px;
+  padding:0;margin:22px 0;overflow:hidden;font-family:var(--mono);font-size:12px}
+.wf-bar{background:var(--wire-fill);border-bottom:1px solid var(--wire-line);
+  padding:9px 14px;display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted)}
+.wf-bar .dot{width:9px;height:9px;border-radius:50%;background:var(--wire-line);flex:none}
+.wf-bar .t{margin-left:6px;color:var(--ink);font-weight:600}
+.wf-body{padding:18px}
+.wf-row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+.wf-row>*{min-width:0}
+.wf-col{flex:1 1 240px}
+.box{border:1px solid var(--wire-line);border-radius:6px;padding:12px;background:var(--panel);margin-bottom:10px}
+.box.dash{border-style:dashed}
+.box.solidfill{background:var(--wire-fill)}
+.lbl-sm{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);
+  margin-bottom:7px;display:block}
+.fld{border:1px solid var(--wire-line);border-radius:4px;padding:7px 9px;background:var(--bg);
+  margin-bottom:8px;display:flex;justify-content:space-between;gap:10px;align-items:center}
+.fld .v{color:var(--ink)}
+.fld .k{color:var(--muted);font-size:11px}
+.btn{display:inline-block;border:1px solid var(--wire-line);border-radius:5px;
+  padding:7px 14px;background:var(--wire-fill);font-size:11.5px;margin:2px 6px 2px 0}
+.btn.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
+@media (prefers-color-scheme:dark){.btn.pri{color:#0f1a14}}
+.chip{display:inline-block;font-size:10px;padding:2px 8px;border-radius:20px;
+  background:var(--accent-soft);color:var(--accent);border:1px solid currentColor;
+  letter-spacing:.04em;text-transform:uppercase;font-weight:600}
+.chip.w{background:var(--warn-soft);color:var(--warn)}
+.chip.n{background:var(--wire-fill);color:var(--muted);border-color:var(--wire-line)}
+.ghost{height:9px;background:var(--wire-fill);border-radius:3px;margin-bottom:7px}
+.ghost.s{width:45%}.ghost.m{width:70%}.ghost.l{width:92%}
+.doc-stub{background:var(--wire-fill);border:1px dashed var(--wire-line);border-radius:6px;
+  min-height:190px;display:flex;align-items:center;justify-content:center;
+  color:var(--muted);font-size:11px;text-align:center;padding:14px}
+
+/* issue board */
+.epic{border:1px solid var(--line);border-radius:12px;margin:18px 0;overflow:hidden;background:var(--panel)}
+.epic-h{padding:14px 20px;background:var(--wire);border-bottom:1px solid var(--line);
+  display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.epic-h .name{font-family:var(--mono);font-size:13px;font-weight:600}
+.epic-h .cnt{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.issues{list-style:none;padding:0;margin:0;max-width:none}
+.issues li{display:flex;gap:14px;padding:11px 20px;border-bottom:1px solid var(--line);
+  align-items:baseline;margin:0;font-size:14.5px}
+.issues li:last-child{border-bottom:none}
+.issues .id{font-family:var(--mono);font-size:11.5px;color:var(--muted);flex:none;width:34px;padding-top:2px}
+.issues .txt{flex:1}
+.issues .txt em{display:block;font-style:normal;font-size:13px;color:var(--muted);margin-top:2px}
+hr{border:none;border-top:1px solid var(--line);margin:56px 0}
+.foot{margin-top:72px;padding-top:28px;border-top:1px solid var(--line);
+  font-size:13.5px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <h1>Invoice Ingester</h1>
+  <p class="sub">Drop in an invoice, get the particulars extracted and stored, then search what you paid for a thing and what you paid a vendor in total. Plan, spec and wireframes for version one.</p>
+  <div class="meta">
+    <span>17 Sep 2026</span>
+    <span>Product 2 of 4</span>
+    <span>v1 scope, contracts deferred</span>
+    <span>26 issues across 7 epics</span>
+  </div>
+</header>
+
+<!-- ======================= 01 ======================= -->
+<h2><span class="n">01</span>Why this shape</h2>
+<p class="lede">Read this part once, then work from the board.</p>
+
+<p>This document is the stable half of the project. It says what gets built and why, and it should barely change once you approve it. The moving half lives on a GitHub Projects board, where each issue below becomes a card that changes state daily.</p>
+
+<p>Keeping those two separate is the point. A plan file has no state. You cannot mark a paragraph done, cannot see what is blocked, and nothing connects a sentence to the commit that implemented it. That is the gap you felt when you asked the question. The fix is not a longer document, it is a document plus a tracker, each doing the job it is good at.</p>
+
+<div class="grid g2">
+  <div class="card">
+    <h5>This file answers</h5>
+    <p>What are we building, what is the data model, what do the screens look like, what is deliberately left out. Written once, read whole, revised rarely.</p>
+  </div>
+  <div class="card">
+    <h5>The board answers</h5>
+    <p>What is the state of each piece right now, what is blocked, what is next. Never read whole, changes every day.</p>
+  </div>
+</div>
+
+<h3>How people run products with many features</h3>
+<p>The pattern is consistent across teams and it has three layers:</p>
+
+<div class="figure">
+  <div class="cap">Figure 1, the three layers</div>
+  <svg viewBox="0 0 860 260" role="img" aria-label="Three layers: spec, epics, issues">
+    <defs>
+      <marker id="ar" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+        <path d="M0,0 L9,4.5 L0,9 z" fill="currentColor"/>
+      </marker>
+    </defs>
+    <g fill="none" stroke="currentColor" stroke-width="1.4" opacity=".55" color="currentColor">
+      <line x1="200" y1="62" x2="252" y2="62" marker-end="url(#ar)"/>
+      <line x1="520" y1="62" x2="572" y2="62" marker-end="url(#ar)"/>
+    </g>
+    <g font-family="ui-monospace,monospace" font-size="12.5">
+      <rect x="10" y="30" width="188" height="66" rx="8" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="26" y="58" fill="currentColor" font-weight="600">SPEC</text>
+      <text x="26" y="78" fill="currentColor" opacity=".65" font-size="11">1 document</text>
+
+      <rect x="256" y="30" width="260" height="66" rx="8" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="274" y="58" fill="currentColor" font-weight="600">EPICS</text>
+      <text x="274" y="78" fill="currentColor" opacity=".65" font-size="11">7 labels, one theme each</text>
+
+      <rect x="576" y="30" width="274" height="66" rx="8" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="594" y="58" fill="currentColor" font-weight="600">ISSUES</text>
+      <text x="594" y="78" fill="currentColor" opacity=".65" font-size="11">26 cards, one day of work each</text>
+
+      <text x="26" y="142" fill="currentColor" opacity=".8" font-size="12">Why we are building it,</text>
+      <text x="26" y="160" fill="currentColor" opacity=".8" font-size="12">and the data model.</text>
+      <text x="26" y="178" fill="currentColor" opacity=".55" font-size="11">Changes rarely.</text>
+
+      <text x="274" y="142" fill="currentColor" opacity=".8" font-size="12">Groups the work so you can</text>
+      <text x="274" y="160" fill="currentColor" opacity=".8" font-size="12">see a whole area at once.</text>
+      <text x="274" y="178" fill="currentColor" opacity=".55" font-size="11">Changes when scope changes.</text>
+
+      <text x="594" y="142" fill="currentColor" opacity=".8" font-size="12">The actual unit of work.</text>
+      <text x="594" y="160" fill="currentColor" opacity=".8" font-size="12">Closed by a commit or PR.</text>
+      <text x="594" y="178" fill="currentColor" opacity=".55" font-size="11">Changes daily.</text>
+
+      <rect x="10" y="205" width="840" height="44" rx="8" fill="currentColor" opacity=".05"/>
+      <text x="26" y="232" fill="currentColor" opacity=".75" font-size="12">Board columns: Backlog, Ready, In progress, Done. A card only moves right when something real happened.</text>
+    </g>
+  </svg>
+</div>
+
+<p>Big teams add more ceremony on top, such as quarterly planning documents and RFCs per subsystem, but the three layers are the core and they work the same at one person as at fifty.</p>
+
+<h4>Why GitHub Projects over Linear or Notion</h4>
+<div class="scroll">
+<table>
+<thead><tr><th>Factor</th><th>GitHub Projects</th><th>Linear</th><th>Notion board</th></tr></thead>
+<tbody>
+<tr><td>Cost</td><td>Free, public</td><td>Free tier, private</td><td>Already paid</td></tr>
+<tr><td>Links to code</td><td>Issues close from commits and PRs</td><td>Needs integration setup</td><td>None</td></tr>
+<tr><td>A recruiter can see it</td><td>Yes</td><td>No</td><td>Only if shared</td></tr>
+<tr><td>New tool to learn</td><td>No</td><td>Yes</td><td>No</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="callout">
+  <span class="lbl">The reason this matters beyond convenience</span>
+  <p>A public repo with a real board is itself the portfolio artifact. Epics broken into sensible issues, a done column full of closed issues linked to their PRs, and a spec that matches what shipped. Nobody evaluates a product manager by reading a plan document. They look at whether the work was decomposed sensibly and whether it got finished. Linear is the nicer tool to work in day to day, but it is invisible, which loses half the value here.</p>
+</div>
+
+<!-- ======================= 02 ======================= -->
+<h2><span class="n">02</span>Decisions already made</h2>
+<p class="lede">Every one of these narrows the build. Worth a glance before the detail.</p>
+
+<div class="scroll">
+<table>
+<thead><tr><th>Question</th><th>Decision</th><th>What it rules out</th></tr></thead>
+<tbody>
+<tr><td>Contracts</td><td>Version 2, specced here but not built</td><td>Contract ingestion, term extraction, variance detection</td></tr>
+<tr><td>Users</td><td>Hosted on Vercel, single user, public read only</td><td>Sign up, accounts, per tenant queries</td></tr>
+<tr><td>Input</td><td>Drag and drop file upload, PDF and images</td><td>Inbound email, chat interface</td></tr>
+<tr><td>Extraction</td><td>Vision model with a strict output schema</td><td>Regex and template rules per vendor</td></tr>
+<tr><td>Provider</td><td>Claude API or OpenRouter, chosen in settings</td><td>Being locked to one vendor, or hardcoding a key</td></tr>
+<tr><td>Locale</td><td>India first, GST and GSTIN and rupees</td><td>Generic multi currency, which we cannot test</td></tr>
+<tr><td>Vendor identity</td><td>GSTIN as the key, name as fallback</td><td>Fuzzy matching vendors, which GSTIN makes unnecessary</td></tr>
+<tr><td>Item identity</td><td>Normalise, fuzzy match, you confirm the middle band</td><td>Silent automatic merging, manual only tagging</td></tr>
+<tr><td>Payoff</td><td>Price history per item, vendor spend totals</td><td>Alerts and anomaly flags, which are version 2</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>Stack</h3>
+<p>Next.js App Router on Vercel, Postgres on Neon through the Vercel integration, Vercel Blob for the original files, and the <code>pg_trgm</code> extension for item matching. Extraction goes through the Anthropic TypeScript SDK or the OpenRouter HTTP API depending on the setting.</p>
+
+<p>Item matching lives in Postgres rather than in application code. Trigram similarity is a built in index type, so the matching logic is a query with a threshold rather than a library and a scoring function. That is one less dependency and one fewer thing to get wrong.</p>
+
+<!-- ======================= 03 ======================= -->
+<h2><span class="n">03</span>Architecture</h2>
+<p class="lede">Four moving parts and one shared schema holding them together.</p>
+
+<div class="figure">
+  <div class="cap">Figure 2, request path for a single invoice</div>
+  <svg viewBox="0 0 880 400" role="img" aria-label="Architecture flow from upload through extraction to database">
+    <defs>
+      <marker id="ar2" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+        <path d="M0,0 L9,4.5 L0,9 z" fill="currentColor"/>
+      </marker>
+    </defs>
+    <g font-family="ui-monospace,monospace" font-size="12">
+
+      <rect x="10" y="20" width="150" height="54" rx="8" fill="currentColor" opacity=".06"/>
+      <rect x="10" y="20" width="150" height="54" rx="8" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="26" y="44" fill="currentColor" font-weight="600">Browser</text>
+      <text x="26" y="62" fill="currentColor" opacity=".6" font-size="10.5">drop a file</text>
+
+      <rect x="10" y="110" width="150" height="54" rx="8" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="26" y="134" fill="currentColor" font-weight="600">Vercel Blob</text>
+      <text x="26" y="152" fill="currentColor" opacity=".6" font-size="10.5">original kept</text>
+
+      <rect x="230" y="20" width="200" height="144" rx="8" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="248" y="44" fill="currentColor" font-weight="600">extract/index.ts</text>
+      <text x="248" y="64" fill="currentColor" opacity=".6" font-size="10.5">reads settings,</text>
+      <text x="248" y="80" fill="currentColor" opacity=".6" font-size="10.5">picks a provider,</text>
+      <text x="248" y="96" fill="currentColor" opacity=".6" font-size="10.5">returns one type</text>
+      <rect x="248" y="112" width="164" height="34" rx="5" fill="currentColor" opacity=".07"/>
+      <text x="260" y="133" fill="currentColor" opacity=".8" font-size="10.5">schema.ts, shared</text>
+
+      <rect x="500" y="14" width="180" height="50" rx="8" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="516" y="35" fill="currentColor" font-weight="600">anthropic.ts</text>
+      <text x="516" y="52" fill="currentColor" opacity=".6" font-size="10.5">claude-opus-5</text>
+
+      <rect x="500" y="80" width="180" height="50" rx="8" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="516" y="101" fill="currentColor" font-weight="600">openrouter.ts</text>
+      <text x="516" y="118" fill="currentColor" opacity=".6" font-size="10.5">model from settings</text>
+
+      <rect x="230" y="210" width="200" height="60" rx="8" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="248" y="234" fill="currentColor" font-weight="600">validate.ts</text>
+      <text x="248" y="252" fill="currentColor" opacity=".6" font-size="10.5">schema, then arithmetic</text>
+
+      <rect x="230" y="310" width="200" height="60" rx="8" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="248" y="334" fill="currentColor" font-weight="600">Review screen</text>
+      <text x="248" y="352" fill="currentColor" opacity=".6" font-size="10.5">you confirm or fix</text>
+
+      <rect x="500" y="310" width="180" height="60" rx="8" fill="currentColor" opacity=".06"/>
+      <rect x="500" y="310" width="180" height="60" rx="8" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="516" y="334" fill="currentColor" font-weight="600">Postgres</text>
+      <text x="516" y="352" fill="currentColor" opacity=".6" font-size="10.5">match, then save</text>
+
+      <rect x="720" y="210" width="150" height="60" rx="8" fill="none" stroke="currentColor" opacity=".3" stroke-dasharray="4 3"/>
+      <text x="736" y="234" fill="currentColor" opacity=".6" font-weight="600">Settings</text>
+      <text x="736" y="252" fill="currentColor" opacity=".45" font-size="10.5">keys, model, limits</text>
+
+      <g fill="none" stroke="currentColor" stroke-width="1.4" opacity=".5">
+        <line x1="85" y1="74" x2="85" y2="104" marker-end="url(#ar2)"/>
+        <line x1="160" y1="47" x2="224" y2="60" marker-end="url(#ar2)"/>
+        <line x1="430" y1="60" x2="494" y2="42" marker-end="url(#ar2)"/>
+        <line x1="430" y1="100" x2="494" y2="105" marker-end="url(#ar2)"/>
+        <line x1="330" y1="164" x2="330" y2="204" marker-end="url(#ar2)"/>
+        <line x1="330" y1="270" x2="330" y2="304" marker-end="url(#ar2)"/>
+        <line x1="430" y1="340" x2="494" y2="340" marker-end="url(#ar2)"/>
+        <path d="M795 210 L795 130 L688 105" stroke-dasharray="4 3" opacity=".35" marker-end="url(#ar2)"/>
+        <path d="M720 240 L440 240" stroke-dasharray="4 3" opacity=".35" marker-end="url(#ar2)"/>
+      </g>
+    </g>
+  </svg>
+</div>
+
+<p>The shape worth noticing: both providers are behind one function that returns one type, and everything downstream of <code>validate.ts</code> has no idea which model produced the data. Swapping providers cannot break the review screen, the matcher, or the database, because they never see a provider specific response.</p>
+
+<!-- ======================= 04 ======================= -->
+<h2><span class="n">04</span>Data model</h2>
+<p class="lede">Four tables. Two constraints do most of the safety work.</p>
+
+<pre><code>vendor
+  id              uuid pk
+  gstin           text unique nullable      -- real business identifier
+  name            text
+  normalized_name text
+  address         text nullable
+  created_at      timestamptz
+
+invoice
+  id              uuid pk
+  vendor_id       uuid fk -> vendor
+  invoice_number  text
+  invoice_date    date
+  subtotal        numeric(14,2)
+  cgst            numeric(14,2) default 0
+  sgst            numeric(14,2) default 0
+  igst            numeric(14,2) default 0
+  total           numeric(14,2)
+  blob_url        text
+  status          text  -- pending | needs_review | confirmed
+  extraction_meta jsonb -- provider, model, cost, raw response
+  created_at      timestamptz
+  UNIQUE (vendor_id, invoice_number)
+
+line_item
+  id               uuid pk
+  invoice_id       uuid fk -> invoice on delete cascade
+  raw_description  text          -- exactly as printed on the invoice
+  hsn_code         text nullable
+  quantity         numeric(12,3)
+  unit             text nullable
+  unit_price       numeric(14,4)
+  amount           numeric(14,2)
+  item_id          uuid fk -> item nullable    -- null until matched
+  match_confidence numeric(4,3) nullable
+
+item
+  id               uuid pk
+  canonical_name   text
+  normalized_name  text
+  created_at       timestamptz
+</code></pre>
+
+<div class="grid g2">
+  <div class="card">
+    <h5>UNIQUE (vendor_id, invoice_number)</h5>
+    <p>Upload the same invoice twice and the database refuses it. Duplicate detection is a constraint, not a feature you have to remember to build or a heuristic that gets it wrong.</p>
+  </div>
+  <div class="card">
+    <h5>line_item.item_id is nullable</h5>
+    <p>An unmatched line still saves. It just does not appear in price history yet. Nothing about ingestion ever waits on matching, which keeps the two flows independent.</p>
+  </div>
+</div>
+
+<p><code>raw_description</code> is never overwritten. Matching adds a link, it does not rewrite what the vendor actually printed. If a match turns out to be wrong later, unlinking restores the truth with nothing lost.</p>
+
+<p><code>extraction_meta</code> holds the provider, the model id, the token counts and the raw response. It costs nothing to store and it is the only way to answer questions like whether one model reads a particular vendor's layout better than another.</p>
+
+<!-- ======================= 05 ======================= -->
+<h2><span class="n">05</span>Extraction and the provider layer</h2>
+<p class="lede">One schema, two callers, no provider specific code past the boundary.</p>
+
+<p>Four files, and the last one is the only one either provider gets to disagree about:</p>
+
+<pre><code>lib/extract/schema.ts      the JSON schema plus a zod parse, shared by both
+lib/extract/anthropic.ts   Anthropic SDK, claude-opus-5, strict tool schema
+lib/extract/openrouter.ts  OpenRouter HTTP, response_format json_schema
+lib/extract/index.ts       reads settings, calls one of the two, returns one type
+</code></pre>
+
+<p>Both paths return the same object and both run through the same zod parse before anything touches the database. That is what keeps this cheap: adding the second provider is one file and a branch, not a second pipeline.</p>
+
+<h4>Claude path</h4>
+<p>Anthropic TypeScript SDK, model <code>claude-opus-5</code>, adaptive thinking, and a tool definition with <code>strict: true</code> so the returned arguments are guaranteed to validate against the schema. PDFs go as a document content block and images as an image block. Roughly two to four cents per invoice.</p>
+
+<h4>OpenRouter path</h4>
+<p>OpenAI compatible endpoint with <code>response_format</code> set to a json_schema, using the model id chosen in settings. Cost varies by model, which is most of the reason to have this option at all.</p>
+
+<h3>The model dropdown</h3>
+
+<div class="callout">
+  <span class="lbl">Checked before writing this</span>
+  <p>OpenRouter's <code>GET /api/v1/models</code> returns, for every model, an <code>architecture.input_modalities</code> array and a <code>supported_parameters</code> array. That means the app can work out which models can actually read an invoice and return structured JSON, rather than us maintaining a list by hand.</p>
+</div>
+
+<p>So the dropdown is built at runtime, not hardcoded:</p>
+
+<ol>
+  <li>Fetch the catalogue server side, cache it for 24 hours.</li>
+  <li>Keep only models whose <code>input_modalities</code> includes <code>image</code> and whose <code>supported_parameters</code> includes <code>structured_outputs</code>. Everything else would fail at extraction time with a confusing error.</li>
+  <li>Order by a short <code>RECOMMENDED</code> array in code, then by price for the rest.</li>
+  <li>Show the top ten. Two carry a Recommended badge and one line saying why.</li>
+</ol>
+
+<p>Why not a fixed top ten: model ids on OpenRouter change often, and a pinned list rots within weeks. A dead id in a dropdown does not fail when you pick it, it fails later when you upload, which is the worst place to find out. Filtering live means the list is always models that exist and can do the job. The only curated part is which two get the badge, which is one array to edit.</p>
+
+<div class="callout warn">
+  <span class="lbl">Known ceiling</span>
+  <p>If OpenRouter is unreachable the app falls back to the last cached list, and if there is no cache it says so and asks you to retry rather than showing an empty dropdown. The two recommended ids are matched by string, so if one is retired it simply loses its badge instead of breaking the page.</p>
+</div>
+
+<h3>Catching a bad extraction without reading every invoice</h3>
+<p>Two arithmetic checks run before anything saves:</p>
+<ol>
+  <li>Line item amounts sum to the subtotal.</li>
+  <li>Subtotal plus CGST plus SGST plus IGST equals the total.</li>
+</ol>
+<p>Both within a one rupee tolerance for rounding, which is configurable. Fail either and the invoice saves with status <code>needs_review</code> and the failing figures highlighted, instead of <code>confirmed</code>.</p>
+
+<p>This is the highest value code in the build relative to its size. A model that quietly invents a number is worse than one that fails loudly, because a wrong total flows straight into your spend figures and nothing ever tells you. Arithmetic catches that class of error for free, without a human checking every line.</p>
+
+<!-- ======================= 06 ======================= -->
+<h2><span class="n">06</span>Settings</h2>
+<p class="lede">Provider, keys, model, and the two thresholds that need real world tuning.</p>
+
+<div class="wf">
+  <div class="wf-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">Settings</span></div>
+  <div class="wf-body">
+
+    <div class="box">
+      <span class="lbl-sm">Extraction provider</span>
+      <div class="wf-row">
+        <div class="wf-col">
+          <div class="box solidfill" style="margin:0">
+            <div style="margin-bottom:6px">&#9679; Claude API &nbsp;<span class="chip n">direct</span></div>
+            <div style="color:var(--muted);font-size:11px">claude-opus-5, fixed</div>
+          </div>
+        </div>
+        <div class="wf-col">
+          <div class="box" style="margin:0">
+            <div style="margin-bottom:6px">&#9675; OpenRouter</div>
+            <div style="color:var(--muted);font-size:11px">choose a model below</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="box">
+      <span class="lbl-sm">API keys</span>
+      <div class="fld"><span class="k">Anthropic key</span><span class="v">sk-ant &#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226; 4f2a &nbsp;<span class="chip">saved</span></span></div>
+      <div class="fld"><span class="k">OpenRouter key</span><span class="v">not set</span></div>
+      <span class="btn">Replace key</span><span class="btn">Test connection</span>
+      <div style="color:var(--muted);font-size:11px;margin-top:8px">Stored encrypted. Never shown again after saving.</div>
+    </div>
+
+    <div class="box dash">
+      <span class="lbl-sm">OpenRouter model &nbsp;<span class="chip n">shown only when OpenRouter is selected</span></span>
+      <div class="fld"><span class="v">Model A</span><span class="k"><span class="chip">Recommended</span> best accuracy on dense tables</span></div>
+      <div class="fld"><span class="v">Model B</span><span class="k"><span class="chip">Recommended</span> a tenth the cost, close on clean invoices</span></div>
+      <div class="fld"><span class="v">Model C</span><span class="k">$0.0000012 in / $0.0000042 out</span></div>
+      <div class="fld"><span class="v">Model D</span><span class="k">$0.0000020 in / $0.0000060 out</span></div>
+      <div style="color:var(--muted);font-size:11px;margin-top:4px">
+        6 more. Filtered to models that accept images and return structured output. Refreshed daily.
+      </div>
+    </div>
+
+    <div class="wf-row">
+      <div class="wf-col">
+        <div class="box">
+          <span class="lbl-sm">Item matching</span>
+          <div class="fld"><span class="k">Link automatically above</span><span class="v">0.85</span></div>
+          <div class="fld"><span class="k">Suggest above</span><span class="v">0.60</span></div>
+          <div style="color:var(--muted);font-size:11px">Lower the first number and more lines link by themselves, with more mistakes to undo.</div>
+        </div>
+      </div>
+      <div class="wf-col">
+        <div class="box">
+          <span class="lbl-sm">Invoice defaults</span>
+          <div class="fld"><span class="k">Rounding tolerance</span><span class="v">&#8377; 1.00</span></div>
+          <div class="fld"><span class="k">Financial year starts</span><span class="v">April</span></div>
+          <div class="fld"><span class="k">On duplicate</span><span class="v">Reject</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="box">
+      <span class="lbl-sm">Data</span>
+      <span class="btn">Export all as CSV</span><span class="btn">Reset demo data</span>
+    </div>
+
+    <div style="margin-top:6px"><span class="btn pri">Save settings</span></div>
+  </div>
+</div>
+
+<div class="callout warn">
+  <span class="lbl">How keys are handled</span>
+  <p>Keys are entered here and encrypted at rest with AES-256-GCM, using a master key held in a Vercel environment variable rather than in the database. Once saved, a key is never sent back to the browser. The field shows a masked form with the last four characters only, and the sole action available is Replace. Test connection makes one cheap call and reports pass or fail, it never echoes the key back. The public read only view does not render this page at all, and the API routes behind it reject any request without the session cookie.</p>
+</div>
+
+<p>The two matching thresholds are on this page on purpose. Where they should sit depends on how varied your actual invoices are, and that is not knowable before there is real data in the system. Leaving them adjustable is cheaper than guessing right, and it is the difference between a demo and something you would keep using.</p>
+
+<!-- ======================= 07 ======================= -->
+<h2><span class="n">07</span>User flows</h2>
+<p class="lede">Four flows. Ingest is the one that has to feel good.</p>
+
+<h3>Flow A, ingest an invoice</h3>
+
+<div class="figure">
+  <div class="cap">Figure 3, upload to saved</div>
+  <svg viewBox="0 0 880 300" role="img" aria-label="Ingest flow">
+    <defs>
+      <marker id="ar3" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+        <path d="M0,0 L9,4.5 L0,9 z" fill="currentColor"/>
+      </marker>
+    </defs>
+    <g font-family="ui-monospace,monospace" font-size="11.5">
+      <rect x="8" y="24" width="120" height="48" rx="7" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="22" y="53" fill="currentColor">Drop file</text>
+
+      <rect x="164" y="24" width="120" height="48" rx="7" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="178" y="46" fill="currentColor">Store</text>
+      <text x="178" y="62" fill="currentColor" opacity=".6" font-size="10">original</text>
+
+      <rect x="320" y="24" width="130" height="48" rx="7" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="334" y="46" fill="currentColor">Extract</text>
+      <text x="334" y="62" fill="currentColor" opacity=".6" font-size="10">chosen provider</text>
+
+      <polygon points="550,20 640,48 550,76 460,48" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="498" y="45" fill="currentColor" font-size="10.5">schema +</text>
+      <text x="498" y="59" fill="currentColor" font-size="10.5">arithmetic</text>
+
+      <rect x="676" y="10" width="190" height="40" rx="7" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="690" y="35" fill="currentColor">pass &#8594; confirmed</text>
+
+      <rect x="676" y="62" width="190" height="40" rx="7" fill="none" stroke="currentColor" opacity=".45" stroke-dasharray="4 3"/>
+      <text x="690" y="87" fill="currentColor" opacity=".8">fail &#8594; needs_review</text>
+
+      <rect x="320" y="150" width="280" height="52" rx="7" fill="currentColor" opacity=".06"/>
+      <rect x="320" y="150" width="280" height="52" rx="7" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="336" y="172" fill="currentColor" font-weight="600">Review screen</text>
+      <text x="336" y="190" fill="currentColor" opacity=".6" font-size="10">original beside the fields, everything editable</text>
+
+      <rect x="320" y="238" width="130" height="46" rx="7" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="334" y="259" fill="currentColor">Match</text>
+      <text x="334" y="274" fill="currentColor" opacity=".6" font-size="10">vendor, items</text>
+
+      <rect x="486" y="238" width="114" height="46" rx="7" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="500" y="266" fill="currentColor">Save</text>
+
+      <rect x="640" y="238" width="226" height="46" rx="7" fill="none" stroke="currentColor" opacity=".3" stroke-dasharray="4 3"/>
+      <text x="654" y="260" fill="currentColor" opacity=".7" font-size="10.5">duplicate? database rejects,</text>
+      <text x="654" y="275" fill="currentColor" opacity=".7" font-size="10.5">screen offers the existing one</text>
+
+      <g fill="none" stroke="currentColor" stroke-width="1.3" opacity=".5">
+        <line x1="128" y1="48" x2="158" y2="48" marker-end="url(#ar3)"/>
+        <line x1="284" y1="48" x2="314" y2="48" marker-end="url(#ar3)"/>
+        <line x1="450" y1="48" x2="456" y2="48" marker-end="url(#ar3)"/>
+        <line x1="640" y1="40" x2="670" y2="30" marker-end="url(#ar3)"/>
+        <line x1="640" y1="56" x2="670" y2="78" marker-end="url(#ar3)"/>
+        <path d="M771 102 L771 128 L460 128 L460 144" marker-end="url(#ar3)"/>
+        <path d="M771 50 L771 128" opacity=".3"/>
+        <line x1="400" y1="202" x2="400" y2="232" marker-end="url(#ar3)"/>
+        <line x1="450" y1="261" x2="480" y2="261" marker-end="url(#ar3)"/>
+        <line x1="600" y1="261" x2="634" y2="261" stroke-dasharray="4 3" opacity=".35" marker-end="url(#ar3)"/>
+      </g>
+    </g>
+  </svg>
+</div>
+
+<p>Both outcomes land on the review screen. The difference is what it draws attention to: a clean extraction shows confirmed fields and a ready button, a failed check shows the figures that do not add up. You are never told an invoice is fine when the numbers disagree, and you are never blocked from saving one you have checked yourself.</p>
+
+<h4>Wireframe, upload</h4>
+<div class="wf">
+  <div class="wf-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">Upload</span></div>
+  <div class="wf-body">
+    <div class="box dash" style="min-height:130px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:var(--muted)">
+      <div style="font-size:22px">&#8595;</div>
+      <div>Drop invoices here</div>
+      <div style="font-size:11px">PDF, JPG or PNG &nbsp;&#183;&nbsp; several at once is fine</div>
+    </div>
+    <span class="lbl-sm">In progress</span>
+    <div class="fld"><span class="v">acme-traders-8841.pdf</span><span class="k"><span class="chip">extracted</span> ready to review</span></div>
+    <div class="fld"><span class="v">stationery-mar.pdf</span><span class="k"><span class="chip n">working</span> reading page 1</span></div>
+    <div class="fld"><span class="v">scan_0042.jpg</span><span class="k"><span class="chip w">check totals</span> subtotal off by &#8377;120</span></div>
+  </div>
+</div>
+
+<h4>Wireframe, review screen</h4>
+<div class="wf">
+  <div class="wf-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">Review &#183; acme-traders-8841.pdf</span></div>
+  <div class="wf-body">
+    <div class="wf-row">
+      <div class="wf-col" style="flex:1 1 230px">
+        <span class="lbl-sm">Original</span>
+        <div class="doc-stub">rendered invoice<br>page 1 of 1<br><br>click a field on the right<br>to highlight it here</div>
+      </div>
+      <div class="wf-col" style="flex:1.3 1 280px">
+        <span class="lbl-sm">Extracted &nbsp;<span class="chip n">everything editable</span></span>
+        <div class="box" style="margin-bottom:8px">
+          <div class="fld"><span class="k">Vendor</span><span class="v">Acme Traders Pvt Ltd</span></div>
+          <div class="fld"><span class="k">GSTIN</span><span class="v">29AABCA1234F1Z5 &nbsp;<span class="chip">known vendor</span></span></div>
+          <div class="fld"><span class="k">Invoice no.</span><span class="v">INV-8841</span></div>
+          <div class="fld"><span class="k">Date</span><span class="v">04 Sep 2026</span></div>
+        </div>
+        <div class="box">
+          <span class="lbl-sm">Line items</span>
+          <div class="fld"><span class="v">A4 Paper 500 Sheets &#215;10</span><span class="k">&#8377;2,850 &nbsp;<span class="chip">linked</span></span></div>
+          <div class="fld"><span class="v">Stapler HD-45 &#215;2</span><span class="k">&#8377;640 &nbsp;<span class="chip w">is this Stapler HD45?</span></span></div>
+          <div class="fld"><span class="v">Ink Cartridge 803B &#215;3</span><span class="k">&#8377;3,270 &nbsp;<span class="chip n">new item</span></span></div>
+        </div>
+        <div class="box solidfill">
+          <div class="fld"><span class="k">Subtotal</span><span class="v">&#8377;6,760</span></div>
+          <div class="fld"><span class="k">CGST 9% / SGST 9%</span><span class="v">&#8377;608.40 / &#8377;608.40</span></div>
+          <div class="fld"><span class="k">Total</span><span class="v">&#8377;7,976.80 &nbsp;<span class="chip">adds up</span></span></div>
+        </div>
+        <span class="btn pri">Confirm and save</span><span class="btn">Discard</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p>Side by side is the whole design here. Checking an extraction means comparing it to the source, and any layout that makes you remember a number while you scroll has already lost. Clicking a field highlights where it came from on the original.</p>
+
+<h3>Flow B, matching</h3>
+
+<div class="figure">
+  <div class="cap">Figure 4, how a line item finds its catalogue entry</div>
+  <svg viewBox="0 0 880 250" role="img" aria-label="Item matching decision flow">
+    <defs>
+      <marker id="ar4" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+        <path d="M0,0 L9,4.5 L0,9 z" fill="currentColor"/>
+      </marker>
+    </defs>
+    <g font-family="ui-monospace,monospace" font-size="11.5">
+      <rect x="8" y="90" width="150" height="56" rx="7" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="22" y="112" fill="currentColor">"A4 Paper</text>
+      <text x="22" y="128" fill="currentColor">500 Sheets"</text>
+
+      <rect x="192" y="90" width="150" height="56" rx="7" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="206" y="112" fill="currentColor">Normalise</text>
+      <text x="206" y="130" fill="currentColor" opacity=".6" font-size="10">a4 paper 500</text>
+
+      <rect x="376" y="90" width="150" height="56" rx="7" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="390" y="112" fill="currentColor">pg_trgm</text>
+      <text x="390" y="130" fill="currentColor" opacity=".6" font-size="10">similarity score</text>
+
+      <rect x="576" y="14" width="290" height="50" rx="7" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="592" y="36" fill="currentColor">&#8805; 0.85 &nbsp;link automatically</text>
+      <text x="592" y="53" fill="currentColor" opacity=".55" font-size="10">no interruption, reversible later</text>
+
+      <rect x="576" y="80" width="290" height="50" rx="7" fill="currentColor" opacity=".06"/>
+      <rect x="576" y="80" width="290" height="50" rx="7" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="592" y="102" fill="currentColor">0.60 to 0.85 &nbsp;suggest</text>
+      <text x="592" y="119" fill="currentColor" opacity=".55" font-size="10">you accept or reject, on the review screen</text>
+
+      <rect x="576" y="146" width="290" height="50" rx="7" fill="none" stroke="currentColor" opacity=".45"/>
+      <text x="592" y="168" fill="currentColor">&lt; 0.60 &nbsp;new catalogue item</text>
+      <text x="592" y="185" fill="currentColor" opacity=".55" font-size="10">merge by hand any time</text>
+
+      <text x="376" y="214" fill="currentColor" opacity=".55" font-size="10.5">thresholds live in settings</text>
+
+      <g fill="none" stroke="currentColor" stroke-width="1.3" opacity=".5">
+        <line x1="158" y1="118" x2="186" y2="118" marker-end="url(#ar4)"/>
+        <line x1="342" y1="118" x2="370" y2="118" marker-end="url(#ar4)"/>
+        <path d="M526 110 L550 110 L550 39 L570 39" marker-end="url(#ar4)"/>
+        <line x1="526" y1="118" x2="570" y2="106" marker-end="url(#ar4)"/>
+        <path d="M526 126 L550 126 L550 171 L570 171" marker-end="url(#ar4)"/>
+        <path d="M451 146 L451 196" stroke-dasharray="3 3" opacity=".3"/>
+      </g>
+    </g>
+  </svg>
+</div>
+
+<p>Vendors skip all of this. GSTIN is a real unique business identifier, so vendor identity is an exact key lookup. Only invoices with no GSTIN printed fall back to a normalised name comparison, and those surface on the review screen for you to confirm rather than being guessed at.</p>
+
+<p>Normalisation is the unglamorous part that decides how well the rest works: lowercase, strip punctuation and pack sizes and units, drop filler words like "pack of" and "approx". It gets its own tests because it is the one piece where a small change quietly shifts every score in the system.</p>
+
+<h3>Flow C, search and price history</h3>
+
+<div class="wf">
+  <div class="wf-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">A4 Paper 500 Sheets</span></div>
+  <div class="wf-body">
+    <div class="fld"><span class="k">&#128269;</span><span class="v" style="flex:1;text-align:left">a4 paper</span></div>
+    <div class="wf-row">
+      <div class="wf-col" style="flex:1 1 150px">
+        <div class="box"><span class="lbl-sm">Total paid</span><div style="font-size:19px">&#8377;34,200</div><div style="color:var(--muted);font-size:11px">12 purchases, 4 vendors</div></div>
+      </div>
+      <div class="wf-col" style="flex:1 1 150px">
+        <div class="box"><span class="lbl-sm">Unit price now</span><div style="font-size:19px">&#8377;285</div><div style="color:var(--muted);font-size:11px">up 9.6% since March</div></div>
+      </div>
+      <div class="wf-col" style="flex:1 1 150px">
+        <div class="box"><span class="lbl-sm">Cheapest vendor</span><div style="font-size:19px">&#8377;262</div><div style="color:var(--muted);font-size:11px">Nandi Stationers</div></div>
+      </div>
+    </div>
+    <div class="box">
+      <span class="lbl-sm">Unit price over time</span>
+      <svg viewBox="0 0 600 140" style="width:100%">
+        <g stroke="currentColor" opacity=".16" stroke-width="1">
+          <line x1="40" y1="20" x2="580" y2="20"/><line x1="40" y1="60" x2="580" y2="60"/>
+          <line x1="40" y1="100" x2="580" y2="100"/>
+        </g>
+        <polyline points="60,92 150,88 240,74 330,70 420,52 510,40 560,36"
+          fill="none" stroke="currentColor" stroke-width="2" opacity=".75"/>
+        <g fill="currentColor" opacity=".75">
+          <circle cx="60" cy="92" r="3.5"/><circle cx="150" cy="88" r="3.5"/><circle cx="240" cy="74" r="3.5"/>
+          <circle cx="330" cy="70" r="3.5"/><circle cx="420" cy="52" r="3.5"/><circle cx="510" cy="40" r="3.5"/>
+          <circle cx="560" cy="36" r="3.5"/>
+        </g>
+        <g font-family="ui-monospace,monospace" font-size="10" fill="currentColor" opacity=".5">
+          <text x="6" y="24">300</text><text x="6" y="64">280</text><text x="6" y="104">260</text>
+          <text x="48" y="128">Mar</text><text x="318" y="128">Jun</text><text x="540" y="128">Sep</text>
+        </g>
+      </svg>
+    </div>
+    <div class="box">
+      <span class="lbl-sm">Every purchase</span>
+      <div class="fld"><span class="v">04 Sep &#183; Acme Traders</span><span class="k">10 &#215; &#8377;285 &nbsp; INV-8841</span></div>
+      <div class="fld"><span class="v">18 Aug &#183; Nandi Stationers</span><span class="k">20 &#215; &#8377;262 &nbsp; NS/1129</span></div>
+      <div class="fld"><span class="v">02 Jul &#183; Acme Traders</span><span class="k">10 &#215; &#8377;279 &nbsp; INV-8402</span></div>
+    </div>
+  </div>
+</div>
+
+<p>This screen is the reason the product exists. The three numbers at the top are what turn a pile of stored invoices into something you would act on: you are paying more than you were, and someone else sells it cheaper. Everything else in the build is in service of these being correct.</p>
+
+<h3>Flow D, vendor view</h3>
+<div class="wf">
+  <div class="wf-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">Acme Traders Pvt Ltd</span></div>
+  <div class="wf-body">
+    <div class="wf-row">
+      <div class="wf-col"><div class="box"><span class="lbl-sm">Total spend</span><div style="font-size:19px">&#8377;2,84,600</div><div style="color:var(--muted);font-size:11px">this financial year</div></div></div>
+      <div class="wf-col"><div class="box"><span class="lbl-sm">Invoices</span><div style="font-size:19px">23</div><div style="color:var(--muted);font-size:11px">1 needs review</div></div></div>
+      <div class="wf-col"><div class="box"><span class="lbl-sm">GSTIN</span><div style="font-size:14px;padding-top:4px">29AABCA1234F1Z5</div></div></div>
+    </div>
+    <div class="box">
+      <span class="lbl-sm">Invoices</span>
+      <div class="fld"><span class="v">INV-8841 &#183; 04 Sep</span><span class="k">&#8377;7,976.80 &nbsp;<span class="chip">confirmed</span></span></div>
+      <div class="fld"><span class="v">INV-8402 &#183; 02 Jul</span><span class="k">&#8377;12,040.00 &nbsp;<span class="chip">confirmed</span></span></div>
+      <div class="fld"><span class="v">INV-8155 &#183; 11 Jun</span><span class="k">&#8377;4,220.00 &nbsp;<span class="chip w">needs review</span></span></div>
+    </div>
+    <div class="box">
+      <span class="lbl-sm">What you buy here most</span>
+      <div class="ghost l"></div><div class="ghost m"></div><div class="ghost s"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= 08 ======================= -->
+<h2><span class="n">08</span>The board</h2>
+<p class="lede">26 issues, 7 epics. Each issue is about a day.</p>
+
+<p>Columns are Backlog, Ready, In progress, Done. Foundation and extraction are the critical path. Vendors, items and search only unblock once ingest can save a real invoice, so they sit in Backlog until then rather than pretending to be parallel work.</p>
+
+<div class="epic">
+  <div class="epic-h"><span class="name">epic:foundation</span><span class="cnt">4 issues &#183; critical path</span></div>
+  <ul class="issues">
+    <li><span class="id">F1</span><span class="txt">Scaffold Next.js with TypeScript, deploy to Vercel<em>A deployed empty app on day one. Nothing is more expensive than discovering deployment problems at the end.</em></span></li>
+    <li><span class="id">F2</span><span class="txt">Provision Neon Postgres, write the schema migration, enable pg_trgm<em>All four tables and both constraints in one migration.</em></span></li>
+    <li><span class="id">F3</span><span class="txt">Password gate and public read only mode<em>Middleware. Mutations need the cookie, reads do not.</em></span></li>
+    <li><span class="id">F4</span><span class="txt">Settings storage and the encrypted key helper<em>AES-256-GCM, master key from the environment. Write this before any key is ever entered.</em></span></li>
+  </ul>
+</div>
+
+<div class="epic">
+  <div class="epic-h"><span class="name">epic:settings</span><span class="cnt">6 issues</span></div>
+  <ul class="issues">
+    <li><span class="id">S1</span><span class="txt">Settings page shell and navigation</span></li>
+    <li><span class="id">S2</span><span class="txt">Provider selection, key entry, masked display, replace flow<em>Saved keys are never returned to the browser.</em></span></li>
+    <li><span class="id">S3</span><span class="txt">Fetch the OpenRouter catalogue, filter it, cache for 24 hours<em>Keep image input plus structured output. Fall back to the last cache when unreachable.</em></span></li>
+    <li><span class="id">S4</span><span class="txt">Model dropdown with the two recommended badges</span></li>
+    <li><span class="id">S5</span><span class="txt">Test connection<em>One cheap call. Returns pass or fail, never the key.</em></span></li>
+    <li><span class="id">S6</span><span class="txt">Matching thresholds and invoice defaults</span></li>
+  </ul>
+</div>
+
+<div class="epic">
+  <div class="epic-h"><span class="name">epic:extraction</span><span class="cnt">5 issues &#183; critical path</span></div>
+  <ul class="issues">
+    <li><span class="id">E1</span><span class="txt">Shared extraction schema and zod validation<em>Written first. Both providers are built against it, not the other way round.</em></span></li>
+    <li><span class="id">E2</span><span class="txt">Anthropic extractor, claude-opus-5 with a strict tool schema</span></li>
+    <li><span class="id">E3</span><span class="txt">OpenRouter extractor, json_schema response format</span></li>
+    <li><span class="id">E4</span><span class="txt">Arithmetic validation and the needs_review status<em>Line items sum to subtotal, subtotal plus taxes equals total, inside tolerance.</em></span></li>
+    <li><span class="id">E5</span><span class="txt">Extraction failures, retries and readable errors<em>Bad key, unreadable file, model returning nothing usable. Each says what to do next.</em></span></li>
+  </ul>
+</div>
+
+<div class="epic">
+  <div class="epic-h"><span class="name">epic:ingest</span><span class="cnt">4 issues &#183; critical path</span></div>
+  <ul class="issues">
+    <li><span class="id">I1</span><span class="txt">Upload dropzone and Blob storage</span></li>
+    <li><span class="id">I2</span><span class="txt">Extraction job with visible progress per file</span></li>
+    <li><span class="id">I3</span><span class="txt">Review screen, original beside editable fields<em>Clicking a field highlights its source on the original.</em></span></li>
+    <li><span class="id">I4</span><span class="txt">Confirm and save, with the duplicate case handled<em>The constraint rejects it, the screen offers the existing invoice.</em></span></li>
+  </ul>
+</div>
+
+<div class="epic">
+  <div class="epic-h"><span class="name">epic:vendors</span><span class="cnt">3 issues</span></div>
+  <ul class="issues">
+    <li><span class="id">V1</span><span class="txt">GSTIN resolution and vendor creation<em>Exact key, name fallback, new vendors flagged on review.</em></span></li>
+    <li><span class="id">V2</span><span class="txt">Vendor list with spend totals</span></li>
+    <li><span class="id">V3</span><span class="txt">Vendor detail page, invoices and what you buy there</span></li>
+  </ul>
+</div>
+
+<div class="epic">
+  <div class="epic-h"><span class="name">epic:items</span><span class="cnt">4 issues</span></div>
+  <ul class="issues">
+    <li><span class="id">T1</span><span class="txt">Description normalisation<em>Its own tests. One change here moves every score in the system.</em></span></li>
+    <li><span class="id">T2</span><span class="txt">Trigram matching against the configured thresholds</span></li>
+    <li><span class="id">T3</span><span class="txt">Suggestion queue, accept or reject</span></li>
+    <li><span class="id">T4</span><span class="txt">Merge two catalogue items by hand<em>Also the undo for a wrong automatic link.</em></span></li>
+  </ul>
+</div>
+
+<div class="epic">
+  <div class="epic-h"><span class="name">epic:search</span><span class="cnt">2 issues</span></div>
+  <ul class="issues">
+    <li><span class="id">R1</span><span class="txt">Item search</span></li>
+    <li><span class="id">R2</span><span class="txt">Price history, the three headline numbers and the trend line</span></li>
+  </ul>
+</div>
+
+<div class="epic">
+  <div class="epic-h"><span class="name">epic:demo</span><span class="cnt">2 issues</span></div>
+  <ul class="issues">
+    <li><span class="id">D1</span><span class="txt">Seed a demo dataset<em>Enough invoices across enough vendors that the price trend is real, not one point.</em></span></li>
+    <li><span class="id">D2</span><span class="txt">README and screenshots</span></li>
+  </ul>
+</div>
+
+<div class="epic">
+  <div class="epic-h"><span class="name">epic:contracts</span><span class="cnt">version 2, specced not built</span></div>
+  <ul class="issues">
+    <li><span class="id">C1</span><span class="txt">Contract table and ingestion<em>A contract carries a vendor, a period, and agreed rates per item.</em></span></li>
+    <li><span class="id">C2</span><span class="txt">Link invoices to the contract in force on their date</span></li>
+    <li><span class="id">C3</span><span class="txt">Variance detection<em>Flag when a billed unit price disagrees with the contracted one. This is the whole reason contracts are worth building.</em></span></li>
+  </ul>
+</div>
+
+<div class="callout">
+  <span class="lbl">Why contracts wait</span>
+  <p>Contract variance is the most valuable thing this product could eventually do, and it is entirely unbuildable until invoices, vendors and items are reliable. A variance check on top of shaky extraction produces confident wrong answers, which is worse than no check. The v1 data model already has room for it: contracts attach to a vendor and reference catalogue items, both of which exist from day one, so nothing needs reshaping later.</p>
+</div>
+
+<!-- ======================= 09 ======================= -->
+<h2><span class="n">09</span>Scope and testing</h2>
+
+<h4>Deliberately not in version one</h4>
+<div class="grid g3">
+  <div class="card"><h5>Multiple users</h5><p>No sign up, no accounts. One password gates edits.</p></div>
+  <div class="card"><h5>Separate OCR</h5><p>Vision models read scans directly. A second pipeline buys nothing.</p></div>
+  <div class="card"><h5>Price alerts</h5><p>Needs a baseline of real history first. Version 2.</p></div>
+  <div class="card"><h5>Contracts</h5><p>Specced above, deliberately last.</p></div>
+  <div class="card"><h5>Bulk queues</h5><p>Upload several at once is enough. Hundreds is a problem you do not have.</p></div>
+  <div class="card"><h5>Accounting export</h5><p>CSV out covers it. Tally and Zoho integrations are their own project.</p></div>
+</div>
+
+<h4>Tests</h4>
+<p>One test file, covering the three pieces of logic where a silent mistake would not announce itself:</p>
+<ul>
+  <li><strong>Normalisation</strong>, because every match score depends on it.</li>
+  <li><strong>Match thresholds</strong>, that the three bands behave at their boundaries.</li>
+  <li><strong>Arithmetic validation</strong>, including the rounding tolerance and each tax combination.</li>
+</ul>
+<p>Everything else is a page rendering or a database query, and those fail loudly on their own. No framework, no fixtures, no test per function.</p>
+
+<hr>
+
+<h4>Open questions, none blocking</h4>
+<ul>
+  <li>Which two OpenRouter models get the Recommended badge. Best answered by running the same ten invoices through the shortlist once extraction works, rather than by picking now.</li>
+  <li>Whether the public demo should let a visitor upload their own invoice. It is the better demo and it spends your API credit, so it is a flag, defaulted off.</li>
+</ul>
+
+<div class="foot">
+  <p>Invoice Ingester, version 1 plan. Product 2 of 4 in the portfolio build queue, after mailprobe.<br>
+  Spec is stable, the board is where the work lives. Written 17 September 2026.</p>
+</div>
+
+</div>
+</body>
+</html>
