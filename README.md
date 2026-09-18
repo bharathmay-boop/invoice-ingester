@@ -4,7 +4,7 @@ Drop in an invoice, get the particulars extracted and stored, then search what y
 
 Built for Indian invoices first: GSTIN, HSN codes, and the CGST, SGST and IGST split.
 
-**Status:** planned, not yet built. The spec is agreed and the work is broken into issues. See the board.
+**Status:** planned, not yet built. The spec is agreed and the work is broken into 33 issues on the [board](https://github.com/users/bharathmay-boop/projects/1).
 
 ## The problem
 
@@ -41,9 +41,10 @@ Next.js App Router on Vercel, Postgres on Neon, Vercel Blob for the original fil
 ## Documentation
 
 - [`docs/spec.md`](docs/spec.md) is the specification: scope, data model, architecture, and what is deliberately left out.
-- [`docs/plan.html`](docs/plan.html) is the same plan with wireframes and flow diagrams. GitHub shows HTML files as source, so open it locally or through GitHub Pages.
+- [The plan](https://bharathmay-boop.github.io/invoice-ingester/plan.html) is the same thing with wireframes and flow diagrams. Served through GitHub Pages, since GitHub shows HTML files in the repo as source.
+- [The board](https://github.com/users/bharathmay-boop/projects/1) holds the 33 issues, grouped into epics by label.
 
-Work is tracked as issues grouped into epics, not in these documents. The documents say what is being built. The board says what state each piece is in.
+Work is tracked on the board, not in these documents. The documents say what is being built and why, and change rarely. The board says what state each piece is in, and changes daily.
 
 ## Scope
 
