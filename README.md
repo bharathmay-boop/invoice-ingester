@@ -66,7 +66,7 @@ npm test
 
 They cover the places a mistake would not announce itself: description normalisation, the match thresholds, the arithmetic checks, and key sealing.
 
-The store tests need a database and skip themselves without one, so `npm test` still runs on a clean checkout. Run `vercel env pull` first to include them.
+The store tests need a database and skip themselves without one, so `npm test` still runs on a clean checkout. Run `vercel env pull` first to include them. They build a throwaway schema from the migration file and drop it afterwards, so running the suite cannot touch a saved API key.
 
 ## Documentation
 

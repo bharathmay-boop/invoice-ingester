@@ -2,10 +2,16 @@
 // suite stays green through a renamed column, a wrong placeholder, a broken
 // upsert or a JSON serialisation change, none of which the crypto tests touch.
 //
+// Everything runs in a throwaway schema created per run and dropped at the end,
+// built from the real migration file. `npm test` therefore cannot touch a saved
+// API key, and two runs against the same database cannot collide.
+//
 // Skipped when there is no database configured, so `npm test` still runs on a
 // clean checkout. Run `vercel env pull` to get one.
 import assert from "node:assert/strict";
-import { after, test } from "node:test";
+import { readFile } from "node:fs/promises";
+import { after, before, test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 const configured = Boolean(
   process.env.DATABASE_URL && process.env.SETTINGS_MASTER_KEY,
@@ -17,39 +23,60 @@ const skip = configured
 const store = configured ? await import("../lib/settings/store.ts") : null;
 const db = configured ? await import("../lib/db.ts") : null;
 
-// Rows are named per run so a failed run cannot poison the next one, and so two
-// runs against the same database cannot collide.
-const run = Math.random().toString(36).slice(2, 8);
-const SETTING = `test_${run}`;
-const KEY = `sk-test-${run}-${"x".repeat(20)}-4d7e`;
+const SCHEMA = `test_${Math.random().toString(36).slice(2, 10)}`;
+const KEY = "sk-test-" + "x".repeat(24) + "-4d7e";
+
+if (db) {
+  // Attached before the pool has opened a single connection, so every client it
+  // hands out is already pointed at the throwaway schema. A schema that does not
+  // exist yet in search_path is ignored rather than an error, which is what makes
+  // this safe to set before creating it.
+  db.pool.on("connect", (client) => {
+    client.query(`SET search_path TO ${SCHEMA}, public`);
+  });
+}
+
+before(async () => {
+  if (!db) return;
+  await db.query(`CREATE SCHEMA ${SCHEMA}`);
+  const migration = fileURLToPath(
+    new URL("../db/migrations/002_settings.sql", import.meta.url),
+  );
+  await db.query(await readFile(migration, "utf8"));
+});
 
 after(async () => {
   if (!db) return;
-  await db.query("DELETE FROM setting WHERE key LIKE 'test_%'");
-  await db.query(
-    "DELETE FROM secret WHERE name IN ('anthropic_api_key','openrouter_api_key')",
-  );
+  await db.query(`DROP SCHEMA IF EXISTS ${SCHEMA} CASCADE`);
   await db.pool.end();
+});
+
+test("the tests are isolated from real data", { skip }, async () => {
+  const rows = await db!.query<{ schema: string }>(
+    "SELECT current_schema() AS schema",
+  );
+  assert.equal(rows[0].schema, SCHEMA, "tests must not run against the live schema");
 });
 
 test("a setting round trips, including nested JSON", { skip }, async () => {
   const value = { link: 0.85, suggest: 0.6, note: "tolerance in rupees" };
-  await store!.setSetting(SETTING, value);
-  assert.deepEqual(await store!.getSetting(SETTING), value);
+  await store!.setSetting("match_thresholds", value);
+  assert.deepEqual(await store!.getSetting("match_thresholds"), value);
 });
 
 test("writing a setting twice updates rather than duplicating", { skip }, async () => {
-  await store!.setSetting(SETTING, { link: 0.9 });
-  assert.deepEqual(await store!.getSetting(SETTING), { link: 0.9 });
+  await store!.setSetting("rounding_tolerance", { rupees: 1 });
+  await store!.setSetting("rounding_tolerance", { rupees: 2 });
+  assert.deepEqual(await store!.getSetting("rounding_tolerance"), { rupees: 2 });
   const rows = await db!.query<{ n: number }>(
     "SELECT count(*)::int n FROM setting WHERE key = $1",
-    [SETTING],
+    ["rounding_tolerance"],
   );
   assert.equal(rows[0].n, 1);
 });
 
 test("a missing setting is null, not a throw", { skip }, async () => {
-  assert.equal(await store!.getSetting(`test_${run}_absent`), null);
+  assert.equal(await store!.getSetting("never_written"), null);
 });
 
 test("a secret is stored sealed and comes back whole", { skip }, async () => {
@@ -104,6 +131,7 @@ test("a deleted secret is gone and reads as absent", { skip }, async () => {
 });
 
 test("a row moved to another name will not open", { skip }, async () => {
+  await store!.deleteSecret("openrouter_api_key");
   await store!.setSecret("anthropic_api_key", KEY);
   await db!.query(
     "UPDATE secret SET name = 'openrouter_api_key' WHERE name = 'anthropic_api_key'",
