@@ -4,7 +4,7 @@ Drop in an invoice, get the particulars extracted and stored, then search what y
 
 Built for Indian invoices first: GSTIN, HSN codes, and the CGST, SGST and IGST split.
 
-**Status:** planned, not yet built. The spec is agreed and the work is broken into 33 issues on the [board](https://github.com/users/bharathmay-boop/projects/1).
+**Status:** in build. The spec is agreed and the work is broken into 33 issues on the [board](https://github.com/users/bharathmay-boop/projects/1).
 
 ## The problem
 
@@ -37,6 +37,21 @@ API keys are entered in settings and encrypted at rest. They are never sent back
 ## Stack
 
 Next.js App Router on Vercel, Postgres on Neon, Vercel Blob for the original files, and the `pg_trgm` extension for item matching.
+
+## Running it locally
+
+```
+npm install
+npm run dev
+```
+
+The database lives on Neon. Set `DATABASE_URL` in `.env.local`, then apply the schema:
+
+```
+npm run migrate
+```
+
+Migrations are plain SQL files in `db/migrations`, applied in filename order and recorded in a `_migration` table, so re-running is safe.
 
 ## Documentation
 
