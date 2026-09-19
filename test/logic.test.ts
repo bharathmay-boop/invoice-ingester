@@ -95,3 +95,71 @@ test("the provider JSON schema covers every field", () => {
     "line_items", "sgst", "subtotal", "total", "vendor_name",
   ]);
 });
+
+// --- key sealing -----------------------------------------------------------
+
+process.env.SETTINGS_MASTER_KEY = Buffer.alloc(32, 7).toString("base64");
+const { seal, unseal, maskKey } = await import("../lib/settings/crypto.ts");
+
+const KEY = "sk-ant-api03-not-a-real-key-0000000000000000000000000000";
+
+test("a key round trips through seal and unseal", () => {
+  assert.equal(unseal("anthropic_api_key", seal("anthropic_api_key", KEY)), KEY);
+});
+
+test("the stored form gives nothing away", () => {
+  const sealed = seal("anthropic_api_key", KEY);
+  assert.equal(sealed.includes(KEY), false);
+  assert.equal(sealed.startsWith("v1."), true);
+  // Fresh IV every time, so the same key never stores as the same string.
+  assert.notEqual(sealed, seal("anthropic_api_key", KEY));
+});
+
+test("unsealing fails rather than returning something wrong", () => {
+  const sealed = seal("anthropic_api_key", KEY);
+  const [v, iv, tag, body] = sealed.split(".");
+
+  // Ciphertext moved to a different setting.
+  assert.throws(() => unseal("openrouter_api_key", sealed));
+
+  // Body edited.
+  const flipped = Buffer.from(body, "base64url");
+  flipped[0] ^= 0xff;
+  assert.throws(() =>
+    unseal("anthropic_api_key", [v, iv, tag, flipped.toString("base64url")].join(".")),
+  );
+
+  // Tag edited.
+  const badTag = Buffer.from(tag, "base64url");
+  badTag[0] ^= 0xff;
+  assert.throws(() =>
+    unseal("anthropic_api_key", [v, iv, badTag.toString("base64url"), body].join(".")),
+  );
+
+  // Not a sealed value at all.
+  assert.throws(() => unseal("anthropic_api_key", "garbage"));
+});
+
+test("a different master key cannot open it", () => {
+  const sealed = seal("anthropic_api_key", KEY);
+  const original = process.env.SETTINGS_MASTER_KEY;
+  process.env.SETTINGS_MASTER_KEY = Buffer.alloc(32, 9).toString("base64");
+  assert.throws(() => unseal("anthropic_api_key", sealed));
+  process.env.SETTINGS_MASTER_KEY = original;
+  assert.equal(unseal("anthropic_api_key", sealed), KEY);
+});
+
+test("a master key of the wrong size is refused", () => {
+  const original = process.env.SETTINGS_MASTER_KEY;
+  process.env.SETTINGS_MASTER_KEY = Buffer.alloc(16, 1).toString("base64");
+  assert.throws(() => seal("anthropic_api_key", KEY), /32 bytes/);
+  delete process.env.SETTINGS_MASTER_KEY;
+  assert.throws(() => seal("anthropic_api_key", KEY), /not set/);
+  process.env.SETTINGS_MASTER_KEY = original;
+});
+
+test("the mask shows the last four and nothing else", () => {
+  assert.equal(maskKey(KEY), "****" + KEY.slice(-4));
+  assert.equal(maskKey("ab"), "****");
+  assert.equal(maskKey(KEY).includes(KEY.slice(0, 8)), false);
+});
