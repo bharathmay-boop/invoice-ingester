@@ -45,11 +45,14 @@ npm install
 npm run dev
 ```
 
-The database lives on Neon. Set `DATABASE_URL` in `.env.local`, then apply the schema:
+The database is Neon, provisioned through the Vercel Marketplace. Pull the connection strings, then apply the schema:
 
 ```
+vercel env pull
 npm run migrate
 ```
+
+Migrations use `DATABASE_URL_UNPOOLED`, since DDL in a transaction does not sit well behind the pooler.
 
 Migrations are plain SQL files in `db/migrations`, applied in filename order and recorded in a `_migration` table, so re-running is safe.
 

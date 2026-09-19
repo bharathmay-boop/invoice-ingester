@@ -6,9 +6,11 @@ import { fileURLToPath } from "node:url";
 import pg from "pg";
 
 const dir = fileURLToPath(new URL("../db/migrations/", import.meta.url));
-const url = process.env.DATABASE_URL;
+// Unpooled by preference: DDL in a transaction does not sit well behind
+// pgbouncer. Neon sets both, so this only falls back on a plain Postgres URL.
+const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
 if (!url) {
-  console.error("DATABASE_URL is not set. Put it in .env.local or the shell.");
+  console.error("DATABASE_URL is not set. Run `vercel env pull` first.");
   process.exit(1);
 }
 
