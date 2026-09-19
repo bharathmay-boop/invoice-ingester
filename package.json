@@ -2,18 +2,21 @@
   "name": "invoice-ingester",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "migrate": "node --env-file-if-exists=.env.local scripts/migrate.mjs"
+    "migrate": "node --env-file-if-exists=.env.local scripts/migrate.mjs",
+    "test": "node --test \"test/*.test.ts\""
   },
   "dependencies": {
     "next": "16.3.5",
     "pg": "^8.23.0",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

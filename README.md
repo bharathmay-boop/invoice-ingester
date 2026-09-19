@@ -53,6 +53,14 @@ npm run migrate
 
 Migrations are plain SQL files in `db/migrations`, applied in filename order and recorded in a `_migration` table, so re-running is safe.
 
+Tests run on the Node test runner, no framework:
+
+```
+npm test
+```
+
+They cover the three places a mistake would not announce itself: description normalisation, the match thresholds, and the arithmetic checks.
+
 ## Documentation
 
 - [`docs/spec.md`](docs/spec.md) is the specification: scope, data model, architecture, and what is deliberately left out.
