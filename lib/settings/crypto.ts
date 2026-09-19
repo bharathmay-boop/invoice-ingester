@@ -4,6 +4,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
 const VERSION = "v1";
 const IV_BYTES = 12; // 96 bits, the size GCM is specified for
+const TAG_BYTES = 16; // 128 bits, the full tag
 const KEY_BYTES = 32;
 
 function masterKey(): Buffer {
@@ -28,7 +29,9 @@ function masterKey(): Buffer {
  */
 export function seal(name: string, plaintext: string): string {
   const iv = randomBytes(IV_BYTES);
-  const cipher = createCipheriv("aes-256-gcm", masterKey(), iv);
+  const cipher = createCipheriv("aes-256-gcm", masterKey(), iv, {
+    authTagLength: TAG_BYTES,
+  });
   cipher.setAAD(Buffer.from(name, "utf8"));
   const body = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   return [
@@ -45,13 +48,23 @@ export function unseal(name: string, sealed: string): string {
   if (version !== VERSION || !iv || !tag || !body) {
     throw new Error("stored value is not a sealed secret");
   }
-  const decipher = createDecipheriv(
-    "aes-256-gcm",
-    masterKey(),
-    Buffer.from(iv, "base64url"),
-  );
+
+  // GCM accepts short authentication tags, and a short tag is a weak tag: 32
+  // bits of authentication instead of 128. Anyone who can write to the secret
+  // table could otherwise swap a full tag for a truncated one and make forged
+  // ciphertext far cheaper to land. Both lengths are fixed by seal, so any
+  // other length means the stored value was tampered with.
+  const ivBytes = Buffer.from(iv, "base64url");
+  const tagBytes = Buffer.from(tag, "base64url");
+  if (ivBytes.length !== IV_BYTES || tagBytes.length !== TAG_BYTES) {
+    throw new Error("stored value has the wrong iv or authentication tag size");
+  }
+
+  const decipher = createDecipheriv("aes-256-gcm", masterKey(), ivBytes, {
+    authTagLength: TAG_BYTES,
+  });
   decipher.setAAD(Buffer.from(name, "utf8"));
-  decipher.setAuthTag(Buffer.from(tag, "base64url"));
+  decipher.setAuthTag(tagBytes);
   return Buffer.concat([
     decipher.update(Buffer.from(body, "base64url")),
     decipher.final(),

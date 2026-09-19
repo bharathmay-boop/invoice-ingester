@@ -140,6 +140,29 @@ test("unsealing fails rather than returning something wrong", () => {
   assert.throws(() => unseal("anthropic_api_key", "garbage"));
 });
 
+test("a truncated authentication tag is refused, not accepted weakly", () => {
+  const [v, iv, tag, body] = seal("anthropic_api_key", KEY).split(".");
+
+  // GCM will accept 4, 8, 12, 13, 14 and 15 byte tags. Every one of them is
+  // weaker than the 16 byte tag seal produces, so all of them must be refused
+  // rather than quietly lowering the bar for a forgery.
+  for (const size of [4, 8, 12, 13, 14, 15]) {
+    const short = Buffer.from(tag, "base64url").subarray(0, size);
+    assert.throws(
+      () => unseal("anthropic_api_key", [v, iv, short.toString("base64url"), body].join(".")),
+      /authentication tag size/,
+      `a ${size} byte tag should have been refused`,
+    );
+  }
+
+  // A resized IV is the same class of problem.
+  const shortIv = Buffer.from(iv, "base64url").subarray(0, 8);
+  assert.throws(
+    () => unseal("anthropic_api_key", [v, shortIv.toString("base64url"), tag, body].join(".")),
+    /iv or authentication tag size/,
+  );
+});
+
 test("a different master key cannot open it", () => {
   const sealed = seal("anthropic_api_key", KEY);
   const original = process.env.SETTINGS_MASTER_KEY;

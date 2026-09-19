@@ -64,7 +64,9 @@ Tests run on the Node test runner, no framework:
 npm test
 ```
 
-They cover the three places a mistake would not announce itself: description normalisation, the match thresholds, and the arithmetic checks.
+They cover the places a mistake would not announce itself: description normalisation, the match thresholds, the arithmetic checks, and key sealing.
+
+The store tests need a database and skip themselves without one, so `npm test` still runs on a clean checkout. Run `vercel env pull` first to include them.
 
 ## Documentation
 
