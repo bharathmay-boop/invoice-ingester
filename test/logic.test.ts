@@ -77,6 +77,8 @@ test("each malformed variant fails with a readable error", () => {
     ["zero quantity", { ...valid, line_items: [{ ...valid.line_items[0], quantity: 0 }] }, /quantity/],
     ["non numeric hsn", { ...valid, line_items: [{ ...valid.line_items[0], hsn_code: "48O2" }] }, /hsn_code/],
     ["not an object", "nope", /./],
+    ["amount past the column width", { ...valid, total: 1e307 }, /total/],
+    ["quantity past the column width", { ...valid, line_items: [{ ...valid.line_items[0], quantity: 1e12 }] }, /quantity/],
   ];
 
   for (const [name, payload, expected] of cases) {
