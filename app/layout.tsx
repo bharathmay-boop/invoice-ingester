@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { cookies } from "next/headers";
 import { Nav } from "./nav.tsx";
+import { ThemeProvider } from "./theme-provider.tsx";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 
 const geistSans = Geist({
@@ -27,11 +28,16 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
+      // next-themes sets the class on <html> before paint, which React cannot
+      // know about during hydration.
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
-        <Nav signedIn={signedIn} />
-        {children}
+      <body className="min-h-full flex flex-col bg-background text-foreground">
+        <ThemeProvider>
+          <Nav signedIn={signedIn} />
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );
