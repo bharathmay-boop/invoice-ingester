@@ -4,7 +4,7 @@ Drop in an invoice, get the particulars extracted and stored, then search what y
 
 Built for Indian invoices first: GSTIN, HSN codes, and the CGST, SGST and IGST split.
 
-**Status:** in build. The spec is agreed and the work is broken into 33 issues on the [board](https://github.com/users/bharathmay-boop/projects/1).
+**Status:** in build. Browsing works against demo data, uploading does not yet. The spec is agreed and the work is broken into 33 issues on the [board](https://github.com/users/bharathmay-boop/projects/1).
 
 ## The problem
 
@@ -59,6 +59,14 @@ Signing in needs `ADMIN_PASSWORD`, which `vercel env pull` also brings down. Rea
 `vercel env pull` also brings down `SETTINGS_MASTER_KEY`, the AES-256-GCM key that API keys are sealed with. It is held in the environment rather than the database, so a database dump on its own does not open anything. Losing it means re-entering the API keys, not losing invoice data.
 
 Migrations are plain SQL files in `db/migrations`, applied in filename order and recorded in a `_migration` table, so re-running is safe.
+
+Load the demo data, which is what the screens show:
+
+```
+npm run seed
+```
+
+It removes only the rows it seeded, marked with `is_demo`, and reloads them. Safe to re-run, and it doubles as the reset action without touching real invoices in the same tables.
 
 Tests run on the Node test runner, no framework:
 
