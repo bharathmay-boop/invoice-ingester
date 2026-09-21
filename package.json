@@ -13,6 +13,8 @@
     "seed": "node --conditions=react-server --env-file-if-exists=.env.local scripts/seed.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.127.0",
+    "@vercel/blob": "^2.8.0",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.3.2",
     "lucide-react": "^1.47.0",

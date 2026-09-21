@@ -4,7 +4,7 @@ Drop in an invoice, get the particulars extracted and stored, then search what y
 
 Built for Indian invoices first: GSTIN, HSN codes, and the CGST, SGST and IGST split.
 
-**Status:** in build. Browsing works against demo data, uploading does not yet. The spec is agreed and the work is broken into 33 issues on the [board](https://github.com/users/bharathmay-boop/projects/1).
+**Status:** in build. Upload, extraction, review and save work end to end. Item matching is still exact-name only, and OpenRouter is not wired up yet. The spec is agreed and the work is broken into 33 issues on the [board](https://github.com/users/bharathmay-boop/projects/1).
 
 ## The problem
 
@@ -77,6 +77,16 @@ npm test
 They cover the places a mistake would not announce itself: description normalisation, the match thresholds, the arithmetic checks, and key sealing.
 
 The store tests need a database and skip themselves without one, so `npm test` still runs on a clean checkout. Run `vercel env pull` first to include them. They build a throwaway schema from the migration file and drop it afterwards, so running the suite cannot touch a saved API key.
+
+## Using it
+
+1. Sign in with the password in `ADMIN_PASSWORD`.
+2. Settings, Extraction: paste a Claude API key and save it. Test connection tells you whether it works.
+3. Upload: drop in a PDF or a photo of an invoice.
+4. Review: the original sits beside the extracted fields, everything editable. The arithmetic is rechecked as you type.
+5. Confirm and save. The invoice, its vendor and its line items are written in one transaction, and a duplicate is refused by the database rather than by a check someone remembered to write.
+
+Originals are stored in a private blob store and served back through an authenticated route, so an uploaded invoice is not sitting on a public URL.
 
 ## Design system
 
