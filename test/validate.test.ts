@@ -144,6 +144,19 @@ test("paise do not drift when many lines are added", () => {
   assert.equal(result.status, "confirmed");
 });
 
+test("an unrepresentable figure throws rather than passing as confirmed", () => {
+  // Without the guard: 1e307 * 100 is Infinity, Infinity minus Infinity is NaN,
+  // and NaN > tolerance is false, so this would come back confirmed.
+  assert.throws(
+    () => validateArithmetic(invoice({ subtotal: 1e307, total: 1e307 })),
+    /too large/,
+  );
+  assert.throws(
+    () => validateArithmetic(invoice({ total: Number.MAX_VALUE })),
+    /too large/,
+  );
+});
+
 test("the description says which figure is wrong and by how much", () => {
   const low = validateArithmetic(invoice({ subtotal: 3400, total: 3400 }));
   assert.equal(

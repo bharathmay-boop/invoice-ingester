@@ -5,14 +5,22 @@ import { z } from "zod";
 // 15 characters: state code, PAN, entity number, 'Z', checksum character.
 const GSTIN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 
-const amount = z.number().finite().nonnegative();
+// Bounds match the database columns, so an absurd figure fails here with a
+// readable error instead of at save time, or worse, sailing through the
+// arithmetic checks as Infinity. numeric(14,2) holds twelve digits before the
+// decimal point; the other two follow their own columns.
+const MAX_AMOUNT = 999_999_999_999.99; // numeric(14,2)
+const MAX_UNIT_PRICE = 9_999_999_999.9999; // numeric(14,4)
+const MAX_QUANTITY = 999_999_999.999; // numeric(12,3)
+
+const amount = z.number().finite().nonnegative().max(MAX_AMOUNT);
 
 export const lineItemSchema = z.object({
   description: z.string().min(1),
   hsn_code: z.string().regex(/^\d{4,8}$/).nullable(),
-  quantity: z.number().finite().positive(),
+  quantity: z.number().finite().positive().max(MAX_QUANTITY),
   unit: z.string().min(1).nullable(),
-  unit_price: amount,
+  unit_price: z.number().finite().nonnegative().max(MAX_UNIT_PRICE),
   amount: amount,
 });
 

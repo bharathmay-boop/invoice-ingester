@@ -27,7 +27,20 @@ export const DEFAULT_TOLERANCE_RUPEES = 1;
 // Money arrives as JSON numbers, and adding those directly means 0.1 + 0.2.
 // Everything is compared in whole paise instead, which is exact for the two
 // decimal places the schema stores.
-const toPaise = (rupees: number) => Math.round(rupees * 100);
+//
+// The safe integer guard is not paranoia. A figure large enough to overflow
+// turns into Infinity, two of those subtract to NaN, and `NaN > tolerance` is
+// false, so an invoice that adds up to nothing at all would be returned as
+// confirmed. The schema bounds amounts to the database columns, but this
+// function has to hold on its own since it is the last thing before a save.
+function toPaise(rupees: number): number {
+  const paise = Math.round(rupees * 100);
+  if (!Number.isSafeInteger(paise)) {
+    throw new Error(`${rupees} is too large to check arithmetically`);
+  }
+  return paise;
+}
+
 const toRupees = (paise: number) => paise / 100;
 
 /**
