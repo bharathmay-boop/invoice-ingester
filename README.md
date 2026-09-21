@@ -86,6 +86,10 @@ The store tests need a database and skip themselves without one, so `npm test` s
 4. Review: the original sits beside the extracted fields, everything editable. The arithmetic is rechecked as you type.
 5. Confirm and save. The invoice, its vendor and its line items are written in one transaction, and a duplicate is refused by the database rather than by a check someone remembered to write.
 
+To try a provider without saving its key, put it in `.env.local` as `OPENROUTER_API_KEY` or `ANTHROPIC_API_KEY`. Those are read only when `VERCEL` is unset, so they never apply on a deployment, and a key entered through Settings always wins over them. Settings shows where a key came from. `.env.example` lists every variable name and no values.
+
+Note that `vercel env pull` rewrites `.env.local`, so a key added by hand there has to be added again afterwards.
+
 Originals are stored in a private blob store and served back through an authenticated route, so an uploaded invoice is not sitting on a public URL.
 
 ## Design system

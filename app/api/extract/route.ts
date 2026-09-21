@@ -4,7 +4,8 @@ import { cookies } from "next/headers";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { query } from "@/lib/db.ts";
 import { extractWithAnthropic } from "@/lib/extract/anthropic.ts";
-import { getProvider, PROVIDER_LABEL } from "@/lib/extract/provider.ts";
+import { extractWithOpenRouter } from "@/lib/extract/openrouter.ts";
+import { getProvider } from "@/lib/extract/provider.ts";
 import { DEFAULT_TOLERANCE_RUPEES, describeDiscrepancy, validateArithmetic } from "@/lib/extract/validate.ts";
 import { getSetting } from "@/lib/settings/store.ts";
 
@@ -23,12 +24,6 @@ export async function POST(request: NextRequest) {
   }
 
   const provider = await getProvider();
-  if (provider !== "anthropic") {
-    return NextResponse.json(
-      { error: `${PROVIDER_LABEL[provider]} extraction is not built yet. Switch to Claude in settings.` },
-      { status: 409 },
-    );
-  }
 
   // Read the private blob here rather than handing the provider a URL. A
   // private blob has no URL anyone can fetch, which is the point of it.
@@ -38,7 +33,10 @@ export async function POST(request: NextRequest) {
   }
   const data = Buffer.from(await new Response(stored.stream).arrayBuffer()).toString("base64");
 
-  const outcome = await extractWithAnthropic({ data, contentType });
+  const outcome =
+    provider === "anthropic"
+      ? await extractWithAnthropic({ data, contentType })
+      : await extractWithOpenRouter({ data, contentType });
   if (!outcome.ok) {
     return NextResponse.json({ error: outcome.error }, { status: 422 });
   }

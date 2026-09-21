@@ -138,3 +138,41 @@ test("a row moved to another name will not open", { skip }, async () => {
   );
   await assert.rejects(() => store!.getSecret("openrouter_api_key"));
 });
+
+test("a key in the environment is local only", { skip }, async () => {
+  const name = "openrouter_api_key" as const;
+  const original = process.env.OPENROUTER_API_KEY;
+  const LOCAL = "sk-or-local-only-key-000000000000000000007c4f";
+
+  try {
+    // An earlier test leaves a row under this name behind on purpose.
+    await store!.deleteSecret(name);
+    delete process.env.OPENROUTER_API_KEY;
+    assert.equal((await store!.describeSecret(name)).present, false);
+
+    process.env.OPENROUTER_API_KEY = LOCAL;
+    assert.equal(await store!.getSecret(name), LOCAL);
+
+    const status = await store!.describeSecret(name);
+    assert.equal(status.present, true);
+    // Says where it came from, or the page would claim nothing is set while
+    // uploads quietly worked.
+    assert.match(status.masked ?? "", /from \.env\.local/);
+    assert.equal(status.masked?.includes(LOCAL.slice(0, 12)), false);
+
+    // The whole point: never on a deployment.
+    process.env.VERCEL = "1";
+    assert.equal(await store!.getSecret(name), null);
+    assert.equal((await store!.describeSecret(name)).present, false);
+    delete process.env.VERCEL;
+
+    // A key entered through settings wins, so the environment cannot shadow it.
+    await store!.setSecret(name, "sk-or-saved-in-settings-0000000000000000beef");
+    assert.equal((await store!.getSecret(name))?.endsWith("beef"), true);
+    await store!.deleteSecret(name);
+  } finally {
+    delete process.env.VERCEL;
+    if (original === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = original;
+  }
+});

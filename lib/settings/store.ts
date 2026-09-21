@@ -8,6 +8,25 @@ export type SecretName = "anthropic_api_key" | "openrouter_api_key";
 
 export type SecretStatus = { present: boolean; masked: string | null };
 
+/**
+ * Local only escape hatch for testing a key without saving it.
+ *
+ * The database is shared with the deployed app, so a key saved through settings
+ * is a key the deployed app can spend. A key put in .env.local instead never
+ * leaves this machine: the fallback is switched off whenever VERCEL is set,
+ * which it always is on a deployment and never is locally.
+ */
+const ENV_FALLBACK: Record<SecretName, string> = {
+  anthropic_api_key: "ANTHROPIC_API_KEY",
+  openrouter_api_key: "OPENROUTER_API_KEY",
+};
+
+function localKey(name: SecretName): string | null {
+  if (process.env.VERCEL) return null;
+  const value = process.env[ENV_FALLBACK[name]]?.trim();
+  return value ? value : null;
+}
+
 export async function getSetting<T>(key: string): Promise<T | null> {
   const rows = await query<{ value: T }>(
     "SELECT value FROM setting WHERE key = $1",
@@ -47,7 +66,10 @@ export async function getSecret(name: SecretName): Promise<string | null> {
     "SELECT sealed FROM secret WHERE name = $1",
     [name],
   );
-  return rows.length ? unseal(name, rows[0].sealed) : null;
+  // A saved key wins, so the environment cannot quietly shadow one somebody
+  // entered on purpose.
+  if (rows.length) return unseal(name, rows[0].sealed);
+  return localKey(name);
 }
 
 /** What the settings page renders: whether a key is set, and its last four. */
@@ -56,8 +78,13 @@ export async function describeSecret(name: SecretName): Promise<SecretStatus> {
     "SELECT last_four FROM secret WHERE name = $1",
     [name],
   );
-  return rows.length
-    ? { present: true, masked: rows[0].last_four }
+  if (rows.length) return { present: true, masked: rows[0].last_four };
+
+  // Says so plainly when the key is coming from the environment, otherwise the
+  // settings page would claim no key is set while uploads quietly work.
+  const local = localKey(name);
+  return local
+    ? { present: true, masked: `${maskKey(local)} (from .env.local)` }
     : { present: false, masked: null };
 }
 
