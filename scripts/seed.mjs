@@ -69,15 +69,44 @@ try {
       AND NOT EXISTS (SELECT 1 FROM invoice i WHERE i.vendor_id = vendor.id)
   `);
 
+  // gstin is unique across the whole table, so a real vendor holding one of the
+  // demo GSTINs would be caught by the upsert below and quietly renamed to the
+  // demo name. Refuse instead: these are invented GSTINs, so a collision means
+  // something needs a human, not a silent overwrite.
+  const clashes = await client.query(
+    `SELECT gstin, name FROM vendor
+     WHERE NOT is_demo AND gstin = ANY($1::text[])`,
+    [vendors.map((v) => v.gstin)],
+  );
+  if (clashes.rows.length) {
+    await client.query("ROLLBACK");
+    console.error(
+      [
+        "these vendors are not demo rows but hold a demo GSTIN, so seeding",
+        "would overwrite them:",
+        ...clashes.rows.map((r) => `  ${r.gstin}  ${r.name}`),
+      ].join("\n"),
+    );
+    await client.end();
+    process.exit(1);
+  }
+
   const vendorIds = new Map();
   for (const vendor of vendors) {
     const { rows } = await client.query(
       `INSERT INTO vendor (gstin, name, normalized_name, address, is_demo)
        VALUES ($1, $2, $3, $4, true)
-       ON CONFLICT (gstin) DO UPDATE SET name = EXCLUDED.name
+       ON CONFLICT (gstin) DO UPDATE
+         SET name = EXCLUDED.name,
+             normalized_name = EXCLUDED.normalized_name,
+             address = EXCLUDED.address
+         WHERE vendor.is_demo
        RETURNING id`,
       [vendor.gstin, vendor.name, vendor.name.toLowerCase(), vendor.address],
     );
+    if (!rows.length) {
+      throw new Error(`refused to overwrite a non demo vendor on ${vendor.gstin}`);
+    }
     vendorIds.set(vendor.gstin, rows[0].id);
   }
 
