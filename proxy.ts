@@ -1,6 +1,6 @@
 // Reads are public, writes need the session cookie, settings does not exist
 // without it. See docs/spec.md section 2.
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server.js";
 import { isValidSession, sessionCookie } from "./lib/auth.ts";
 
 const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);

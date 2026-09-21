@@ -14,11 +14,20 @@ export default function Login() {
     setBusy(true);
     setError(null);
 
-    const response = await fetch("/api/session", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ password }),
-    });
+    let response: Response;
+    try {
+      response = await fetch("/api/session", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+    } catch {
+      // A rejected fetch never reaches the branches below, so without this the
+      // form stays disabled on "Signing in…" and the only way out is a reload.
+      setError("Could not reach the server. Check your connection and try again.");
+      setBusy(false);
+      return;
+    }
 
     if (response.ok) {
       router.push("/");
