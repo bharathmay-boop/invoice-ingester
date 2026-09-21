@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getItem } from "@/lib/queries.ts";
 import { changeSince, formatDate, money, moneyRounded } from "@/lib/format.ts";
+import { cheapestVendorNow, unitsAreComparable } from "@/lib/price.ts";
 import { DemoNotice, Empty, Page, Stat, StatusBadge } from "../../ui.tsx";
 import { PriceChart } from "./chart.tsx";
 
@@ -29,14 +30,9 @@ export default async function ItemDetail({
   // wrong comparison is worse than no comparison. Until conversions exist, say
   // so rather than drawing a line through incomparable numbers.
   const units = new Set(confirmed.map((p) => p.unit ?? "each"));
-  const comparable = units.size <= 1;
+  const comparable = unitsAreComparable(confirmed);
 
-  const cheapest = comparable
-    ? confirmed.reduce(
-        (best, p) => (best === null || p.unit_price < best.unit_price ? p : best),
-        null as (typeof confirmed)[number] | null,
-      )
-    : null;
+  const cheapest = comparable ? cheapestVendorNow(confirmed) : null;
 
   const movement =
     comparable && latest && earliest && latest !== earliest
@@ -68,9 +64,13 @@ export default async function ItemDetail({
               }
             />
             <Stat
-              label="Cheapest vendor"
+              label="Cheapest vendor now"
               value={cheapest ? money(cheapest.unit_price) : "Not comparable"}
-              note={cheapest?.vendor_name ?? "Units differ between invoices"}
+              note={
+                cheapest
+                  ? `${cheapest.vendor_name}, as at ${formatDate(cheapest.invoice_date)}`
+                  : "Units differ between invoices"
+              }
             />
           </div>
 

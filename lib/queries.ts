@@ -2,6 +2,7 @@
 // interesting ones aggregate, and an ORM would only get in the way.
 import "server-only";
 import { query } from "./db.ts";
+import { normalize } from "./items/normalize.ts";
 
 // Only confirmed invoices count towards spend. An invoice whose figures
 // disagree with themselves has no business in a total.
@@ -11,15 +12,17 @@ export type VendorRow = {
   id: string;
   name: string;
   gstin: string | null;
+  /** Every invoice, whatever its status, so it matches the list on the page. */
   invoice_count: number;
   needs_review: number;
+  /** Confirmed only. An invoice that disagrees with itself is not a total. */
   spend: number;
 };
 
 export function listVendors(): Promise<VendorRow[]> {
   return query<VendorRow>(`
     SELECT v.id, v.name, v.gstin,
-           count(i.id) FILTER (WHERE ${CONFIRMED})::int      AS invoice_count,
+           count(i.id)::int                                       AS invoice_count,
            count(i.id) FILTER (WHERE i.status = 'needs_review')::int AS needs_review,
            coalesce(sum(i.total) FILTER (WHERE ${CONFIRMED}), 0)::float AS spend
     FROM vendor v
@@ -35,7 +38,7 @@ export async function getVendor(id: string): Promise<VendorDetail | null> {
   const rows = await query<VendorDetail>(
     `
     SELECT v.id, v.name, v.gstin, v.address,
-           count(i.id) FILTER (WHERE ${CONFIRMED})::int      AS invoice_count,
+           count(i.id)::int                                       AS invoice_count,
            count(i.id) FILTER (WHERE i.status = 'needs_review')::int AS needs_review,
            coalesce(sum(i.total) FILTER (WHERE ${CONFIRMED}), 0)::float AS spend
     FROM vendor v
@@ -76,8 +79,17 @@ export type ItemRow = {
 export function listItems(search?: string): Promise<ItemRow[]> {
   // Search filters the same list rather than being a separate screen, so there
   // is one way into an item.
-  const filter = search?.trim()
-    ? "WHERE it.normalized_name ILIKE '%' || $1 || '%' OR it.canonical_name ILIKE '%' || $1 || '%'"
+  //
+  // The term goes through the same normaliser the catalogue keys are built
+  // with, so "Paper, A4" and "a4 paper" find the same item. Without it the
+  // screen promises loose matching and then does a raw substring match, and
+  // tells you an item does not exist when it does. Every normalised token has
+  // to appear, which keeps multi word searches from matching everything.
+  const terms = search?.trim() ? normalize(search).split(" ").filter(Boolean) : [];
+  const filter = terms.length
+    ? `WHERE (SELECT bool_and(it.normalized_name LIKE '%' || t || '%')
+               FROM unnest($1::text[]) AS t)
+          OR it.canonical_name ILIKE '%' || $2 || '%'`
     : "";
 
   return query<ItemRow>(
@@ -98,7 +110,7 @@ export function listItems(search?: string): Promise<ItemRow[]> {
     GROUP BY it.id, it.canonical_name
     ORDER BY spend DESC, it.canonical_name
   `,
-    search?.trim() ? [search.trim()] : [],
+    terms.length ? [terms, search!.trim()] : [],
   );
 }
 

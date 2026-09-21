@@ -66,7 +66,7 @@ Load the demo data, which is what the screens show:
 npm run seed
 ```
 
-It clears the demo tables and reloads them, so it is safe to re-run and doubles as the reset action.
+It removes only the rows it seeded, marked with `is_demo`, and reloads them. Safe to re-run, and it doubles as the reset action without touching real invoices in the same tables.
 
 Tests run on the Node test runner, no framework:
 

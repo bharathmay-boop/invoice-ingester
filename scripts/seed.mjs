@@ -1,5 +1,6 @@
-// Loads the demo dataset into the database. Safe to re-run: it clears the demo
-// tables first, so this is also the "reset demo data" action from settings.
+// Loads the demo dataset into the database. Safe to re-run: it removes only the
+// rows it previously seeded, so this is also the "reset demo data" action from
+// settings and it cannot take a real invoice with it.
 //
 // Run: npm run seed
 import pg from "pg";
@@ -50,14 +51,31 @@ await client.connect();
 try {
   await client.query("BEGIN");
 
-  // Order matters: line_item references both invoice and item.
-  await client.query("TRUNCATE line_item, invoice, item, vendor RESTART IDENTITY CASCADE");
+  // Only demo rows. Truncating these tables would delete real uploaded
+  // invoices, which share them.
+  //
+  // Invoices first, taking their line items with them by cascade. Items and
+  // vendors go next, but only where nothing real still points at them: a real
+  // invoice may well have matched a catalogue item the demo created.
+  await client.query("DELETE FROM invoice WHERE is_demo");
+  await client.query(`
+    DELETE FROM item
+    WHERE is_demo
+      AND NOT EXISTS (SELECT 1 FROM line_item li WHERE li.item_id = item.id)
+  `);
+  await client.query(`
+    DELETE FROM vendor
+    WHERE is_demo
+      AND NOT EXISTS (SELECT 1 FROM invoice i WHERE i.vendor_id = vendor.id)
+  `);
 
   const vendorIds = new Map();
   for (const vendor of vendors) {
     const { rows } = await client.query(
-      `INSERT INTO vendor (gstin, name, normalized_name, address)
-       VALUES ($1, $2, $3, $4) RETURNING id`,
+      `INSERT INTO vendor (gstin, name, normalized_name, address, is_demo)
+       VALUES ($1, $2, $3, $4, true)
+       ON CONFLICT (gstin) DO UPDATE SET name = EXCLUDED.name
+       RETURNING id`,
       [vendor.gstin, vendor.name, vendor.name.toLowerCase(), vendor.address],
     );
     vendorIds.set(vendor.gstin, rows[0].id);
@@ -65,10 +83,19 @@ try {
 
   const itemIds = new Map();
   for (const item of items) {
-    const { rows } = await client.query(
-      "INSERT INTO item (canonical_name, normalized_name) VALUES ($1, $2) RETURNING id",
-      [item.canonicalName, item.normalizedName],
+    // A demo item that a real line item still points at survives the delete
+    // above, so reuse it rather than inserting a second one beside it.
+    const existing = await client.query(
+      "SELECT id FROM item WHERE normalized_name = $1 AND is_demo LIMIT 1",
+      [item.normalizedName],
     );
+    const { rows } = existing.rows.length
+      ? existing
+      : await client.query(
+          `INSERT INTO item (canonical_name, normalized_name, is_demo)
+           VALUES ($1, $2, true) RETURNING id`,
+          [item.canonicalName, item.normalizedName],
+        );
     itemIds.set(item.normalizedName, rows[0].id);
   }
 
@@ -77,8 +104,8 @@ try {
     const { rows } = await client.query(
       `INSERT INTO invoice
          (vendor_id, invoice_number, invoice_date, subtotal, cgst, sgst, igst,
-          total, status, extraction_meta)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+          total, status, extraction_meta, is_demo)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true) RETURNING id`,
       [
         vendorIds.get(invoice.gstin),
         invoice.number,
