@@ -78,6 +78,16 @@ They cover the places a mistake would not announce itself: description normalisa
 
 The store tests need a database and skip themselves without one, so `npm test` still runs on a clean checkout. Run `vercel env pull` first to include them. They build a throwaway schema from the migration file and drop it afterwards, so running the suite cannot touch a saved API key.
 
+## Design system
+
+The interface is built on [shadcn/ui](https://ui.shadcn.com), with components added by the CLI into `components/ui` rather than installed as a dependency. Theme tokens, type scale, radius and dark mode are defined once in `app/globals.css` and consumed everywhere else, so screens never define their own colours.
+
+```
+npx shadcn@latest add <component>
+```
+
+Dark mode follows the system setting through `next-themes`, which puts the class shadcn's tokens key off.
+
 ## Documentation
 
 - [`docs/spec.md`](docs/spec.md) is the specification: scope, data model, architecture, and what is deliberately left out.
