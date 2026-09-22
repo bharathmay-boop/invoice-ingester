@@ -20,25 +20,27 @@ const skip = configured
   ? false
   : "no DATABASE_URL and SETTINGS_MASTER_KEY, run `vercel env pull`";
 
-const store = configured ? await import("../lib/settings/store.ts") : null;
-const db = configured ? await import("../lib/db.ts") : null;
-
 const SCHEMA = `test_${Math.random().toString(36).slice(2, 10)}`;
 const KEY = "sk-test-" + "x".repeat(24) + "-4d7e";
 
-if (db) {
-  // Attached before the pool has opened a single connection, so every client it
-  // hands out is already pointed at the throwaway schema. A schema that does not
-  // exist yet in search_path is ignored rather than an error, which is what makes
-  // this safe to set before creating it.
-  db.pool.on("connect", (client) => {
-    client.query(`SET search_path TO ${SCHEMA}, public`);
-  });
-}
+// Both set before anything imports the pool, since the pool reads them once at
+// construction. Importing the store first would build the pool against the live
+// schema and this isolation would do nothing.
+//
+// Setting the schema on the pool's connect event instead is a race: the pool
+// can hand out a client and run a query on it before that SET lands, which
+// silently puts the write in public. Neon's pooler refuses search_path in the
+// startup packet, so tests use the direct connection, as migrations do.
+process.env.DATABASE_SCHEMA = SCHEMA;
+process.env.DATABASE_URL = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
+
+const store = configured ? await import("../lib/settings/store.ts") : null;
+const db = configured ? await import("../lib/db.ts") : null;
+
 
 before(async () => {
   if (!db) return;
-  await db.query(`CREATE SCHEMA ${SCHEMA}`);
+  await db.query(`CREATE SCHEMA IF NOT EXISTS ${SCHEMA}`);
   const migration = fileURLToPath(
     new URL("../db/migrations/002_settings.sql", import.meta.url),
   );

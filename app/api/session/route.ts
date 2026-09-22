@@ -1,18 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server.js";
 import { isCorrectPassword, mintSession, sessionCookie } from "@/lib/auth.ts";
-import {
-  checkLoginRate,
-  clearLoginFailures,
-  recordLoginFailure,
-  sweepLoginAttempts,
-} from "@/lib/rate-limit.ts";
+import { clearLoginAttempts, registerLoginAttempt } from "@/lib/rate-limit.ts";
 
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
-  // Checked before the password is even read, so a locked out source cannot
-  // keep spending a constant time comparison per guess.
-  const limit = await checkLoginRate(request);
+  // Records the attempt and decides in one transaction, before the password is
+  // even read, so a locked out source cannot keep spending a constant time
+  // comparison per guess and a parallel burst cannot all pass on one count.
+  const limit = await registerLoginAttempt(request);
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "Too many wrong passwords. Try again shortly." },
@@ -32,15 +28,14 @@ export async function POST(request: NextRequest) {
   }
 
   if (!(await isCorrectPassword(password))) {
-    await recordLoginFailure(request);
-    // Deliberately says nothing about which part was wrong.
+    // The attempt is already recorded. Deliberately says nothing about which
+    // part was wrong.
     return NextResponse.json({ error: "That password is not right." }, { status: 401 });
   }
 
   // A correct password clears the record, so one mistyped evening is not a
-  // lockout, and old rows go with it rather than needing a scheduled job.
-  await clearLoginFailures(request);
-  await sweepLoginAttempts();
+  // lockout.
+  await clearLoginAttempts(request);
 
   const response = NextResponse.json({ ok: true });
   response.cookies.set(sessionCookie.name, await mintSession(), {
