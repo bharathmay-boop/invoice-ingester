@@ -9,6 +9,7 @@ import { parseExtraction } from "@/lib/extract/schema.ts";
 import { validateArithmetic, DEFAULT_TOLERANCE_RUPEES } from "@/lib/extract/validate.ts";
 import { getSetting } from "@/lib/settings/store.ts";
 import { normalize } from "@/lib/items/normalize.ts";
+import { discardUpload } from "@/lib/blob.ts";
 
 export type SaveResult = { ok: false; message: string; duplicateId?: string } | null;
 
@@ -32,17 +33,20 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
     return { ok: false, message: "Nothing to save." };
   }
 
-  const parsed = parseExtraction(JSON.parse(payload));
+  let raw: unknown;
+  try {
+    raw = JSON.parse(payload);
+  } catch {
+    // The invoice rides in a hidden field, so a tampered or truncated value is
+    // a message back to the form, not an uncaught SyntaxError.
+    return { ok: false, message: "Could not read the edited invoice. Reload and try again." };
+  }
+
+  const parsed = parseExtraction(raw);
   if (!parsed.ok) {
     return { ok: false, message: parsed.error };
   }
   const invoice = parsed.data;
-
-  const [draft] = await query<{ blob_url: string; extraction_meta: unknown }>(
-    "SELECT blob_url, extraction_meta FROM draft WHERE id = $1",
-    [draftId],
-  );
-  if (!draft) return { ok: false, message: "That draft is gone." };
 
   const tolerance = (await getSetting<number>("rounding_tolerance")) ?? DEFAULT_TOLERANCE_RUPEES;
   // Re-checked on the edited figures, not the extracted ones: correcting one
@@ -53,6 +57,21 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
   let savedId: string;
   try {
     await client.query("BEGIN");
+
+    // Claimed inside the transaction, not read before it. Two confirms of the
+    // same draft would otherwise both proceed, and for an invoice with no
+    // GSTIN each would create its own vendor, so the
+    // UNIQUE (vendor_id, invoice_number) constraint would not see a duplicate
+    // and the same invoice would be stored twice.
+    const claimed = await client.query<{ blob_url: string; extraction_meta: unknown }>(
+      "SELECT blob_url, extraction_meta FROM draft WHERE id = $1 FOR UPDATE",
+      [draftId],
+    );
+    if (!claimed.rows.length) {
+      await client.query("ROLLBACK");
+      return { ok: false, message: "That draft has already been saved or discarded." };
+    }
+    const draft = claimed.rows[0];
 
     // GSTIN is a real unique business identifier, so vendor identity is an
     // exact key lookup rather than a guess.
@@ -162,6 +181,14 @@ export async function discardDraft(_previous: SaveResult, form: FormData): Promi
   const draftId = form.get("draftId");
   if (typeof draftId !== "string") return { ok: false, message: "Nothing to discard." };
 
+  const [draft] = await query<{ blob_url: string }>(
+    "SELECT blob_url FROM draft WHERE id = $1",
+    [draftId],
+  );
   await query("DELETE FROM draft WHERE id = $1", [draftId]);
+  // The original goes too. Otherwise a discarded invoice stays in the blob
+  // store forever, unreachable through the app and still someone's document.
+  if (draft) await discardUpload(draft.blob_url);
+
   redirect("/upload");
 }

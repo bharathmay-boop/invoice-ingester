@@ -5,6 +5,7 @@ import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { getProvider, SECRET_FOR } from "@/lib/extract/provider.ts";
 import { describeSecret } from "@/lib/settings/store.ts";
 import { reject } from "@/lib/upload.ts";
+import { query } from "@/lib/db.ts";
 
 export const runtime = "nodejs";
 
@@ -47,6 +48,13 @@ export async function POST(request: NextRequest) {
     addRandomSuffix: false,
     contentType: file.type,
   });
+
+  // Recorded so /api/extract can tell this blob from a URL a caller invented.
+  await query(
+    `INSERT INTO upload (blob_url, file_name, content_type) VALUES ($1, $2, $3)
+     ON CONFLICT (blob_url) DO NOTHING`,
+    [blob.url, file.name, file.type],
+  );
 
   return NextResponse.json({
     url: blob.url,

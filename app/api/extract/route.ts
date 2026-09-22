@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server.js";
 import { cookies } from "next/headers";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { query } from "@/lib/db.ts";
+import { discardUpload } from "@/lib/blob.ts";
 import { extractWithAnthropic } from "@/lib/extract/anthropic.ts";
 import { extractWithOpenRouter } from "@/lib/extract/openrouter.ts";
 import { getProvider } from "@/lib/extract/provider.ts";
@@ -23,6 +24,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Expected a stored file." }, { status: 400 });
   }
 
+  // Only a blob this app stored. Otherwise a signed in caller could name any
+  // private blob the deployment's credentials can read and have its contents
+  // sent to the model.
+  const claimed = await query<{ id: string }>(
+    "SELECT id FROM upload WHERE blob_url = $1",
+    [url],
+  );
+  if (!claimed.length) {
+    return NextResponse.json({ error: "That file was not uploaded here." }, { status: 404 });
+  }
+
   const provider = await getProvider();
 
   // Read the private blob here rather than handing the provider a URL. A
@@ -37,7 +49,11 @@ export async function POST(request: NextRequest) {
     provider === "anthropic"
       ? await extractWithAnthropic({ data, contentType })
       : await extractWithOpenRouter({ data, contentType });
+
   if (!outcome.ok) {
+    // Nothing will ever claim this file now, so it does not get to sit in the
+    // blob store forever costing money and holding someone's invoice.
+    await discardUpload(url);
     return NextResponse.json({ error: outcome.error }, { status: 422 });
   }
 
@@ -59,6 +75,9 @@ export async function POST(request: NextRequest) {
       JSON.stringify(outcome.meta),
     ],
   );
+
+  // The draft owns the blob from here.
+  await query("DELETE FROM upload WHERE blob_url = $1", [url]);
 
   return NextResponse.json({
     draftId: draft.id,
