@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { CheckIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { ACCEPT_ATTRIBUTE, reject } from "@/lib/upload.ts";
+import { ACCEPT_ATTRIBUTE, MAX_INVOICES_PER_FILE, reject } from "@/lib/upload.ts";
 
 type Stage = "queued" | "uploading" | "extracting" | "ready" | "rejected" | "not_invoice" | "failed";
 
@@ -15,10 +15,16 @@ type Item = {
   size: number;
   stage: Stage;
   note: string;
-  invoiceId?: string;
+  /** One per invoice found in the file. */
+  drafts?: Draft[];
   /** When the current in-flight stage began, for the elapsed timer. */
   startedAt?: number;
 };
+
+type Draft = { id: string; firstPage: number; lastPage: number; summary: string };
+
+const pagesOf = (d: Draft) =>
+  d.lastPage > d.firstPage ? `Pages ${d.firstPage} to ${d.lastPage}` : `Page ${d.firstPage}`;
 
 const STEPS = [
   { label: "Upload", stage: "uploading" },
@@ -142,10 +148,17 @@ export function Dropzone({ enabled }: { enabled: boolean }) {
           continue;
         }
 
+        const drafts: Draft[] = outcome.drafts ?? [];
         update(item.id, {
           stage: "ready",
-          invoiceId: outcome.draftId,
-          note: outcome.summary ?? "",
+          drafts,
+          note:
+            drafts.length === 1
+              ? drafts[0].summary
+              : `${drafts.length} invoices found.` +
+                (outcome.overLimit
+                  ? ` That is over the ${MAX_INVOICES_PER_FILE} per file limit. All were read, but split larger files next time.`
+                  : ""),
         });
       } catch (error) {
         update(item.id, {
@@ -179,7 +192,8 @@ export function Dropzone({ enabled }: { enabled: boolean }) {
           {enabled ? "Drop invoices here" : "Uploading needs a provider key"}
         </p>
         <p className="text-muted-foreground mt-1 text-sm">
-          PDF, JPEG, PNG or WebP. Several at once is fine.
+          PDF or image (JPEG, PNG, WebP), up to {MAX_INVOICES_PER_FILE} invoices per file.
+          Several files at once is fine.
         </p>
 
         <input
@@ -241,12 +255,30 @@ export function Dropzone({ enabled }: { enabled: boolean }) {
                     </span>
                   )}
                 </span>
-                {item.stage === "ready" && item.invoiceId && (
+                {item.stage === "ready" && item.drafts?.length === 1 && (
                   <Button asChild size="sm">
-                    <a href={`/review/${item.invoiceId}`}>Review</a>
+                    <a href={`/review/${item.drafts[0].id}`}>Review</a>
                   </Button>
                 )}
               </span>
+              {item.stage === "ready" && item.drafts && item.drafts.length > 1 && (
+                <ol className="border-border w-full space-y-2 border-l pl-4">
+                  {item.drafts.map((draft, i) => (
+                    <li key={draft.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                      <span className="flex flex-col">
+                        <span className="text-sm">
+                          Invoice {i + 1}
+                          <span className="text-muted-foreground"> · {pagesOf(draft)}</span>
+                        </span>
+                        <span className="text-muted-foreground text-xs">{draft.summary}</span>
+                      </span>
+                      <Button asChild size="sm" variant={i === 0 ? "default" : "outline"}>
+                        <a href={`/review/${draft.id}`}>Review</a>
+                      </Button>
+                    </li>
+                  ))}
+                </ol>
+              )}
             </li>
           ))}
         </ul>

@@ -9,7 +9,7 @@ import { parseExtraction } from "@/lib/extract/schema.ts";
 import { validateArithmetic, DEFAULT_TOLERANCE_RUPEES } from "@/lib/extract/validate.ts";
 import { getSetting } from "@/lib/settings/store.ts";
 import { normalize } from "@/lib/items/normalize.ts";
-import { discardUpload } from "@/lib/blob.ts";
+import { releaseDraft } from "@/lib/blob.ts";
 
 export type SaveResult = { ok: false; message: string; duplicateId?: string } | null;
 
@@ -55,6 +55,7 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
 
   const client = await pool.connect();
   let savedId: string;
+  let blobUrl: string;
   try {
     await client.query("BEGIN");
 
@@ -72,6 +73,7 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
       return { ok: false, message: "That draft has already been saved or discarded." };
     }
     const draft = claimed.rows[0];
+    blobUrl = draft.blob_url;
 
     // GSTIN is a real unique business identifier, so vendor identity is an
     // exact key lookup rather than a guess.
@@ -173,7 +175,7 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
   revalidatePath("/");
   revalidatePath("/items");
   revalidatePath("/vendors");
-  redirect(`/vendors?saved=${savedId}`);
+  redirect(await nextFromSameFile(blobUrl, `/vendors?saved=${savedId}`));
 }
 
 export async function discardDraft(_previous: SaveResult, form: FormData): Promise<SaveResult> {
@@ -181,16 +183,27 @@ export async function discardDraft(_previous: SaveResult, form: FormData): Promi
   const draftId = form.get("draftId");
   if (typeof draftId !== "string") return { ok: false, message: "Nothing to discard." };
 
-  // One statement, so the delete is the claim. Reading the row first and
-  // deleting after would let a discard that lost the race to a confirm still
-  // remove the blob, leaving the invoice that just saved pointing at a missing
-  // original.
-  const [owned] = await query<{ blob_url: string }>(
-    "DELETE FROM draft WHERE id = $1 RETURNING blob_url",
+  // Read before the discard so the next invoice from the same file can be
+  // found after it. releaseDraft is the claim and decides about the original.
+  const [draft] = await query<{ blob_url: string }>(
+    "SELECT blob_url FROM draft WHERE id = $1",
     [draftId],
   );
-  // Only the caller that actually removed the draft owns the original.
-  if (owned) await discardUpload(owned.blob_url);
+  await releaseDraft(draftId);
 
-  redirect("/upload");
+  redirect(draft ? await nextFromSameFile(draft.blob_url, "/upload") : "/upload");
+}
+
+/**
+ * Where to go after finishing with one invoice: the next draft from the same
+ * file, so a three invoice PDF is reviewed in one pass rather than by going
+ * back to the upload page between each.
+ */
+async function nextFromSameFile(blobUrl: string, otherwise: string): Promise<string> {
+  const [next] = await query<{ id: string }>(
+    `SELECT id FROM draft WHERE blob_url = $1
+     ORDER BY first_page NULLS FIRST, created_at LIMIT 1`,
+    [blobUrl],
+  );
+  return next ? `/review/${next.id}` : otherwise;
 }

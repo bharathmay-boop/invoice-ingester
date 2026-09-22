@@ -114,7 +114,13 @@ lib/extract/index.ts       reads settings, calls one, returns one type
 
 Both paths return the same object and both run through the same zod parse before anything touches the database.
 
-The response is a verdict first and the invoice second: `{ reason, is_invoice, invoice }`. `reason` is one sentence on what the file is. When `is_invoice` is false, `invoice` is null, no draft is created, the stored file is deleted, and the upload row says "Not an invoice" with the reason. Without that way out, a photo or any other non invoice has no valid answer except an invented one, which is exactly what the first real non invoice upload produced. Nothing downstream of validation sees a provider specific response, so swapping providers cannot break the review screen, the matcher, or the schema.
+The response is a verdict first and the invoices second: `{ reason, is_invoice, invoices }`, still one call per file. `reason` is one sentence on what the file is. When `is_invoice` is false, `invoices` is empty, no draft is created, the stored file is deleted, and the upload row says "Not an invoice" with the reason. Without that way out, a photo or any other non invoice has no valid answer except an invented one, which is exactly what the first real non invoice upload produced.
+
+`invoices` holds every invoice in the file, each with the `first_page` and `last_page` it spans. Continuation pages belong to the invoice they continue, and printed copies ("Original for recipient", "Duplicate for transporter") are returned once. Each invoice becomes its own draft, all written in one transaction and all sharing the one stored original. The review screen opens the PDF at that invoice's first page, and saving or discarding one moves on to the next draft from the same file.
+
+The upload page states a limit of 15 invoices per file. Only the page count can be checked before paying for a call, so a PDF over 30 pages is refused at upload, and a file that still turns out to hold more than 15 invoices keeps its drafts and says it was over the limit.
+
+A shared original is deleted only when the last draft or saved invoice using it goes. Discarding a draft deletes the row, takes a Postgres advisory lock on the file, and checks for anything else still using it, so two siblings discarded at the same moment cannot each see the other and both keep the file.
 
 ### Claude path
 
@@ -147,6 +153,8 @@ Two arithmetic checks run before any save:
 Both within a configurable tolerance, one rupee by default, for rounding. Failing either sets status `needs_review` with the disagreeing figures highlighted, instead of `confirmed`.
 
 Two more checks catch a model that fills in the form for something that is not a bill even though it could have declined: a total of zero, and a placeholder invoice number such as "unknown" or "N/A". Both add up perfectly, so the arithmetic alone would pass them. Either one sets `needs_review`.
+
+Two more flag duplicates rather than letting them through to the unique constraint at save time: the same supplier and invoice number appearing earlier in the same file, which is usually a printed copy, and one already saved. These, and the two above, are shown on the review screen under "Check this before saving", apart from the sums.
 
 This is the highest value code in the build relative to its size. A model that quietly invents a number is worse than one that fails loudly, because a wrong total flows straight into the spend figures and nothing announces it.
 

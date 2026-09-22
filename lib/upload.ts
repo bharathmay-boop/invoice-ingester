@@ -3,6 +3,15 @@
 
 export const MAX_BYTES = 12 * 1024 * 1024;
 
+// The limit the upload page states. The model can only count invoices after
+// it has been paid to read them, so this is enforced after the fact: a file
+// over it keeps its drafts and says so.
+export const MAX_INVOICES_PER_FILE = 15;
+
+// The limit that is enforced before anything is paid for: 15 invoices at up
+// to two pages each. Past this a single call also gets less reliable.
+export const MAX_PDF_PAGES = 30;
+
 export const ACCEPTED = {
   "application/pdf": ".pdf",
   "image/jpeg": ".jpg",

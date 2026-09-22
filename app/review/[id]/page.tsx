@@ -15,6 +15,10 @@ type DraftRow = {
   content_type: string;
   extracted: ExtractedInvoice;
   discrepancies: Discrepancy[];
+  first_page: number | null;
+  last_page: number | null;
+  /** Drafts from the same file still waiting, this one included. */
+  siblings: number;
 };
 
 export default async function Review({ params }: { params: Promise<{ id: string }> }) {
@@ -22,16 +26,40 @@ export default async function Review({ params }: { params: Promise<{ id: string 
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
 
   const [draft] = await query<DraftRow>(
-    `SELECT id, blob_url, file_name, content_type, extracted, discrepancies
-     FROM draft WHERE id = $1`,
+    `SELECT id, blob_url, file_name, content_type, extracted, discrepancies,
+            first_page, last_page,
+            (SELECT count(*)::int FROM draft s WHERE s.blob_url = d.blob_url) AS siblings
+     FROM draft d WHERE id = $1`,
     [id],
   );
   if (!draft) notFound();
 
+  const original = `/api/original?url=${encodeURIComponent(draft.blob_url)}`;
+  // The browser's PDF viewer opens at a page given in the fragment, so the
+  // invoice being reviewed is the one on screen.
+  const atPage = draft.first_page ? `${original}#page=${draft.first_page}` : original;
+  const pages =
+    draft.first_page && draft.last_page && draft.last_page > draft.first_page
+      ? `pages ${draft.first_page} to ${draft.last_page}`
+      : draft.first_page
+        ? `page ${draft.first_page}`
+        : null;
+
   return (
     <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 sm:py-12">
       <h1 className="text-2xl font-semibold sm:text-3xl">Review</h1>
-      <p className="text-muted-foreground mt-2 text-sm">{draft.file_name}</p>
+      <p className="text-muted-foreground mt-2 text-sm">
+        {draft.file_name}
+        {draft.siblings > 1 && (
+          <>
+            {" · "}
+            <span className="text-foreground font-medium">
+              {draft.siblings} invoices from this file left to review
+            </span>
+          </>
+        )}
+        {pages && draft.content_type === "application/pdf" && <> · {pages}</>}
+      </p>
 
       {/* Side by side is the design. Checking an extraction means comparing it
           to its source, and a layout that makes you hold a number in your head
@@ -42,14 +70,17 @@ export default async function Review({ params }: { params: Promise<{ id: string 
           <div className="border-border bg-muted/30 mt-3 overflow-hidden rounded-lg border">
             {draft.content_type === "application/pdf" ? (
               <object
-                data={`/api/original?url=${encodeURIComponent(draft.blob_url)}`}
+                // Keyed on the page: an <object> does not reload when only the
+                // fragment of its data changes.
+                key={atPage}
+                data={atPage}
                 type="application/pdf"
                 className="h-[70vh] w-full"
                 aria-label={`The original of ${draft.file_name}`}
               >
                 <p className="p-6 text-sm">
                   This browser will not display the PDF inline.{" "}
-                  <a href={`/api/original?url=${encodeURIComponent(draft.blob_url)}`} className="underline">
+                  <a href={atPage} className="underline">
                     Open it in a new tab
                   </a>
                   .
@@ -58,7 +89,7 @@ export default async function Review({ params }: { params: Promise<{ id: string 
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={`/api/original?url=${encodeURIComponent(draft.blob_url)}`}
+                src={original}
                 alt={`The original of ${draft.file_name}`}
                 className="max-h-[70vh] w-full object-contain"
               />

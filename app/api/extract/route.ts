@@ -2,16 +2,42 @@ import { get } from "@vercel/blob";
 import { NextResponse, type NextRequest } from "next/server.js";
 import { cookies } from "next/headers";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
-import { query } from "@/lib/db.ts";
+import { pool, query } from "@/lib/db.ts";
 import { discardUpload } from "@/lib/blob.ts";
 import { extractWithAnthropic } from "@/lib/extract/anthropic.ts";
 import { extractWithOpenRouter } from "@/lib/extract/openrouter.ts";
 import { getProvider } from "@/lib/extract/provider.ts";
-import { DEFAULT_TOLERANCE_RUPEES, describeDiscrepancy, validateArithmetic } from "@/lib/extract/validate.ts";
+import {
+  DEFAULT_TOLERANCE_RUPEES,
+  describeDiscrepancy,
+  findRepeats,
+  validateArithmetic,
+  warning,
+} from "@/lib/extract/validate.ts";
+import type { ExtractedInvoice } from "@/lib/extract/schema.ts";
+import { MAX_INVOICES_PER_FILE } from "@/lib/upload.ts";
+import { normalize } from "@/lib/items/normalize.ts";
 import { getSetting } from "@/lib/settings/store.ts";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
+
+/**
+ * Whether this supplier's invoice number is already stored. Matched on GSTIN
+ * where there is one, and on the normalised name otherwise, the same way the
+ * save path finds the vendor. Saving it again would fail on the unique
+ * constraint anyway; this says so before anyone spends time reviewing it.
+ */
+async function alreadySaved(invoice: ExtractedInvoice): Promise<boolean> {
+  const rows = await query(
+    `SELECT 1 FROM invoice i JOIN vendor v ON v.id = i.vendor_id
+     WHERE i.invoice_number = $1
+       AND CASE WHEN $2::text IS NOT NULL THEN v.gstin = $2 ELSE v.normalized_name = $3 END
+     LIMIT 1`,
+    [invoice.invoice_number, invoice.gstin, normalize(invoice.vendor_name)],
+  );
+  return rows.length > 0;
+}
 
 export async function POST(request: NextRequest) {
   const jar = await cookies();
@@ -72,31 +98,62 @@ export async function POST(request: NextRequest) {
 
     const tolerance =
       (await getSetting<number>("rounding_tolerance")) ?? DEFAULT_TOLERANCE_RUPEES;
-    const checks = validateArithmetic(outcome.invoice, tolerance);
+    const repeats = findRepeats(outcome.invoices.map((f) => f.invoice));
 
-    const [draft] = await query<{ id: string }>(
-      `INSERT INTO draft (blob_url, file_name, content_type, extracted, discrepancies,
-                          status, extraction_meta)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-      [
-        url,
-        name,
-        contentType,
-        JSON.stringify(outcome.invoice),
-        JSON.stringify(checks.discrepancies),
-        checks.status === "confirmed" ? "checks_passed" : "needs_review",
-        JSON.stringify(outcome.meta),
-      ],
-    );
+    const drafts = [];
+    for (const [i, found] of outcome.invoices.entries()) {
+      const checks = validateArithmetic(found.invoice, tolerance);
+      if (repeats.has(i)) checks.discrepancies.push(warning("repeated_in_file"));
+      if (await alreadySaved(found.invoice)) checks.discrepancies.push(warning("already_saved"));
+      drafts.push({ found, discrepancies: checks.discrepancies });
+    }
 
-    // Ownership has transferred. The draft holds the blob from here.
+    // All or none. Half the invoices of a file saved as drafts, with the
+    // original then deleted by the catch below, would leave drafts pointing at
+    // nothing.
+    const client = await pool.connect();
+    const ids: string[] = [];
+    try {
+      await client.query("BEGIN");
+      for (const { found, discrepancies } of drafts) {
+        const { rows } = await client.query<{ id: string }>(
+          `INSERT INTO draft (blob_url, file_name, content_type, extracted, discrepancies,
+                              status, extraction_meta, first_page, last_page)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+          [
+            url,
+            name,
+            contentType,
+            JSON.stringify(found.invoice),
+            JSON.stringify(discrepancies),
+            discrepancies.length ? "needs_review" : "checks_passed",
+            JSON.stringify(outcome.meta),
+            found.first_page,
+            found.last_page,
+          ],
+        );
+        ids.push(rows[0].id);
+      }
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    // Ownership has transferred. The drafts share the blob from here, and it
+    // goes when the last of them is discarded.
     return NextResponse.json({
-      draftId: draft.id,
-      status: checks.status,
-      summary:
-        checks.status === "confirmed"
-          ? `${outcome.invoice.vendor_name}, ${outcome.invoice.line_items.length} line items. The figures add up.`
-          : checks.discrepancies.map(describeDiscrepancy).join(" "),
+      drafts: drafts.map(({ found, discrepancies }, i) => ({
+        id: ids[i],
+        firstPage: found.first_page,
+        lastPage: found.last_page,
+        summary: discrepancies.length
+          ? `${found.invoice.invoice_number}: ${discrepancies.map(describeDiscrepancy).join(" ")}`
+          : `${found.invoice.vendor_name}, ${found.invoice.invoice_number}, ${found.invoice.line_items.length} line items. The figures add up.`,
+      })),
+      overLimit: drafts.length > MAX_INVOICES_PER_FILE,
     });
   } catch (error) {
     // A throw anywhere above, including from the draft insert itself, leaves

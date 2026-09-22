@@ -5,7 +5,13 @@
 // See docs/spec.md section 5.
 import type { ExtractedInvoice } from "./schema.ts";
 
-export type CheckName = "line_items_sum" | "tax_total" | "zero_total" | "placeholder_number";
+export type CheckName =
+  | "line_items_sum"
+  | "tax_total"
+  | "zero_total"
+  | "placeholder_number"
+  | "repeated_in_file"
+  | "already_saved";
 
 // What a model writes when it has no invoice number but was made to give one.
 const PLACEHOLDER_NUMBER = /^(unknown|n\/?a|none|null|nil|not available|-+|0+|x+)$/i;
@@ -94,10 +100,10 @@ export function validateArithmetic(
   // not a bill, which the extraction prompt now lets it refuse, so these only
   // catch the times it says yes anyway.
   if (toPaise(invoice.total) === 0) {
-    discrepancies.push({ check: "zero_total", stated: 0, computed: 0, difference: 0 });
+    discrepancies.push(warning("zero_total"));
   }
   if (PLACEHOLDER_NUMBER.test(invoice.invoice_number.trim())) {
-    discrepancies.push({ check: "placeholder_number", stated: 0, computed: 0, difference: 0 });
+    discrepancies.push(warning("placeholder_number"));
   }
 
   return {
@@ -111,8 +117,35 @@ export function validateArithmetic(
  * review screen shows them apart from the sums, since correcting a figure is
  * the wrong advice for either.
  */
-export const isValidityWarning = (d: Discrepancy) =>
-  d.check === "zero_total" || d.check === "placeholder_number";
+export const isValidityWarning = (d: Discrepancy) => !ARITHMETIC.includes(d.check);
+
+const ARITHMETIC: CheckName[] = ["line_items_sum", "tax_total"];
+
+/** A warning that is not about the figures, recorded with no figures to compare. */
+export const warning = (check: CheckName): Discrepancy => ({
+  check,
+  stated: 0,
+  computed: 0,
+  difference: 0,
+});
+
+/**
+ * Which invoices in one file repeat an earlier one: same supplier, same
+ * number. The prompt asks for printed copies to be returned once, and this
+ * catches the times they are not, so a triplicate does not become three spend
+ * entries. The supplier is the GSTIN where there is one, the name otherwise.
+ */
+export function findRepeats(invoices: ExtractedInvoice[]): Set<number> {
+  const seen = new Set<string>();
+  const repeats = new Set<number>();
+  invoices.forEach((invoice, i) => {
+    const supplier = invoice.gstin ?? invoice.vendor_name.trim().toLowerCase();
+    const key = JSON.stringify([supplier, invoice.invoice_number.trim().toUpperCase()]);
+    if (seen.has(key)) repeats.add(i);
+    seen.add(key);
+  });
+  return repeats;
+}
 
 /** One line per discrepancy, for the review screen and for error messages. */
 export function describeDiscrepancy(d: Discrepancy): string {
@@ -121,6 +154,12 @@ export function describeDiscrepancy(d: Discrepancy): string {
   }
   if (d.check === "placeholder_number") {
     return "The invoice number looks like a placeholder, not a real number.";
+  }
+  if (d.check === "repeated_in_file") {
+    return "The same invoice appears earlier in this file, so this may be a printed copy.";
+  }
+  if (d.check === "already_saved") {
+    return "An invoice with this number from this supplier is already saved.";
   }
 
   const direction = d.difference > 0 ? "more than" : "less than";
