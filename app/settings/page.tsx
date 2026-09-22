@@ -9,7 +9,10 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { describeSecret } from "@/lib/settings/store.ts";
 import { DEFAULT_TOLERANCE_RUPEES } from "@/lib/extract/validate.ts";
-import { getProvider, PROVIDER_LABEL } from "@/lib/extract/provider.ts";
+import { getProvider, MODEL_SETTING, PROVIDER_LABEL } from "@/lib/extract/provider.ts";
+import { DEFAULT_OPENROUTER_MODEL, formatCost, listModels } from "@/lib/extract/models.ts";
+import { getSetting } from "@/lib/settings/store.ts";
+import { ModelPicker } from "./model-picker.tsx";
 import { Pending } from "./pending.tsx";
 import { ProviderSettings, type ProviderView } from "./provider-settings.tsx";
 
@@ -26,6 +29,12 @@ export default async function Settings() {
     describeSecret("openrouter_api_key"),
     getProvider(),
   ]);
+
+  // Only fetched when it is the provider in use, so choosing Claude does not
+  // pay for a catalogue nobody is going to look at.
+  const catalogue = selected === "openrouter" ? await listModels() : null;
+  const chosenModel =
+    (await getSetting<string>(MODEL_SETTING)) ?? DEFAULT_OPENROUTER_MODEL;
 
   const providers: ProviderView[] = [
     {
@@ -73,6 +82,38 @@ export default async function Settings() {
               <ProviderSettings providers={providers} selected={selected} />
             </CardContent>
           </Card>
+
+          {catalogue && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Model</CardTitle>
+                <CardDescription>
+                  Which model on OpenRouter reads the invoice. They differ by
+                  more than twenty times in price for the same job, so this is
+                  worth choosing rather than accepting.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {catalogue.ok ? (
+                  <ModelPicker
+                    selected={chosenModel}
+                    stale={catalogue.stale}
+                    models={catalogue.models.map((m) => ({
+                      id: m.id,
+                      name: m.name,
+                      cost: formatCost(m.cost),
+                      recommended: m.recommended,
+                    }))}
+                  />
+                ) : (
+                  <p className="text-destructive text-sm">
+                    {catalogue.reason} The model list will appear once
+                    OpenRouter is reachable.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="matching" className="mt-6 space-y-4">

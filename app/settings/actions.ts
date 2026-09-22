@@ -6,6 +6,7 @@ import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { deleteSecret, setSecret, setSetting } from "@/lib/settings/store.ts";
 import {
   isProvider,
+  MODEL_SETTING,
   PROVIDER_SETTING,
   SECRET_FOR,
   testConnection,
@@ -73,6 +74,22 @@ export async function chooseProvider(
   revalidatePath("/settings");
   revalidatePath("/upload");
   return { ok: true, message: "Provider updated." };
+}
+
+export async function chooseModel(
+  _previous: ActionResult | null,
+  form: FormData,
+): Promise<ActionResult> {
+  await requireSession();
+
+  const model = form.get("model");
+  if (typeof model !== "string" || !model.trim()) {
+    return { ok: false, message: "Pick a model first." };
+  }
+
+  await setSetting(MODEL_SETTING, model.trim());
+  revalidatePath("/settings");
+  return { ok: true, message: "Saved. New uploads will use it." };
 }
 
 export async function checkConnection(
