@@ -1,12 +1,21 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { getSecret } from "../settings/store.ts";
-import { extractionJsonSchema, parseExtraction, type ExtractedInvoice } from "./schema.ts";
+import { extractionJsonSchema, parseResponse, type ExtractedInvoice } from "./schema.ts";
 import { DEFAULT_ANTHROPIC_MODEL } from "./provider.ts";
 
 const TOOL_NAME = "record_invoice";
 
-const INSTRUCTIONS = `You are reading a single Indian tax invoice.
+const INSTRUCTIONS = `You are reading a file someone uploaded as an Indian tax invoice.
+
+First decide whether it is one. An invoice, bill or receipt names who issued
+it, carries an invoice number or a date, and lists amounts charged. A product
+photo, a quote without prices, a bank statement or any other document is not
+an invoice. In reason, say in one short sentence what the file is. If it is not
+an invoice, set is_invoice to false and invoice to null, and fill in nothing
+else: an invented invoice number, date or amount is far worse than saying no.
+
+If it is an invoice, set is_invoice to true and fill invoice as follows.
 
 Return every figure exactly as printed. Do not compute, correct or round
 anything: if the invoice's own totals disagree with its line items, return what
@@ -22,7 +31,9 @@ is the worst thing you can do here.
 
 export type ExtractionOutcome =
   | { ok: true; invoice: ExtractedInvoice; meta: Record<string, unknown> }
-  | { ok: false; error: string };
+  // `notInvoice` marks a file the model read and declined, with `error` saying
+  // what it was, as opposed to a call that failed.
+  | { ok: false; error: string; notInvoice?: boolean };
 
 /**
  * A tool with `strict: true`, so the arguments are guaranteed to match the
@@ -66,7 +77,7 @@ export async function extractWithAnthropic(
       tools: [
         {
           name: TOOL_NAME,
-          description: "Record the particulars of one invoice, exactly as printed.",
+          description: "Say whether the file is an invoice and, if it is, record its particulars exactly as printed.",
           input_schema: extractionJsonSchema as Anthropic.Tool["input_schema"],
         },
       ],
@@ -87,14 +98,16 @@ export async function extractWithAnthropic(
       return { ok: false, error: "The model did not return invoice fields." };
     }
 
-    const parsed = parseExtraction(call.input);
+    const parsed = parseResponse(call.input);
     if (!parsed.ok) {
-      return { ok: false, error: `The extracted fields did not validate.\n${parsed.error}` };
+      return parsed.notInvoice
+        ? { ok: false, notInvoice: true, error: parsed.reason }
+        : { ok: false, error: parsed.error };
     }
 
     return {
       ok: true,
-      invoice: parsed.data,
+      invoice: parsed.invoice,
       // Recorded so it is possible to tell later whether one model reads a
       // given vendor's layout better than another.
       meta: {
