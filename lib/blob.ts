@@ -11,10 +11,22 @@ import { query } from "./db.ts";
  * is logged and swallowed.
  */
 export async function discardUpload(url: string): Promise<void> {
+  // Neither half may throw. This is best effort cleanup, and it is called from
+  // error handlers: a failure here would replace the real error with this one,
+  // so the caller would lose both the reason and its structured response.
   try {
     await del(url);
   } catch (error) {
     console.error("could not delete blob", url, error instanceof Error ? error.message : error);
   }
-  await query("DELETE FROM upload WHERE blob_url = $1", [url]);
+
+  try {
+    await query("DELETE FROM upload WHERE blob_url = $1", [url]);
+  } catch (error) {
+    console.error(
+      "could not delete upload row",
+      url,
+      error instanceof Error ? error.message : error,
+    );
+  }
 }
