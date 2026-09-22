@@ -44,3 +44,6 @@ next-env.d.ts
 .agents/
 .claude/
 skills-lock.json
+
+# Variable names only, no values. Safe to commit.
+!.env.example

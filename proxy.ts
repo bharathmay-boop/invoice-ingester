@@ -9,7 +9,12 @@ const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const ALWAYS_OPEN = ["/api/session"];
 
 // Not rendered at all when signed out, rather than rendered and refused.
-const PRIVATE_PAGES = ["/settings"];
+//
+// /review is here because a draft holds a whole extracted invoice, vendor,
+// GSTIN, line items and totals. The proxy lets any GET through by default, so
+// without this a review URL out of someone's history reads all of it with no
+// session at all.
+const PRIVATE_PAGES = ["/settings", "/review"];
 
 function isUnder(pathname: string, prefixes: string[]): boolean {
   return prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));

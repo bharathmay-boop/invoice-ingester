@@ -9,7 +9,9 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { describeSecret } from "@/lib/settings/store.ts";
 import { DEFAULT_TOLERANCE_RUPEES } from "@/lib/extract/validate.ts";
+import { getProvider, PROVIDER_LABEL } from "@/lib/extract/provider.ts";
 import { Pending } from "./pending.tsx";
+import { ProviderSettings, type ProviderView } from "./provider-settings.tsx";
 
 export const dynamic = "force-dynamic";
 
@@ -19,10 +21,28 @@ export const metadata = { title: "Settings" };
 // and every one says which, so the page is honest about being a shell rather
 // than looking finished and doing nothing.
 export default async function Settings() {
-  const [anthropic, openrouter] = await Promise.all([
+  const [anthropic, openrouter, selected] = await Promise.all([
     describeSecret("anthropic_api_key"),
     describeSecret("openrouter_api_key"),
+    getProvider(),
   ]);
+
+  const providers: ProviderView[] = [
+    {
+      id: "anthropic",
+      label: PROVIDER_LABEL.anthropic,
+      blurb: "Claude reads the invoice directly. No model to choose. Around two to four cents an invoice.",
+      present: anthropic.present,
+      masked: anthropic.masked,
+    },
+    {
+      id: "openrouter",
+      label: PROVIDER_LABEL.openrouter,
+      blurb: "Any vision model that supports structured output, billed through OpenRouter.",
+      present: openrouter.present,
+      masked: openrouter.masked,
+    },
+  ];
 
   return (
     <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8 sm:px-6 sm:py-12">
@@ -49,23 +69,8 @@ export default async function Settings() {
                 other changes nothing downstream.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <dl className="grid gap-3 sm:grid-cols-2">
-                <KeyStatus
-                  label="Claude API key"
-                  present={anthropic.present}
-                  masked={anthropic.masked}
-                />
-                <KeyStatus
-                  label="OpenRouter key"
-                  present={openrouter.present}
-                  masked={openrouter.masked}
-                />
-              </dl>
-              <Separator />
-              <Pending issue={15} what="Provider selection, key entry and the masked display" />
-              <Pending issue={17} what="The model dropdown, built from the live OpenRouter catalogue" />
-              <Pending issue={18} what="Test connection" />
+            <CardContent>
+              <ProviderSettings providers={providers} selected={selected} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -146,26 +151,6 @@ function Reading({ label, value }: { label: string; value: string }) {
     <div>
       <dt className="text-muted-foreground text-xs uppercase tracking-wide">{label}</dt>
       <dd className="mt-0.5 text-sm font-medium tabular-nums">{value}</dd>
-    </div>
-  );
-}
-
-function KeyStatus({
-  label,
-  present,
-  masked,
-}: {
-  label: string;
-  present: boolean;
-  masked: string | null;
-}) {
-  return (
-    <div>
-      <dt className="text-muted-foreground text-xs uppercase tracking-wide">{label}</dt>
-      <dd className="mt-0.5 font-mono text-sm">
-        {/* The mask is the only form of a key that ever reaches the browser. */}
-        {present ? masked : <span className="font-sans italic">Not set</span>}
-      </dd>
     </div>
   );
 }

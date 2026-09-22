@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 // suggestions screen to point at. A nav item that goes nowhere is worse than
 // a missing one.
 const LINKS = [
+  { href: "/upload", label: "Upload" },
   { href: "/items", label: "Items" },
   { href: "/vendors", label: "Vendors" },
 ];
