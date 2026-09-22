@@ -103,9 +103,8 @@ export async function isValidSession(
  * Compares HMACs rather than the passwords themselves, so the comparison is
  * both constant time and independent of the lengths involved.
  *
- * ponytail: no rate limiting. On a public deployment this is one password
- * against the open internet, and a serverless in-memory counter would not work
- * anyway. Upgrade path is a shared store or the Vercel firewall, tracked in #46.
+ * Rate limited at the route, in lib/rate-limit.ts, since this comparison is
+ * cheap enough to run forever otherwise.
  */
 export async function isCorrectPassword(candidate: string): Promise<boolean> {
   const expected = process.env.ADMIN_PASSWORD;

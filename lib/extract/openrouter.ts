@@ -2,10 +2,8 @@ import "server-only";
 import { getSecret, getSetting } from "../settings/store.ts";
 import { extractionJsonSchema, parseExtraction } from "./schema.ts";
 import { MODEL_SETTING } from "./provider.ts";
+import { DEFAULT_OPENROUTER_MODEL } from "./models.ts";
 import type { ExtractionOutcome } from "./anthropic.ts";
-
-/** Used when settings has no model chosen yet. The dropdown is #16 and #17. */
-export const DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-4.5";
 
 const INSTRUCTIONS = `You are reading a single Indian tax invoice.
 
