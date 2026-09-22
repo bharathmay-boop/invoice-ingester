@@ -1,8 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CheckIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { ACCEPT_ATTRIBUTE, reject } from "@/lib/upload.ts";
 
 type Stage = "queued" | "uploading" | "extracting" | "ready" | "rejected" | "failed";
@@ -14,7 +16,59 @@ type Item = {
   stage: Stage;
   note: string;
   invoiceId?: string;
+  /** When the current in-flight stage began, for the elapsed timer. */
+  startedAt?: number;
 };
+
+const STEPS = [
+  { label: "Upload", stage: "uploading" },
+  { label: "Read", stage: "extracting" },
+  { label: "Check", stage: "ready" },
+] as const;
+
+function Elapsed({ since }: { since: number }) {
+  const [now, setNow] = useState(since);
+  useEffect(() => {
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(tick);
+  }, []);
+  return <span className="tabular-nums">{Math.max(0, Math.round((now - since) / 1000))}s</span>;
+}
+
+/**
+ * Upload, read, check, with the live step spinning. Only drawn while a file is
+ * in flight or done: a rejected or failed file just shows its reason.
+ */
+function Steps({ stage }: { stage: Stage }) {
+  const current = STEPS.findIndex((s) => s.stage === stage);
+  const at = stage === "queued" ? -1 : current;
+  return (
+    <ol className="flex items-center gap-2 text-xs">
+      {STEPS.map((step, i) => {
+        const done = i < at || stage === "ready";
+        const active = i === at && stage !== "ready";
+        return (
+          <li
+            key={step.label}
+            className={`flex items-center gap-1.5 ${
+              done ? "text-foreground" : active ? "text-foreground font-medium" : "text-muted-foreground"
+            }`}
+          >
+            {done ? (
+              <CheckIcon className="text-primary size-3.5" aria-hidden />
+            ) : active ? (
+              <Spinner className="size-3.5 motion-reduce:animate-none" aria-hidden />
+            ) : (
+              <span className="bg-border size-1.5 rounded-full" aria-hidden />
+            )}
+            {step.label}
+            {i < STEPS.length - 1 && <span className="bg-border ml-1 h-px w-4" aria-hidden />}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
 
 const STAGE_TEXT: Record<Stage, string> = {
   queued: "Waiting",
@@ -58,7 +112,7 @@ export function Dropzone({ enabled }: { enabled: boolean }) {
       if (item.stage === "rejected") continue;
 
       try {
-        update(item.id, { stage: "uploading" });
+        update(item.id, { stage: "uploading", startedAt: Date.now() });
         const body = new FormData();
         body.append("file", file);
 
@@ -69,7 +123,7 @@ export function Dropzone({ enabled }: { enabled: boolean }) {
           continue;
         }
 
-        update(item.id, { stage: "extracting" });
+        update(item.id, { stage: "extracting", startedAt: Date.now() });
         const extracted = await fetch("/api/extract", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -148,9 +202,15 @@ export function Dropzone({ enabled }: { enabled: boolean }) {
       {items.length > 0 && (
         <ul className="divide-border divide-y">
           {items.map((item) => (
-            <li key={item.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-3">
-              <span className="flex flex-col">
+            <li key={item.id} className="relative flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3">
+              {(item.stage === "uploading" || item.stage === "extracting") && (
+                <span className="bg-muted absolute inset-x-0 bottom-0 h-0.5 overflow-hidden" aria-hidden>
+                  <span className="bg-primary animate-indeterminate block h-full w-1/4 motion-reduce:animate-none" />
+                </span>
+              )}
+              <span className="flex flex-col gap-1">
                 <span className="text-sm font-medium">{item.name}</span>
+                {item.stage !== "rejected" && item.stage !== "failed" && <Steps stage={item.stage} />}
                 {item.note && (
                   <span
                     className={`text-xs ${
@@ -164,7 +224,16 @@ export function Dropzone({ enabled }: { enabled: boolean }) {
                 )}
               </span>
               <span className="flex items-center gap-3">
-                <span className="text-muted-foreground text-xs">{STAGE_TEXT[item.stage]}</span>
+                <span className="text-muted-foreground text-xs">
+                  <span aria-live="polite">{STAGE_TEXT[item.stage]}</span>
+                  {(item.stage === "uploading" || item.stage === "extracting") && item.startedAt && (
+                    // Out of the live region, or a reader would announce every tick.
+                    <span aria-hidden>
+                      {" · "}
+                      <Elapsed key={item.startedAt} since={item.startedAt} />
+                    </span>
+                  )}
+                </span>
                 {item.stage === "ready" && item.invoiceId && (
                   <Button asChild size="sm">
                     <a href={`/review/${item.invoiceId}`}>Review</a>

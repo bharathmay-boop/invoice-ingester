@@ -5,6 +5,13 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  /* A bar that sweeps rather than fills. Extraction reports no progress, so
+     a filling bar would be a made up number. */
+  --animate-indeterminate: indeterminate 1.4s ease-in-out infinite;
+  @keyframes indeterminate {
+    from { translate: -100% 0; }
+    to { translate: 300% 0; }
+  }
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   /* Point at the variables next/font defines on <html>, so whatever family
