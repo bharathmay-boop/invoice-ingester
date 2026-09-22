@@ -2,6 +2,8 @@
 
 import { useActionState, useState } from "react";
 import Link from "next/link";
+import { TriangleAlertIcon } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,12 +15,15 @@ import { confirmDraft, discardDraft, type SaveResult } from "./actions.ts";
 type Props = {
   draftId: string;
   initial: ExtractedInvoice;
+  /** The sums that do not add up. */
   problems: string[];
+  /** Signs the file may not be an invoice at all, kept apart from the sums. */
+  warnings: string[];
 };
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-export function ReviewForm({ draftId, initial, problems }: Props) {
+export function ReviewForm({ draftId, initial, problems, warnings }: Props) {
   const [invoice, setInvoice] = useState<ExtractedInvoice>(initial);
   const [saved, save, saving] = useActionState<SaveResult, FormData>(confirmDraft, null);
   const [, discard] = useActionState<SaveResult, FormData>(discardDraft, null);
@@ -45,19 +50,40 @@ export function ReviewForm({ draftId, initial, problems }: Props) {
 
   return (
     <div className="space-y-6">
+      {warnings.length > 0 && (
+        <Alert>
+          <TriangleAlertIcon />
+          <AlertTitle>This may not be a real invoice</AlertTitle>
+          <AlertDescription>
+            <ul className="list-disc space-y-0.5 pl-5">
+              {warnings.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+            <p>
+              Check the original. If it is not an invoice, discard it. If it is,
+              fix the invoice number or total below.
+            </p>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {problems.length > 0 && (
-        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
-          <p className="font-medium">These figures do not add up</p>
-          <ul className="mt-1 list-disc space-y-0.5 pl-5">
-            {problems.map((p) => (
-              <li key={p}>{p}</li>
-            ))}
-          </ul>
-          <p className="mt-2">
-            Correct them against the original, or save anyway and it is kept
-            flagged for checking.
-          </p>
-        </div>
+        <Alert>
+          <TriangleAlertIcon />
+          <AlertTitle>These figures do not add up</AlertTitle>
+          <AlertDescription>
+            <ul className="list-disc space-y-0.5 pl-5">
+              {problems.map((p) => (
+                <li key={p}>{p}</li>
+              ))}
+            </ul>
+            <p>
+              Correct them against the original, or save anyway and it is kept
+              flagged for checking.
+            </p>
+          </AlertDescription>
+        </Alert>
       )}
 
       <div className="grid gap-4 sm:grid-cols-2">

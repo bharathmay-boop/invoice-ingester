@@ -8,12 +8,17 @@ const TOOL_NAME = "record_invoice";
 
 const INSTRUCTIONS = `You are reading a file someone uploaded as an Indian tax invoice.
 
-First decide whether it is one. An invoice, bill or receipt names who issued
-it, carries an invoice number or a date, and lists amounts charged. A product
-photo, a quote without prices, a bank statement or any other document is not
-an invoice. In reason, say in one short sentence what the file is. If it is not
-an invoice, set is_invoice to false and invoice to null, and fill in nothing
-else: an invented invoice number, date or amount is far worse than saying no.
+First decide whether it is one. An invoice, bill or receipt shows all four
+of: who issued it, an invoice number, a date, and the amounts charged. A
+product photo, a quote without prices, a bank statement or any other document
+is not an invoice. Nor is a bill that is missing any of the four: every field
+below is required, and a missing number or date must never be filled with a
+guess or a placeholder.
+
+In reason, say in one short sentence what the file is, and for a bill that
+falls short, which of the four is missing. If it is not an invoice, set
+is_invoice to false and invoice to null: an invented invoice number, date or
+amount is far worse than saying no.
 
 If it is an invoice, set is_invoice to true and fill invoice as follows.
 

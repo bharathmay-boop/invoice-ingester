@@ -6,6 +6,7 @@ import { test } from "node:test";
 import {
   DEFAULT_TOLERANCE_RUPEES,
   describeDiscrepancy,
+  isValidityWarning,
   validateArithmetic,
 } from "../lib/extract/validate.ts";
 import type { ExtractedInvoice } from "../lib/extract/schema.ts";
@@ -180,7 +181,8 @@ test("a zero total is flagged even though it adds up", () => {
   const result = validateArithmetic(nothing);
   assert.equal(result.status, "needs_review");
   assert.deepEqual(checks(result), ["zero_total"]);
-  assert.match(describeDiscrepancy(result.discrepancies[0]), /really an invoice/);
+  assert.match(describeDiscrepancy(result.discrepancies[0]), /total is zero/);
+  assert.equal(isValidityWarning(result.discrepancies[0]), true);
 });
 
 test("a placeholder invoice number is flagged", () => {

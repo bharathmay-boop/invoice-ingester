@@ -106,13 +106,21 @@ export function validateArithmetic(
   };
 }
 
+/**
+ * The two checks that add up to the rupee but may not be a real invoice. The
+ * review screen shows them apart from the sums, since correcting a figure is
+ * the wrong advice for either.
+ */
+export const isValidityWarning = (d: Discrepancy) =>
+  d.check === "zero_total" || d.check === "placeholder_number";
+
 /** One line per discrepancy, for the review screen and for error messages. */
 export function describeDiscrepancy(d: Discrepancy): string {
   if (d.check === "zero_total") {
-    return "The total is zero. Check this is really an invoice.";
+    return "The total is zero.";
   }
   if (d.check === "placeholder_number") {
-    return "There is no real invoice number. Check this is really an invoice.";
+    return "The invoice number looks like a placeholder, not a real number.";
   }
 
   const direction = d.difference > 0 ? "more than" : "less than";
