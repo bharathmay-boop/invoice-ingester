@@ -61,8 +61,13 @@ export async function POST(request: NextRequest) {
         : await extractWithOpenRouter({ data, contentType });
 
     if (!outcome.ok) {
+      // A file that is not an invoice leaves nothing behind either: no draft
+      // to confirm by accident, no original kept for a file nobody wanted read.
       await discardUpload(url);
-      return NextResponse.json({ error: outcome.error }, { status: 422 });
+      return NextResponse.json(
+        { error: outcome.error, notInvoice: outcome.notInvoice === true },
+        { status: 422 },
+      );
     }
 
     const tolerance =

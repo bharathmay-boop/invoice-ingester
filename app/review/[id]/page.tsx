@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { query } from "@/lib/db.ts";
 import type { ExtractedInvoice } from "@/lib/extract/schema.ts";
-import { describeDiscrepancy, type Discrepancy } from "@/lib/extract/validate.ts";
+import { describeDiscrepancy, isValidityWarning, type Discrepancy } from "@/lib/extract/validate.ts";
 import { ReviewForm } from "./review-form.tsx";
 
 export const dynamic = "force-dynamic";
@@ -75,7 +75,10 @@ export default async function Review({ params }: { params: Promise<{ id: string 
             <ReviewForm
               draftId={draft.id}
               initial={draft.extracted}
-              problems={draft.discrepancies.map(describeDiscrepancy)}
+              problems={draft.discrepancies
+                .filter((d) => !isValidityWarning(d))
+                .map(describeDiscrepancy)}
+              warnings={draft.discrepancies.filter(isValidityWarning).map(describeDiscrepancy)}
             />
           </div>
         </div>

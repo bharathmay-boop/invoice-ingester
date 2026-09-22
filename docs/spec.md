@@ -112,7 +112,9 @@ lib/extract/openrouter.ts  OpenRouter, response_format json_schema
 lib/extract/index.ts       reads settings, calls one, returns one type
 ```
 
-Both paths return the same object and both run through the same zod parse before anything touches the database. Nothing downstream of validation sees a provider specific response, so swapping providers cannot break the review screen, the matcher, or the schema.
+Both paths return the same object and both run through the same zod parse before anything touches the database.
+
+The response is a verdict first and the invoice second: `{ reason, is_invoice, invoice }`. `reason` is one sentence on what the file is. When `is_invoice` is false, `invoice` is null, no draft is created, the stored file is deleted, and the upload row says "Not an invoice" with the reason. Without that way out, a photo or any other non invoice has no valid answer except an invented one, which is exactly what the first real non invoice upload produced. Nothing downstream of validation sees a provider specific response, so swapping providers cannot break the review screen, the matcher, or the schema.
 
 ### Claude path
 
@@ -143,6 +145,8 @@ Two arithmetic checks run before any save:
 2. Subtotal plus CGST plus SGST plus IGST equals the total.
 
 Both within a configurable tolerance, one rupee by default, for rounding. Failing either sets status `needs_review` with the disagreeing figures highlighted, instead of `confirmed`.
+
+Two more checks catch a model that fills in the form for something that is not a bill even though it could have declined: a total of zero, and a placeholder invoice number such as "unknown" or "N/A". Both add up perfectly, so the arithmetic alone would pass them. Either one sets `needs_review`.
 
 This is the highest value code in the build relative to its size. A model that quietly invents a number is worse than one that fails loudly, because a wrong total flows straight into the spend figures and nothing announces it.
 

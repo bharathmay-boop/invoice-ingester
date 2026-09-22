@@ -5,11 +5,14 @@
 // See docs/spec.md section 5.
 import type { ExtractedInvoice } from "./schema.ts";
 
-export type CheckName = "line_items_sum" | "tax_total";
+export type CheckName = "line_items_sum" | "tax_total" | "zero_total" | "placeholder_number";
+
+// What a model writes when it has no invoice number but was made to give one.
+const PLACEHOLDER_NUMBER = /^(unknown|n\/?a|none|null|nil|not available|-+|0+|x+)$/i;
 
 export type Discrepancy = {
   check: CheckName;
-  /** What the invoice claims. */
+  /** What the invoice claims. Zero for the checks that are not arithmetic. */
   stated: number;
   /** What its own figures add up to. */
   computed: number;
@@ -86,14 +89,40 @@ export function validateArithmetic(
     toPaise(invoice.igst);
   check("tax_total", invoice.total, withTaxes);
 
+  // Both of these add up perfectly and are still not a real invoice. They are
+  // the signature of a model that filled the form in for something that was
+  // not a bill, which the extraction prompt now lets it refuse, so these only
+  // catch the times it says yes anyway.
+  if (toPaise(invoice.total) === 0) {
+    discrepancies.push({ check: "zero_total", stated: 0, computed: 0, difference: 0 });
+  }
+  if (PLACEHOLDER_NUMBER.test(invoice.invoice_number.trim())) {
+    discrepancies.push({ check: "placeholder_number", stated: 0, computed: 0, difference: 0 });
+  }
+
   return {
     status: discrepancies.length === 0 ? "confirmed" : "needs_review",
     discrepancies,
   };
 }
 
+/**
+ * The two checks that add up to the rupee but may not be a real invoice. The
+ * review screen shows them apart from the sums, since correcting a figure is
+ * the wrong advice for either.
+ */
+export const isValidityWarning = (d: Discrepancy) =>
+  d.check === "zero_total" || d.check === "placeholder_number";
+
 /** One line per discrepancy, for the review screen and for error messages. */
 export function describeDiscrepancy(d: Discrepancy): string {
+  if (d.check === "zero_total") {
+    return "The total is zero.";
+  }
+  if (d.check === "placeholder_number") {
+    return "The invoice number looks like a placeholder, not a real number.";
+  }
+
   const direction = d.difference > 0 ? "more than" : "less than";
   const amount = Math.abs(d.difference).toFixed(2);
 

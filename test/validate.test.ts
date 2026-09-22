@@ -6,6 +6,7 @@ import { test } from "node:test";
 import {
   DEFAULT_TOLERANCE_RUPEES,
   describeDiscrepancy,
+  isValidityWarning,
   validateArithmetic,
 } from "../lib/extract/validate.ts";
 import type { ExtractedInvoice } from "../lib/extract/schema.ts";
@@ -169,4 +170,28 @@ test("the description says which figure is wrong and by how much", () => {
     describeDiscrepancy(high.discrepancies[0]),
     "The total is Rs310.00 more than the subtotal plus taxes.",
   );
+});
+
+test("a zero total is flagged even though it adds up", () => {
+  const nothing = invoice({
+    line_items: [{ ...invoice().line_items[0], unit_price: 0, amount: 0 }],
+    subtotal: 0,
+    total: 0,
+  });
+  const result = validateArithmetic(nothing);
+  assert.equal(result.status, "needs_review");
+  assert.deepEqual(checks(result), ["zero_total"]);
+  assert.match(describeDiscrepancy(result.discrepancies[0]), /total is zero/);
+  assert.equal(isValidityWarning(result.discrepancies[0]), true);
+});
+
+test("a placeholder invoice number is flagged", () => {
+  for (const number of ["unknown", "N/A", "na", " none ", "---", "000", "XXX"]) {
+    const result = validateArithmetic(invoice({ invoice_number: number }));
+    assert.deepEqual(checks(result), ["placeholder_number"], number);
+  }
+  // Real numbers that merely contain those letters pass.
+  for (const number of ["INV/26-27/003", "NA-1042", "0012"]) {
+    assert.equal(validateArithmetic(invoice({ invoice_number: number })).status, "confirmed", number);
+  }
 });

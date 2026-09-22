@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { ACCEPT_ATTRIBUTE, reject } from "@/lib/upload.ts";
 
-type Stage = "queued" | "uploading" | "extracting" | "ready" | "rejected" | "failed";
+type Stage = "queued" | "uploading" | "extracting" | "ready" | "rejected" | "not_invoice" | "failed";
 
 type Item = {
   id: string;
@@ -37,7 +37,7 @@ function Elapsed({ since }: { since: number }) {
 
 /**
  * Upload, read, check, with the live step spinning. Only drawn while a file is
- * in flight or done: a rejected or failed file just shows its reason.
+ * in flight or done: a file that stopped just shows its reason.
  */
 function Steps({ stage }: { stage: Stage }) {
   const current = STEPS.findIndex((s) => s.stage === stage);
@@ -70,12 +70,16 @@ function Steps({ stage }: { stage: Stage }) {
   );
 }
 
+/** Stages where the file went no further, so there is no step trail to draw. */
+const STOPPED: Stage[] = ["rejected", "not_invoice", "failed"];
+
 const STAGE_TEXT: Record<Stage, string> = {
   queued: "Waiting",
   uploading: "Uploading",
   extracting: "Reading the invoice",
   ready: "Ready to review",
   rejected: "Not accepted",
+  not_invoice: "Not an invoice",
   failed: "Failed",
 };
 
@@ -131,7 +135,10 @@ export function Dropzone({ enabled }: { enabled: boolean }) {
         });
         const outcome = await extracted.json().catch(() => ({}));
         if (!extracted.ok) {
-          update(item.id, { stage: "failed", note: outcome.error ?? "Extraction failed." });
+          update(item.id, {
+            stage: outcome.notInvoice ? "not_invoice" : "failed",
+            note: outcome.error ?? "Extraction failed.",
+          });
           continue;
         }
 
@@ -210,11 +217,11 @@ export function Dropzone({ enabled }: { enabled: boolean }) {
               )}
               <span className="flex flex-col gap-1">
                 <span className="text-sm font-medium">{item.name}</span>
-                {item.stage !== "rejected" && item.stage !== "failed" && <Steps stage={item.stage} />}
+                {!STOPPED.includes(item.stage) && <Steps stage={item.stage} />}
                 {item.note && (
                   <span
                     className={`text-xs ${
-                      item.stage === "rejected" || item.stage === "failed"
+                      STOPPED.includes(item.stage)
                         ? "text-destructive"
                         : "text-muted-foreground"
                     }`}
