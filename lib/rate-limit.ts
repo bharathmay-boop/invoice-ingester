@@ -12,8 +12,10 @@ import { pool, query } from "./db.ts";
  */
 const WINDOW_MINUTES = 15;
 const MAX_FAILURES = 8;
-/** Rows older than this are noise; swept on every attempt. */
+/** Rows older than this are noise. */
 const RETENTION_MINUTES = WINDOW_MINUTES * 4;
+/** How often an attempt also sweeps. Indexed on `at`, so the sweep is cheap either way. */
+const SWEEP_CHANCE = 0.1;
 
 const LABEL = "invoice-ingester/login-source/v1";
 
@@ -61,10 +63,17 @@ export async function registerLoginAttempt(request: Request): Promise<Limit> {
 
     // Swept here rather than after a successful login: an installation that
     // only ever receives failures would otherwise keep every row forever.
-    await client.query(
-      `DELETE FROM login_attempt WHERE at < now() - ($1 || ' minutes')::interval`,
-      [String(RETENTION_MINUTES)],
-    );
+    //
+    // Not on every attempt though. The sweep is global while the rest of this
+    // transaction is per source, so running it every time makes each login pay
+    // for everyone else's old rows and puts unrelated sources in each other's
+    // way. One in ten clears them just as promptly at a tenth of the cost.
+    if (Math.random() < SWEEP_CHANCE) {
+      await client.query(
+        `DELETE FROM login_attempt WHERE at < now() - ($1 || ' minutes')::interval`,
+        [String(RETENTION_MINUTES)],
+      );
+    }
 
     const { rows } = await client.query<{ failures: number; oldest: string | null }>(
       `SELECT count(*)::int AS failures, min(at)::text AS oldest

@@ -30,10 +30,10 @@ before(async () => {
   if (!db) return;
   // Created through a connection that is not yet pinned to it.
   await db.query(`CREATE SCHEMA IF NOT EXISTS ${SCHEMA}`);
-  const migration = fileURLToPath(
-    new URL("../db/migrations/007_login_attempt.sql", import.meta.url),
-  );
-  await db.query(await readFile(migration, "utf8"));
+  for (const file of ["007_login_attempt.sql", "008_login_attempt_at.sql"]) {
+    const migration = fileURLToPath(new URL(`../db/migrations/${file}`, import.meta.url));
+    await db.query(await readFile(migration, "utf8"));
+  }
 });
 
 after(async () => {
@@ -124,6 +124,19 @@ test("a burst from one source cannot exceed the allowance", { skip }, async () =
 
   assert.equal(results.filter((r) => r.allowed).length, 8);
   assert.equal(results.filter((r) => !r.allowed).length, 12);
+});
+
+test("the index the sweep needs exists", { skip }, async () => {
+  // The sweep filters on `at` alone. Without this index it scans the whole
+  // table on every login that happens to sweep.
+  const rows = await db!.query<{ indexdef: string }>(
+    `SELECT indexdef FROM pg_indexes
+     WHERE tablename = 'login_attempt' AND schemaname = current_schema()`,
+  );
+  assert.ok(
+    rows.some((r) => /\(at\)/.test(r.indexdef)),
+    `no index usable by the retention sweep: ${rows.map((r) => r.indexdef).join("; ")}`,
+  );
 });
 
 test("the stored source is keyed, not a bare digest of the address", { skip }, async () => {

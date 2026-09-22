@@ -5,17 +5,9 @@ import { clearLoginAttempts, registerLoginAttempt } from "@/lib/rate-limit.ts";
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
-  // Records the attempt and decides in one transaction, before the password is
-  // even read, so a locked out source cannot keep spending a constant time
-  // comparison per guess and a parallel burst cannot all pass on one count.
-  const limit = await registerLoginAttempt(request);
-  if (!limit.allowed) {
-    return NextResponse.json(
-      { error: "Too many wrong passwords. Try again shortly." },
-      { status: 429, headers: { "retry-after": String(limit.retryAfterSeconds) } },
-    );
-  }
-
+  // Shape first, and it costs no slot. A request carrying no guess is not a
+  // guess: counting them would let eight empty posts lock out everyone behind
+  // one address without anybody trying a password.
   let password: unknown;
   try {
     ({ password } = await request.json());
@@ -25,6 +17,17 @@ export async function POST(request: NextRequest) {
 
   if (typeof password !== "string" || !password) {
     return NextResponse.json({ error: "Password is required." }, { status: 400 });
+  }
+
+  // Then reserve, still before the comparison, so a locked out source cannot
+  // keep spending a constant time comparison per guess and a parallel burst
+  // cannot all pass on one count.
+  const limit = await registerLoginAttempt(request);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many wrong passwords. Try again shortly." },
+      { status: 429, headers: { "retry-after": String(limit.retryAfterSeconds) } },
+    );
   }
 
   if (!(await isCorrectPassword(password))) {
