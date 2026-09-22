@@ -181,14 +181,16 @@ export async function discardDraft(_previous: SaveResult, form: FormData): Promi
   const draftId = form.get("draftId");
   if (typeof draftId !== "string") return { ok: false, message: "Nothing to discard." };
 
-  const [draft] = await query<{ blob_url: string }>(
-    "SELECT blob_url FROM draft WHERE id = $1",
+  // One statement, so the delete is the claim. Reading the row first and
+  // deleting after would let a discard that lost the race to a confirm still
+  // remove the blob, leaving the invoice that just saved pointing at a missing
+  // original.
+  const [owned] = await query<{ blob_url: string }>(
+    "DELETE FROM draft WHERE id = $1 RETURNING blob_url",
     [draftId],
   );
-  await query("DELETE FROM draft WHERE id = $1", [draftId]);
-  // The original goes too. Otherwise a discarded invoice stays in the blob
-  // store forever, unreachable through the app and still someone's document.
-  if (draft) await discardUpload(draft.blob_url);
+  // Only the caller that actually removed the draft owns the original.
+  if (owned) await discardUpload(owned.blob_url);
 
   redirect("/upload");
 }

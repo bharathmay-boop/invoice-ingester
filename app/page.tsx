@@ -27,9 +27,10 @@ export default async function Home() {
           </h1>
           <p className="text-muted-foreground mt-5 max-w-lg text-base leading-relaxed">
             Drop in a PDF or a photo. The particulars come out, the vendor is
-            resolved by GSTIN, and line items are matched across however many
-            ways they were spelled. Then you can ask what a thing has cost you
-            over time, and who you pay the most.
+            resolved by GSTIN, and line items are matched once their
+            descriptions are normalised, so a ream of A4 is the same thing
+            whether it was typed as a pack or a box. Then you can ask what a
+            thing has cost you over time, and who you pay the most.
           </p>
 
           {/* The thesis, stated once, next to the invoice that demonstrates it. */}

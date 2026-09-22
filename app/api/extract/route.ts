@@ -24,15 +24,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Expected a stored file." }, { status: 400 });
   }
 
-  // Only a blob this app stored. Otherwise a signed in caller could name any
-  // private blob the deployment's credentials can read and have its contents
-  // sent to the model.
+  // Only a blob this app stored, and only once. The delete is the claim: two
+  // requests for the same file cannot both win it, so they cannot both call the
+  // provider and end up with two drafts pointing at one blob, where discarding
+  // either would pull the original out from under the other.
   const claimed = await query<{ id: string }>(
-    "SELECT id FROM upload WHERE blob_url = $1",
+    "DELETE FROM upload WHERE blob_url = $1 RETURNING id",
     [url],
   );
   if (!claimed.length) {
-    return NextResponse.json({ error: "That file was not uploaded here." }, { status: 404 });
+    return NextResponse.json(
+      { error: "That file was not uploaded here, or has already been read." },
+      { status: 404 },
+    );
   }
 
   const provider = await getProvider();
@@ -75,9 +79,6 @@ export async function POST(request: NextRequest) {
       JSON.stringify(outcome.meta),
     ],
   );
-
-  // The draft owns the blob from here.
-  await query("DELETE FROM upload WHERE blob_url = $1", [url]);
 
   return NextResponse.json({
     draftId: draft.id,

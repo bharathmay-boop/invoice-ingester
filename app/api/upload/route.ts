@@ -6,6 +6,7 @@ import { getProvider, SECRET_FOR } from "@/lib/extract/provider.ts";
 import { describeSecret } from "@/lib/settings/store.ts";
 import { reject } from "@/lib/upload.ts";
 import { query } from "@/lib/db.ts";
+import { discardUpload } from "@/lib/blob.ts";
 
 export const runtime = "nodejs";
 
@@ -50,11 +51,18 @@ export async function POST(request: NextRequest) {
   });
 
   // Recorded so /api/extract can tell this blob from a URL a caller invented.
-  await query(
-    `INSERT INTO upload (blob_url, file_name, content_type) VALUES ($1, $2, $3)
-     ON CONFLICT (blob_url) DO NOTHING`,
-    [blob.url, file.name, file.type],
-  );
+  // If this fails the blob goes with it: an untracked file is one nothing can
+  // ever find again, which means paying to store someone's invoice forever.
+  try {
+    await query(
+      `INSERT INTO upload (blob_url, file_name, content_type) VALUES ($1, $2, $3)
+       ON CONFLICT (blob_url) DO NOTHING`,
+      [blob.url, file.name, file.type],
+    );
+  } catch (error) {
+    await discardUpload(blob.url);
+    throw error;
+  }
 
   return NextResponse.json({
     url: blob.url,
