@@ -4,26 +4,12 @@ import { cookies } from "next/headers";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { getProvider, SECRET_FOR } from "@/lib/extract/provider.ts";
 import { describeSecret } from "@/lib/settings/store.ts";
-import { PDFDocument } from "pdf-lib";
+import { countPages } from "@/lib/pdf.ts";
 import { MAX_INVOICES_PER_FILE, MAX_PDF_PAGES, reject } from "@/lib/upload.ts";
 import { query } from "@/lib/db.ts";
 import { discardUpload } from "@/lib/blob.ts";
 
 export const runtime = "nodejs";
-
-/**
- * Null when the PDF cannot be parsed here, for instance one that is encrypted
- * in a way pdf-lib cannot open. The model may still read it, so an unknown
- * count is let through rather than refused.
- */
-async function countPages(bytes: ArrayBuffer): Promise<number | null> {
-  try {
-    const pdf = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
-    return pdf.getPageCount();
-  } catch {
-    return null;
-  }
-}
 
 export async function POST(request: NextRequest) {
   // The proxy already refuses writes without a session. Checked again here
@@ -59,7 +45,17 @@ export async function POST(request: NextRequest) {
   // Counted here, before the file is stored or any model is paid to read it.
   if (file.type === "application/pdf") {
     const pages = await countPages(await file.arrayBuffer());
-    if (pages !== null && pages > MAX_PDF_PAGES) {
+    // Refused rather than let through: a PDF that cannot be counted cannot be
+    // held to the limit, and one pdf-lib cannot open is unlikely to extract.
+    if (pages === null) {
+      return NextResponse.json(
+        {
+          error: "This PDF could not be opened to count its pages. If it has a password, remove it and upload again.",
+        },
+        { status: 415 },
+      );
+    }
+    if (pages > MAX_PDF_PAGES) {
       return NextResponse.json(
         {
           error: `${pages} pages is over the ${MAX_PDF_PAGES} page limit. Split it into smaller files of up to ${MAX_INVOICES_PER_FILE} invoices.`,

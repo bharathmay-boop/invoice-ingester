@@ -17,6 +17,7 @@ import {
 import type { ExtractedInvoice } from "@/lib/extract/schema.ts";
 import { MAX_INVOICES_PER_FILE } from "@/lib/upload.ts";
 import { normalize } from "@/lib/items/normalize.ts";
+import { countPages } from "@/lib/pdf.ts";
 import { getSetting } from "@/lib/settings/store.ts";
 
 export const runtime = "nodejs";
@@ -32,7 +33,8 @@ async function alreadySaved(invoice: ExtractedInvoice): Promise<boolean> {
   const rows = await query(
     `SELECT 1 FROM invoice i JOIN vendor v ON v.id = i.vendor_id
      WHERE i.invoice_number = $1
-       AND CASE WHEN $2::text IS NOT NULL THEN v.gstin = $2 ELSE v.normalized_name = $3 END
+       AND CASE WHEN $2::text IS NOT NULL THEN v.gstin = $2
+                ELSE v.gstin IS NULL AND v.normalized_name = $3 END
      LIMIT 1`,
     [invoice.invoice_number, invoice.gstin, normalize(invoice.vendor_name)],
   );
@@ -79,12 +81,20 @@ export async function POST(request: NextRequest) {
       await discardUpload(url);
       return NextResponse.json({ error: "Could not read the uploaded file." }, { status: 502 });
     }
-    const data = Buffer.from(await new Response(stored.stream).arrayBuffer()).toString("base64");
+    const bytes = Buffer.from(await new Response(stored.stream).arrayBuffer());
+    const data = bytes.toString("base64");
+    // The upload route refused any PDF it could not count, so null here means
+    // the stored file is not what was checked.
+    const pages = contentType === "application/pdf" ? await countPages(bytes) : 1;
+    if (pages === null) {
+      await discardUpload(url);
+      return NextResponse.json({ error: "Could not open the stored PDF." }, { status: 422 });
+    }
 
     const outcome =
       provider === "anthropic"
-        ? await extractWithAnthropic({ data, contentType })
-        : await extractWithOpenRouter({ data, contentType });
+        ? await extractWithAnthropic({ data, contentType, pages })
+        : await extractWithOpenRouter({ data, contentType, pages });
 
     if (!outcome.ok) {
       // A file that is not an invoice leaves nothing behind either: no draft

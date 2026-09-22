@@ -88,8 +88,11 @@ export type ResponseResult =
   | { ok: false; notInvoice: true; reason: string }
   | { ok: false; notInvoice?: false; error: string };
 
-/** The one gate both providers' responses pass through. */
-export function parseResponse(raw: unknown): ResponseResult {
+/**
+ * The one gate both providers' responses pass through. `pages` is the length
+ * of the file that was read, 1 for an image.
+ */
+export function parseResponse(raw: unknown, pages: number): ResponseResult {
   const result = extractionResponseSchema.safeParse(raw);
   if (!result.success) {
     return {
@@ -104,12 +107,22 @@ export function parseResponse(raw: unknown): ResponseResult {
   if (!invoices.length) {
     return { ok: false, error: "The model said this is an invoice but returned no fields." };
   }
-  const backwards = invoices.find((f) => f.last_page < f.first_page);
-  if (backwards) {
-    return {
-      ok: false,
-      error: `Invoice ${backwards.invoice.invoice_number} ends on page ${backwards.last_page}, before it starts.`,
-    };
+  // Checked against the file itself: a range outside it would open the
+  // original at the wrong place, and says the model lost track of the file.
+  // Overlaps are allowed, since one page can hold two small receipts.
+  for (const f of invoices) {
+    if (f.last_page < f.first_page) {
+      return {
+        ok: false,
+        error: `Invoice ${f.invoice.invoice_number} ends on page ${f.last_page}, before it starts.`,
+      };
+    }
+    if (f.last_page > pages) {
+      return {
+        ok: false,
+        error: `Invoice ${f.invoice.invoice_number} was placed on page ${f.last_page}, but the file has ${pages === 1 ? "one page" : `${pages} pages`}.`,
+      };
+    }
   }
   return { ok: true, invoices };
 }

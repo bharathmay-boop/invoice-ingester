@@ -12,7 +12,7 @@ import type { ExtractionOutcome } from "./anthropic.ts";
  * nothing downstream of validation knows which provider ran.
  */
 export async function extractWithOpenRouter(
-  source: { data: string; contentType: string },
+  source: { data: string; contentType: string; pages: number },
 ): Promise<ExtractionOutcome> {
   const key = await getSecret("openrouter_api_key");
   if (!key) return { ok: false, error: "No OpenRouter key is saved." };
@@ -67,7 +67,7 @@ export async function extractWithOpenRouter(
       return { ok: false, error: "The model did not return JSON." };
     }
 
-    const parsed = parseResponse(raw);
+    const parsed = parseResponse(raw, source.pages);
     if (!parsed.ok) {
       return parsed.notInvoice
         ? { ok: false, notInvoice: true, error: parsed.reason }

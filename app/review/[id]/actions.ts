@@ -86,7 +86,13 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
           [invoice.gstin, invoice.vendor_name, normalize(invoice.vendor_name)],
         )
       : await client.query<{ id: string }>(
-          `INSERT INTO vendor (name, normalized_name) VALUES ($1, $2) RETURNING id`,
+          // Reused by name, so the invoice constraint below can see the same
+          // supplier twice. The no-op update is there so RETURNING hands back
+          // the existing row's id.
+          `INSERT INTO vendor (name, normalized_name) VALUES ($1, $2)
+           ON CONFLICT (normalized_name) WHERE gstin IS NULL
+           DO UPDATE SET name = vendor.name
+           RETURNING id`,
           [invoice.vendor_name, normalize(invoice.vendor_name)],
         );
 
@@ -155,8 +161,10 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
     if (typeof error === "object" && error && "code" in error && error.code === "23505") {
       const [existing] = await query<{ id: string }>(
         `SELECT i.id FROM invoice i JOIN vendor v ON v.id = i.vendor_id
-         WHERE v.gstin IS NOT DISTINCT FROM $1 AND i.invoice_number = $2`,
-        [invoice.gstin, invoice.invoice_number],
+         WHERE i.invoice_number = $2
+           AND CASE WHEN $1::text IS NOT NULL THEN v.gstin = $1
+                    ELSE v.gstin IS NULL AND v.normalized_name = $3 END`,
+        [invoice.gstin, invoice.invoice_number, normalize(invoice.vendor_name)],
       );
       return {
         ok: false,

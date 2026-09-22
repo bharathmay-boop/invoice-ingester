@@ -19,7 +19,7 @@ export type ExtractionOutcome =
  * is real or the GSTIN well formed.
  */
 export async function extractWithAnthropic(
-  source: { data: string; contentType: string },
+  source: { data: string; contentType: string; pages: number },
 ): Promise<ExtractionOutcome> {
   const key = await getSecret("anthropic_api_key");
   if (!key) return { ok: false, error: "No Claude API key is saved." };
@@ -78,7 +78,7 @@ export async function extractWithAnthropic(
       return { ok: false, error: "The model did not return invoice fields." };
     }
 
-    const parsed = parseResponse(call.input);
+    const parsed = parseResponse(call.input, source.pages);
     if (!parsed.ok) {
       return parsed.notInvoice
         ? { ok: false, notInvoice: true, error: parsed.reason }
