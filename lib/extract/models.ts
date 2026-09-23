@@ -116,12 +116,10 @@ export async function listModels(): Promise<Catalogue> {
     const models = (body.data ?? [])
       .filter(usable)
       .map(toModel)
-      .sort((a, b) => {
-        // Recommended first, then cheapest, so the list opens on the models
-        // worth picking rather than on whatever the catalogue happened to list.
-        if (Boolean(a.recommended) !== Boolean(b.recommended)) return a.recommended ? -1 : 1;
-        return a.cost - b.cost;
-      });
+      // Cheapest first, full stop. The filter above has already removed
+      // everything that cannot read an invoice, so price is the only question
+      // left to order by. The two notes stay as labels, not as a position.
+      .sort((a, b) => a.cost - b.cost);
 
     if (!models.length) throw new Error("no model in the catalogue can do this job");
 
@@ -200,8 +198,8 @@ export async function resolveModel(configured: string): Promise<string> {
   const qualifies = (id: string) => cached.models.some((m) => m.id === id);
   if (qualifies(configured)) return configured;
   // The default can be retired or lose PDF support like any other model, so it
-  // is checked too. The list is sorted recommended first, then cheapest, so
-  // its head is the best remaining choice rather than an arbitrary one.
+  // is checked too. The list is sorted cheapest first, so its head is the
+  // cheapest model that can still do the job.
   if (qualifies(DEFAULT_OPENROUTER_MODEL)) return DEFAULT_OPENROUTER_MODEL;
   return cached.models[0].id;
 }

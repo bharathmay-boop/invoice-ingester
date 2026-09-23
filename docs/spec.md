@@ -136,8 +136,8 @@ OpenAI compatible endpoint with `response_format` set to a json_schema, using th
 
 1. Fetch the catalogue server side, cache for 24 hours.
 2. Keep only models that can actually do the job: modalities include both `image` and `file`, supported parameters include `structured_outputs`, the model is not a `:batch` variant, and it carries a real price.
-3. Order by a short `RECOMMENDED` array in code, then by price.
-4. Show the top ten, with the first two carrying a badge and a line saying why.
+3. Order by price, cheapest first. The filter has already removed everything that cannot read an invoice, so price is the only question left.
+4. Show them all. The two models that have been tried on a real invoice carry a note on the option, not a position at the top.
 
 A pinned list of model IDs goes stale within weeks, and a retired ID does not fail when it is selected. It fails later during an upload, which is the worst place to discover it. Filtering against the live catalogue means every option in the dropdown is a model that exists and can do the job.
 
