@@ -12,7 +12,9 @@
 -- name, and the index cannot be built over them. They are renamed apart rather
 -- than merged: two suppliers with no GSTIN and the same name may be different
 -- businesses, and a migration has no way to tell, so no invoice changes vendor.
--- The oldest keeps the name, and so the new invoices that match it.
+-- The oldest keeps the name, and so the new invoices that match it. The
+-- duplicate checks read the renamed rows too, by the ' (separate ' suffix, so
+-- an invoice already saved against one is still recognised.
 UPDATE vendor v
 SET normalized_name = v.normalized_name || ' (separate ' || left(v.id::text, 8) || ')'
 WHERE v.gstin IS NULL

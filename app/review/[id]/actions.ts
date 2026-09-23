@@ -163,7 +163,9 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
         `SELECT i.id FROM invoice i JOIN vendor v ON v.id = i.vendor_id
          WHERE i.invoice_number = $2
            AND CASE WHEN $1::text IS NOT NULL THEN v.gstin = $1
-                    ELSE v.gstin IS NULL AND v.normalized_name = $3 END`,
+                    ELSE v.gstin IS NULL
+                         AND (v.normalized_name = $3 OR v.normalized_name LIKE $3 || ' (separate %')
+                    END`,
         [invoice.gstin, invoice.invoice_number, normalize(invoice.vendor_name)],
       );
       return {
