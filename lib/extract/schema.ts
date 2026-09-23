@@ -56,9 +56,23 @@ export function parseExtraction(raw: unknown): ParseResult {
 }
 
 /**
- * What a provider actually returns: a verdict on whether the file is an invoice
- * at all, then the invoice if it is. Without the way out, a photo of a
- * chocolate box has no valid answer except an invented invoice.
+ * One invoice as found in the file, with the pages it came from, so the review
+ * screen can open the original where that invoice starts. Pages are 1 based;
+ * an image is page 1.
+ */
+export const foundInvoiceSchema = z.object({
+  first_page: z.number().int().min(1),
+  last_page: z.number().int().min(1),
+  invoice: extractedInvoiceSchema,
+});
+
+export type FoundInvoice = z.infer<typeof foundInvoiceSchema>;
+
+/**
+ * What a provider actually returns: a verdict on whether the file holds any
+ * invoice at all, then every invoice in it. Without the way out, a photo of a
+ * chocolate box has no valid answer except an invented invoice. Without the
+ * list, a PDF of three invoices comes back as the first one.
  *
  * `reason` comes first so the model says what the file is before committing to
  * the verdict.
@@ -66,27 +80,51 @@ export function parseExtraction(raw: unknown): ParseResult {
 export const extractionResponseSchema = z.object({
   reason: z.string().min(1),
   is_invoice: z.boolean(),
-  invoice: extractedInvoiceSchema.nullable(),
+  invoices: z.array(foundInvoiceSchema),
 });
 
 export type ResponseResult =
-  | { ok: true; invoice: ExtractedInvoice }
+  | { ok: true; invoices: FoundInvoice[] }
   | { ok: false; notInvoice: true; reason: string }
   | { ok: false; notInvoice?: false; error: string };
 
-/** The one gate both providers' responses pass through. */
-export function parseResponse(raw: unknown): ResponseResult {
+/**
+ * The one gate both providers' responses pass through. `pages` is the length
+ * of the file that was read, 1 for an image.
+ */
+export function parseResponse(raw: unknown, pages: number): ResponseResult {
   const result = extractionResponseSchema.safeParse(raw);
   if (!result.success) {
-    return { ok: false, error: `The extracted fields did not validate.
-${z.prettifyError(result.error)}` };
+    return {
+      ok: false,
+      error: `The extracted fields did not validate.\n${z.prettifyError(result.error)}`,
+    };
   }
-  const { is_invoice, reason, invoice } = result.data;
+  const { is_invoice, reason, invoices } = result.data;
   // The verdict wins over whatever was filled in beside it: a "no" with an
   // invoice attached is still a no.
   if (!is_invoice) return { ok: false, notInvoice: true, reason };
-  if (!invoice) return { ok: false, error: "The model said this is an invoice but returned no fields." };
-  return { ok: true, invoice };
+  if (!invoices.length) {
+    return { ok: false, error: "The model said this is an invoice but returned no fields." };
+  }
+  // Checked against the file itself: a range outside it would open the
+  // original at the wrong place, and says the model lost track of the file.
+  // Overlaps are allowed, since one page can hold two small receipts.
+  for (const f of invoices) {
+    if (f.last_page < f.first_page) {
+      return {
+        ok: false,
+        error: `Invoice ${f.invoice.invoice_number} ends on page ${f.last_page}, before it starts.`,
+      };
+    }
+    if (f.last_page > pages) {
+      return {
+        ok: false,
+        error: `Invoice ${f.invoice.invoice_number} was placed on page ${f.last_page}, but the file has ${pages === 1 ? "one page" : `${pages} pages`}.`,
+      };
+    }
+  }
+  return { ok: true, invoices };
 }
 
 /**

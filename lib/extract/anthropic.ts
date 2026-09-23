@@ -1,41 +1,14 @@
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { getSecret } from "../settings/store.ts";
-import { extractionJsonSchema, parseResponse, type ExtractedInvoice } from "./schema.ts";
+import { INSTRUCTIONS } from "./prompt.ts";
+import { extractionJsonSchema, parseResponse, type FoundInvoice } from "./schema.ts";
 import { DEFAULT_ANTHROPIC_MODEL } from "./provider.ts";
 
 const TOOL_NAME = "record_invoice";
 
-const INSTRUCTIONS = `You are reading a file someone uploaded as an Indian tax invoice.
-
-First decide whether it is one. An invoice, bill or receipt shows all four
-of: who issued it, an invoice number, a date, and the amounts charged. A
-product photo, a quote without prices, a bank statement or any other document
-is not an invoice. Nor is a bill that is missing any of the four: every field
-below is required, and a missing number or date must never be filled with a
-guess or a placeholder.
-
-In reason, say in one short sentence what the file is, and for a bill that
-falls short, which of the four is missing. If it is not an invoice, set
-is_invoice to false and invoice to null: an invented invoice number, date or
-amount is far worse than saying no.
-
-If it is an invoice, set is_invoice to true and fill invoice as follows.
-
-Return every figure exactly as printed. Do not compute, correct or round
-anything: if the invoice's own totals disagree with its line items, return what
-is printed and let the checks downstream catch it. Inventing a plausible number
-is the worst thing you can do here.
-
-- invoice_date must be YYYY-MM-DD.
-- gstin is the supplier's 15 character GSTIN, or null if none is printed.
-- For intra state invoices CGST and SGST are filled and IGST is 0. For inter
-  state invoices IGST is filled and CGST and SGST are 0. Use 0, never null.
-- amount is the line total as printed, not quantity times unit price.
-- If a value genuinely is not on the invoice and the field allows null, use null.`;
-
 export type ExtractionOutcome =
-  | { ok: true; invoice: ExtractedInvoice; meta: Record<string, unknown> }
+  | { ok: true; invoices: FoundInvoice[]; meta: Record<string, unknown> }
   // `notInvoice` marks a file the model read and declined, with `error` saying
   // what it was, as opposed to a call that failed.
   | { ok: false; error: string; notInvoice?: boolean };
@@ -46,7 +19,7 @@ export type ExtractionOutcome =
  * is real or the GSTIN well formed.
  */
 export async function extractWithAnthropic(
-  source: { data: string; contentType: string },
+  source: { data: string; contentType: string; pages: number },
 ): Promise<ExtractionOutcome> {
   const key = await getSecret("anthropic_api_key");
   if (!key) return { ok: false, error: "No Claude API key is saved." };
@@ -78,11 +51,13 @@ export async function extractWithAnthropic(
   try {
     const message = await client.messages.create({
       model: DEFAULT_ANTHROPIC_MODEL,
-      max_tokens: 4096,
+      // Up to 15 invoices in one reply. Kept under the SDK's ceiling for a
+      // request that is not streamed.
+      max_tokens: 16000,
       tools: [
         {
           name: TOOL_NAME,
-          description: "Say whether the file is an invoice and, if it is, record its particulars exactly as printed.",
+          description: "Say whether the file holds invoices and record every one exactly as printed.",
           input_schema: extractionJsonSchema as Anthropic.Tool["input_schema"],
         },
       ],
@@ -103,7 +78,7 @@ export async function extractWithAnthropic(
       return { ok: false, error: "The model did not return invoice fields." };
     }
 
-    const parsed = parseResponse(call.input);
+    const parsed = parseResponse(call.input, source.pages);
     if (!parsed.ok) {
       return parsed.notInvoice
         ? { ok: false, notInvoice: true, error: parsed.reason }
@@ -112,7 +87,7 @@ export async function extractWithAnthropic(
 
     return {
       ok: true,
-      invoice: parsed.invoice,
+      invoices: parsed.invoices,
       // Recorded so it is possible to tell later whether one model reads a
       // given vendor's layout better than another.
       meta: {

@@ -34,6 +34,12 @@ const KEY = "sk-test-" + "x".repeat(24) + "-4d7e";
 process.env.DATABASE_SCHEMA = SCHEMA;
 process.env.DATABASE_URL = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
 
+// A provider key in .env.local is a fallback the store reads, so a developer
+// who keeps one there would see "absent" assertions fail. The one test that
+// covers the fallback sets its own.
+delete process.env.ANTHROPIC_API_KEY;
+delete process.env.OPENROUTER_API_KEY;
+
 const store = configured ? await import("../lib/settings/store.ts") : null;
 const db = configured ? await import("../lib/db.ts") : null;
 

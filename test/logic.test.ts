@@ -89,45 +89,82 @@ test("each malformed variant fails with a readable error", () => {
 });
 
 test("the provider JSON schema covers every field", () => {
-  const top = extractionJsonSchema as {
-    properties: Record<string, { anyOf?: { properties?: Record<string, unknown> }[] }>;
-  };
-  assert.deepEqual(Object.keys(top.properties), ["reason", "is_invoice", "invoice"]);
-  const invoice = top.properties.invoice.anyOf?.find((s) => s.properties)?.properties ?? {};
-  assert.deepEqual(Object.keys(invoice).sort(), [
+  type Node = { properties?: Record<string, Node>; items?: Node };
+  const top = extractionJsonSchema as Node;
+  assert.deepEqual(Object.keys(top.properties ?? {}), ["reason", "is_invoice", "invoices"]);
+  const found = top.properties?.invoices.items?.properties ?? {};
+  assert.deepEqual(Object.keys(found), ["first_page", "last_page", "invoice"]);
+  assert.deepEqual(Object.keys(found.invoice.properties ?? {}).sort(), [
     "cgst", "gstin", "igst", "invoice_date", "invoice_number",
     "line_items", "sgst", "subtotal", "total", "vendor_name",
   ]);
 });
 
+const at = (first_page: number, last_page: number, invoice = valid) => ({ first_page, last_page, invoice });
+
 test("a file the model declines is not an invoice, not a failure", () => {
-  const photo = { reason: "A product photo of a chocolate box.", is_invoice: false, invoice: null };
-  assert.deepEqual(parseResponse(photo), {
+  const photo = { reason: "A product photo of a chocolate box.", is_invoice: false, invoices: [] };
+  assert.deepEqual(parseResponse(photo, 1), {
     ok: false,
     notInvoice: true,
     reason: "A product photo of a chocolate box.",
   });
 });
 
-test("the verdict wins over fields filled in beside it", () => {
-  const result = parseResponse({ reason: "A photo.", is_invoice: false, invoice: valid });
+test("the verdict wins over invoices listed beside it", () => {
+  const result = parseResponse({ reason: "A photo.", is_invoice: false, invoices: [at(1, 1)] }, 5);
   assert.equal(result.ok, false);
   assert.equal(!result.ok && result.notInvoice, true);
 });
 
-test("an invoice verdict carries the invoice through", () => {
-  const result = parseResponse({ reason: "A tax invoice.", is_invoice: true, invoice: valid });
-  assert.equal(result.ok && result.invoice.invoice_number, valid.invoice_number);
+test("every invoice in the file comes through, with its pages, in order", () => {
+  const second = { ...valid, invoice_number: "INV-2" };
+  const result = parseResponse({
+    reason: "Two tax invoices.",
+    is_invoice: true,
+    invoices: [at(1, 2), at(3, 3, second)],
+  }, 5);
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.deepEqual(
+    result.invoices.map((f) => [f.invoice.invoice_number, f.first_page, f.last_page]),
+    [[valid.invoice_number, 1, 2], ["INV-2", 3, 3]],
+  );
 });
 
-test("a yes with no fields, or a bad field, is a failure rather than a decline", () => {
-  const empty = parseResponse({ reason: "A tax invoice.", is_invoice: true, invoice: null });
+test("a yes with no invoices, a bad field or impossible pages is a failure, not a decline", () => {
+  const empty = parseResponse({ reason: "A tax invoice.", is_invoice: true, invoices: [] }, 5);
   assert.equal("error" in empty, true);
 
-  const bad = parseResponse({ reason: "A tax invoice.", is_invoice: true, invoice: { ...valid, total: -1 } });
-    assert.match("error" in bad ? bad.error : "", /total/);
+  const bad = parseResponse({
+    reason: "A tax invoice.",
+    is_invoice: true,
+    invoices: [at(1, 1, { ...valid, total: -1 })],
+  }, 5);
+  assert.match("error" in bad ? bad.error : "", /total/);
 
-  assert.equal(parseResponse({ is_invoice: false, invoice: null }).ok, false);
+  const backwards = parseResponse({ reason: "A tax invoice.", is_invoice: true, invoices: [at(3, 2)] }, 5);
+  assert.match("error" in backwards ? backwards.error : "", /before it starts/);
+
+  const pageZero = parseResponse({ reason: "A tax invoice.", is_invoice: true, invoices: [at(0, 1)] }, 5);
+  assert.equal("error" in pageZero, true);
+
+  assert.equal(parseResponse({ is_invoice: false, invoices: [] }, 5).ok, false);
+});
+
+test("pages must fall inside the file that was read", () => {
+  const past = parseResponse({ reason: "A tax invoice.", is_invoice: true, invoices: [at(5, 12)] }, 5);
+  assert.match("error" in past ? past.error : "", /page 12, but the file has 5 pages/);
+
+  const image = parseResponse({ reason: "A photo of a bill.", is_invoice: true, invoices: [at(2, 2)] }, 1);
+  assert.match("error" in image ? image.error : "", /one page/);
+
+  // Two small receipts on one page share it.
+  const shared = parseResponse(
+    { reason: "Two receipts.", is_invoice: true, invoices: [at(1, 1), at(1, 1, { ...valid, invoice_number: "R-2" })] },
+    1,
+  );
+  assert.equal(shared.ok, true);
 });
 
 // --- key sealing -----------------------------------------------------------

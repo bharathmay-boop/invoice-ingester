@@ -6,6 +6,7 @@ import { test } from "node:test";
 import {
   DEFAULT_TOLERANCE_RUPEES,
   describeDiscrepancy,
+  findRepeats,
   isValidityWarning,
   validateArithmetic,
 } from "../lib/extract/validate.ts";
@@ -194,4 +195,19 @@ test("a placeholder invoice number is flagged", () => {
   for (const number of ["INV/26-27/003", "NA-1042", "0012"]) {
     assert.equal(validateArithmetic(invoice({ invoice_number: number })).status, "confirmed", number);
   }
+});
+
+test("a printed copy of an invoice in the same file is a repeat", () => {
+  const a = invoice();
+  const copy = invoice({ invoice_number: " inv-1 " });
+  const other = invoice({ invoice_number: "INV-2" });
+  const sameNumberOtherSupplier = invoice({ gstin: "27ABCDE1234F1Z5" });
+  assert.deepEqual([...findRepeats([a, other, copy, sameNumberOtherSupplier])], [2]);
+});
+
+test("without a GSTIN the supplier name decides what counts as a repeat", () => {
+  const a = invoice({ gstin: null, vendor_name: "Sharma Stationers" });
+  const copy = invoice({ gstin: null, vendor_name: " sharma stationers" });
+  const other = invoice({ gstin: null, vendor_name: "Gupta Traders" });
+  assert.deepEqual([...findRepeats([a, copy, other])], [1]);
 });

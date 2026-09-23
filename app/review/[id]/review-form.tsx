@@ -17,7 +17,7 @@ type Props = {
   initial: ExtractedInvoice;
   /** The sums that do not add up. */
   problems: string[];
-  /** Signs the file may not be an invoice at all, kept apart from the sums. */
+  /** Not about the sums: a possible non invoice, a copy, or one already saved. */
   warnings: string[];
 };
 
@@ -53,7 +53,7 @@ export function ReviewForm({ draftId, initial, problems, warnings }: Props) {
       {warnings.length > 0 && (
         <Alert>
           <TriangleAlertIcon />
-          <AlertTitle>This may not be a real invoice</AlertTitle>
+          <AlertTitle>Check this before saving</AlertTitle>
           <AlertDescription>
             <ul className="list-disc space-y-0.5 pl-5">
               {warnings.map((w) => (
@@ -61,8 +61,8 @@ export function ReviewForm({ draftId, initial, problems, warnings }: Props) {
               ))}
             </ul>
             <p>
-              Check the original. If it is not an invoice, discard it. If it is,
-              fix the invoice number or total below.
+              Check the original. If this should not be saved, discard it. If
+              it should, correct the invoice number or total below.
             </p>
           </AlertDescription>
         </Alert>
