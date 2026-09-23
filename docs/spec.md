@@ -214,6 +214,10 @@ Keys are entered in settings and encrypted at rest with AES-256-GCM, using a mas
 
 The review screen puts the original beside the fields because checking an extraction means comparing it to its source. Any layout that makes you hold a number in your head while scrolling has already failed. Clicking a field highlights where it came from.
 
+### The original, from anywhere a figure appears
+
+Every invoice row on the vendor and item screens carries an icon that opens the stored original in a dialog over the current screen. Checking one number should not cost your place in a list, and the dialog carries a link to open the file in a new tab for printing or reading it full size. A multi invoice PDF opens at the page that invoice starts on, which is why `content_type` and `first_page` are copied from the draft onto the invoice when it is saved. Rows with no stored original, the seeded demo data and anything saved before originals were kept, show no icon rather than an icon that opens nothing. Originals need a session, so the icon is only rendered for a signed in visitor.
+
 ## 9. Version two, contracts
 
 A contract carries a vendor, a period, and agreed rates per catalogue item. Invoices link to the contract in force on their date, and a billed unit price that disagrees with the contracted rate is flagged.

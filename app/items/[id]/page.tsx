@@ -1,5 +1,8 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
+import { isValidSession, sessionCookie } from "@/lib/auth.ts";
+import { InvoiceOriginal } from "../../invoice-original.tsx";
 import { getItem } from "@/lib/queries.ts";
 import { changeSince, formatDate, money, moneyRounded } from "@/lib/format.ts";
 import { cheapestVendorNow, unitsAreComparable } from "@/lib/price.ts";
@@ -18,6 +21,10 @@ export default async function ItemDetail({
 
   const item = await getItem(id);
   if (!item) notFound();
+
+  // Originals need a session, so the column only exists with one.
+  const jar = await cookies();
+  const signedIn = await isValidSession(jar.get(sessionCookie.name)?.value);
 
   const confirmed = item.purchases.filter((p) => p.status === "confirmed");
   const oldestFirst = [...confirmed].reverse();
@@ -110,6 +117,11 @@ export default async function ItemDetail({
               <th scope="col" className="py-2 pr-4 text-right font-medium">Qty</th>
               <th scope="col" className="py-2 pr-4 text-right font-medium">Unit price</th>
               <th scope="col" className="py-2 text-right font-medium">Amount</th>
+              {signedIn && (
+                <th scope="col" className="py-2 pl-2">
+                  <span className="sr-only">Original</span>
+                </th>
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-black/10 dark:divide-white/15">
@@ -134,6 +146,17 @@ export default async function ItemDetail({
                 </td>
                 <td className="py-2 pr-4 text-right tabular-nums">{money(p.unit_price)}</td>
                 <td className="py-2 text-right tabular-nums">{money(p.amount)}</td>
+                {signedIn && (
+                  <td className="py-2 pl-2 text-right">
+                    <InvoiceOriginal
+                      invoiceNumber={p.invoice_number}
+                      date={formatDate(p.invoice_date)}
+                      blobUrl={p.blob_url}
+                      contentType={p.content_type}
+                      firstPage={p.first_page}
+                    />
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

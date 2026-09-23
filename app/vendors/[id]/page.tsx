@@ -1,5 +1,8 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
+import { isValidSession, sessionCookie } from "@/lib/auth.ts";
+import { InvoiceOriginal } from "../../invoice-original.tsx";
 import { getVendor, listVendorInvoices } from "@/lib/queries.ts";
 import { formatDate, money, moneyRounded } from "@/lib/format.ts";
 import { DemoNotice, Empty, Page, Stat, StatusBadge } from "../../ui.tsx";
@@ -20,6 +23,10 @@ export default async function VendorDetail({
   if (!vendor) notFound();
 
   const invoices = await listVendorInvoices(id);
+  // Originals are only readable with a session, so the icon is only offered
+  // with one. An icon that answers 401 is worse than no icon.
+  const jar = await cookies();
+  const signedIn = await isValidSession(jar.get(sessionCookie.name)?.value);
 
   return (
     <Page title={vendor.name} lead={vendor.address ?? undefined}>
@@ -56,6 +63,15 @@ export default async function VendorDetail({
               <span className="flex items-center gap-3">
                 <StatusBadge status={invoice.status} />
                 <span className="font-semibold tabular-nums">{money(invoice.total)}</span>
+                {signedIn && (
+                  <InvoiceOriginal
+                    invoiceNumber={invoice.invoice_number}
+                    date={formatDate(invoice.invoice_date)}
+                    blobUrl={invoice.blob_url}
+                    contentType={invoice.content_type}
+                    firstPage={invoice.first_page}
+                  />
+                )}
               </span>
             </li>
           ))}
