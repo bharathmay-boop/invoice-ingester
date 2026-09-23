@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "migrate": "node --env-file-if-exists=.env.local scripts/migrate.mjs",
+    "backfill-originals": "node --env-file-if-exists=.env.local scripts/backfill-originals.mjs",
     "test": "node --conditions=react-server --env-file-if-exists=.env.local --test \"test/*.test.ts\"",
     "seed": "node --conditions=react-server --env-file-if-exists=.env.local scripts/seed.mjs"
   },
