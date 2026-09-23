@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { usageSince, type Usage as UsageTotals } from "@/lib/usage.ts";
 import { describeSecret } from "@/lib/settings/store.ts";
 import { DEFAULT_TOLERANCE_RUPEES } from "@/lib/extract/validate.ts";
 import { getProvider, MODEL_SETTING, PROVIDER_LABEL } from "@/lib/extract/provider.ts";
@@ -23,7 +24,32 @@ export const metadata = { title: "Settings" };
 // Nothing here writes yet. Each section is the shell its own issue fills in,
 // and every one says which, so the page is honest about being a shell rather
 // than looking finished and doing nothing.
+function Usage({ label, usage }: { label: string; usage: UsageTotals }) {
+  return (
+    <div>
+      <p className="text-sm font-medium">{label}</p>
+      <dl className="mt-2 grid gap-3 sm:grid-cols-4">
+        <Reading label="Calls" value={String(usage.calls)} />
+        <Reading label="Invoices read" value={String(usage.invoices)} />
+        <Reading
+          label="Spend"
+          // A call the catalogue had no price for is counted but not costed,
+          // so the total is a floor rather than a figure.
+          value={`$${usage.cost.toFixed(4)}${usage.unpriced ? " or more" : ""}`}
+        />
+        <Reading label="Failed" value={String(usage.failures)} />
+      </dl>
+    </div>
+  );
+}
+
 export default async function Settings() {
+  const now = new Date();
+  const [today, month] = await Promise.all([
+    usageSince(new Date(now.getFullYear(), now.getMonth(), now.getDate())),
+    usageSince(new Date(now.getFullYear(), now.getMonth(), 1)),
+  ]);
+
   const [anthropic, openrouter, selected] = await Promise.all([
     describeSecret("anthropic_api_key"),
     describeSecret("openrouter_api_key"),
@@ -65,6 +91,7 @@ export default async function Settings() {
           <TabsTrigger value="extraction">Extraction</TabsTrigger>
           <TabsTrigger value="matching">Matching</TabsTrigger>
           <TabsTrigger value="invoices">Invoices</TabsTrigger>
+          <TabsTrigger value="usage">Usage</TabsTrigger>
           <TabsTrigger value="data">Data</TabsTrigger>
         </TabsList>
 
@@ -114,6 +141,23 @@ export default async function Settings() {
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        <TabsContent value="usage" className="mt-6 space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>What extraction has cost</CardTitle>
+              <CardDescription>
+                Every provider call, including the ones that failed. Priced at
+                the model&apos;s catalogue rate when the call was made.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Usage label="Today" usage={today} />
+              <Separator />
+              <Usage label="This month" usage={month} />
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="matching" className="mt-6 space-y-4">

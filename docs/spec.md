@@ -158,6 +158,14 @@ Two more flag duplicates rather than letting them through to the unique constrai
 
 This is the highest value code in the build relative to its size. A model that quietly invents a number is worse than one that fails loudly, because a wrong total flows straight into the spend figures and nothing announces it.
 
+## 5a. Analytics and spend
+
+PostHog carries product usage and crashes, so it can all be read from a phone. Page views and the flow through the app go from the browser; `extraction_completed` goes from the server on every provider call, carrying provider, model, tokens, cost, pages, invoices found, duration and outcome. Crashes are captured on both sides, with `error.tsx` and `global-error.tsx` so a crash shows something usable rather than a white screen. Without `NEXT_PUBLIC_POSTHOG_KEY` the app behaves exactly as before and sends nothing.
+
+Nothing in an event identifies a supplier or an amount charged: counts, model names and costs only. An analytics tool is not a place to keep someone else's books.
+
+The same figures are written to `extraction_event`, which is the record that has to be right. An event can be blocked by an ad blocker, lost with a dropped request or aged out of a retention window, and none of those should be able to lose the record of what was spent. It also works offline, and #41 needs it to price a batch before extracting it. Settings reads it for calls and spend today and this month. A call the catalogue had no price for is counted but not costed, and the total then reads "or more" rather than pretending to be exact.
+
 ## 6. Matching
 
 ### Vendors

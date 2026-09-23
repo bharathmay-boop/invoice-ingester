@@ -36,6 +36,8 @@ export type Model = {
   name: string;
   /** Rough US dollars for one invoice. */
   cost: number;
+  /** US dollars per token, as the catalogue priced it when this was cached. */
+  prices: { prompt: number; completion: number };
   recommended: string | null;
 };
 
@@ -74,6 +76,10 @@ function toModel(entry: CatalogueEntry): Model {
     id: entry.id,
     name: entry.name ?? entry.id,
     cost,
+    prices: {
+      prompt: Number(entry.pricing?.prompt ?? 0),
+      completion: Number(entry.pricing?.completion ?? 0),
+    },
     recommended: RECOMMENDED[entry.id] ?? null,
   };
 }
@@ -132,4 +138,24 @@ export function formatCost(cost: number): string {
   if (cost === 0) return "free";
   if (cost < 0.01) return `$${cost.toFixed(4)}`;
   return `$${cost.toFixed(3)}`;
+}
+
+/**
+ * What one call cost, in US dollars, from the price the catalogue carried when
+ * it was last cached. Null when the model is not in the cache or the usage was
+ * not reported: an unknown cost is recorded as unknown, never as zero, which
+ * would quietly understate a month.
+ *
+ * Reads the cache only. This runs just after an extraction, and a spend figure
+ * is not worth making the user wait on a catalogue fetch.
+ */
+export async function costOf(
+  modelId: string,
+  usage: { input: number | null; output: number | null },
+): Promise<number | null> {
+  if (usage.input === null || usage.output === null) return null;
+  const cached = await getSetting<Cached>(CACHE_KEY);
+  const prices = cached?.models.find((m) => m.id === modelId)?.prices;
+  if (!prices) return null;
+  return usage.input * prices.prompt + usage.output * prices.completion;
 }

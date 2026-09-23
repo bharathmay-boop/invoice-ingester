@@ -1,9 +1,11 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { cookies } from "next/headers";
 import { Nav } from "./nav.tsx";
 import { ThemeProvider } from "./theme-provider.tsx";
+import { Analytics } from "./analytics-provider.tsx";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 
 const geistSans = Geist({
@@ -35,8 +37,12 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <ThemeProvider>
-          <Nav signedIn={signedIn} />
-          {children}
+          <Suspense>
+            <Analytics>
+              <Nav signedIn={signedIn} />
+              {children}
+            </Analytics>
+          </Suspense>
         </ThemeProvider>
       </body>
     </html>
