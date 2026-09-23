@@ -16,7 +16,6 @@ import { Spinner } from "@/components/ui/spinner";
  */
 
 const STAGES = ["Read it", "Check it", "Ask it"] as const;
-type Stage = (typeof STAGES)[number];
 
 const HOLD_MS = 4200;
 
@@ -184,15 +183,18 @@ function AskIt() {
       <p className="mt-5 text-sm font-medium">Microgreens, per kg</p>
       <div className="mt-3">
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-32 w-full" role="img" aria-label="Unit price rising from ₹212 in April to ₹249 in September">
-          <path
-            d={path}
-            fill="none"
-            stroke="var(--color-primary)"
-            strokeWidth="1.5"
-            vectorEffect="non-scaling-stroke"
-            className="motion-safe:animate-[draw_1.4s_ease-out_forwards]"
-            pathLength={1}
-          />
+          {/* Revealed by a clip rather than a dash offset. The stroke does not
+              scale with the stretched viewBox, so a dash pattern measured in
+              user units draws the line as a row of gaps. */}
+          <g className="motion-safe:animate-[reveal_1.4s_ease-out_forwards]">
+            <path
+              d={path}
+              fill="none"
+              stroke="var(--color-primary)"
+              strokeWidth="1.5"
+              vectorEffect="non-scaling-stroke"
+            />
+          </g>
         </svg>
         <div className="text-muted-foreground mt-1 flex justify-between text-xs">
           {points.map((p) => (

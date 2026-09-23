@@ -1,11 +1,13 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { capture } from "../analytics-provider.tsx";
+import { safeNext } from "@/lib/next-path.ts";
 import { useState } from "react";
 
 export default function Login() {
   const router = useRouter();
+  const next = safeNext(useSearchParams().get("next"));
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -32,7 +34,7 @@ export default function Login() {
 
     if (response.ok) {
       capture("signed_in");
-      router.push("/");
+      router.push(next);
       router.refresh();
       return;
     }

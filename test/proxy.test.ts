@@ -104,3 +104,26 @@ test("an expired session is treated as no session", async () => {
   assert.equal(await status("/api/invoices", "POST", expired), 401);
   assert.equal(await status("/settings", "GET", expired), 307);
 });
+
+// --- where sign in sends you afterwards ------------------------------------
+
+const { safeNext } = await import("../lib/next-path.ts");
+
+test("the return path can only ever be a page on this site", () => {
+  assert.equal(safeNext("/items?search=paper"), "/items?search=paper");
+  assert.equal(safeNext("/settings"), "/settings");
+
+  // Everything a stranger could put in the URL to send someone elsewhere.
+  // "//evil.example" is a URL to another site that looks like a path.
+  for (const hostile of [
+    "//evil.example",
+    "https://evil.example",
+    "http://evil.example/items",
+    "javascript:alert(1)",
+    "evil.example",
+    "",
+    null,
+  ]) {
+    assert.equal(safeNext(hostile), "/", String(hostile));
+  }
+});
