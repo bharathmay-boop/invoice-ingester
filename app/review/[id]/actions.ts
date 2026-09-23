@@ -9,7 +9,8 @@ import { parseExtraction } from "@/lib/extract/schema.ts";
 import { validateArithmetic, DEFAULT_TOLERANCE_RUPEES } from "@/lib/extract/validate.ts";
 import { getSetting } from "@/lib/settings/store.ts";
 import { normalize } from "@/lib/items/normalize.ts";
-import { findMatch, getThresholds } from "@/lib/items/match.ts";
+import { getThresholds } from "@/lib/items/match.ts";
+import { saveLine } from "@/lib/items/save-line.ts";
 import { releaseDraft } from "@/lib/blob.ts";
 import { track } from "@/lib/analytics/server.ts";
 
@@ -54,6 +55,11 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
   // Re-checked on the edited figures, not the extracted ones: correcting one
   // number by hand can easily break the sum.
   const checks = validateArithmetic(invoice, tolerance);
+
+  // Read before taking a connection. Reading it inside the transaction means a
+  // client holding one connection while asking the same pool for another, and
+  // enough concurrent saves would each hold one and wait forever for the next.
+  const thresholds = await getThresholds();
 
   const client = await pool.connect();
   let savedId: string;
@@ -130,54 +136,8 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
     );
     savedId = saved.rows[0].id;
 
-    const thresholds = await getThresholds();
-
     for (const line of invoice.line_items) {
-      const key = normalize(line.description);
-      const match = await findMatch(client, key, thresholds);
-
-      // Three outcomes, and only two of them touch the catalogue. A clear
-      // match links. Nothing close enough becomes a new item. The band between
-      // leaves the line unlinked with the candidate recorded, because guessing
-      // either way is exactly what the band exists to avoid: link and two
-      // products merge, create and one product's history splits in two.
-      const itemId =
-        match.kind === "linked"
-          ? match.itemId
-          : match.kind === "new"
-            ? (
-                await client.query<{ id: string }>(
-                  "INSERT INTO item (canonical_name, normalized_name) VALUES ($1,$2) RETURNING id",
-                  [line.description, key],
-                )
-              ).rows[0].id
-            : null;
-
-      const [savedLine] = (
-        await client.query<{ id: string }>(
-          `INSERT INTO line_item (invoice_id, raw_description, hsn_code, quantity, unit,
-                                  unit_price, amount, item_id, match_confidence)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
-          [
-            savedId,
-            line.description,
-            line.hsn_code,
-            line.quantity,
-            line.unit,
-            line.unit_price,
-            line.amount,
-            itemId,
-            match.kind === "linked" ? match.score : null,
-          ],
-        )
-      ).rows;
-
-      if (match.kind === "suggested") {
-        await client.query(
-          `INSERT INTO match_suggestion (line_item_id, item_id, score) VALUES ($1,$2,$3)`,
-          [savedLine.id, match.itemId, match.score],
-        );
-      }
+      await saveLine(client, savedId, line, thresholds);
     }
 
     await client.query("DELETE FROM draft WHERE id = $1", [draftId]);

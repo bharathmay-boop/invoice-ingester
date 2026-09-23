@@ -14,6 +14,7 @@ process.env.DATABASE_URL = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATA
 process.env.SETTINGS_MASTER_KEY ??= Buffer.alloc(32, 9).toString("base64");
 
 const db = configured ? await import("../lib/db.ts") : null;
+const saving = configured ? await import("../lib/items/save-line.ts") : null;
 const { normalize } = await import("../lib/items/normalize.ts");
 const match = configured ? await import("../lib/items/match.ts") : null;
 
@@ -30,6 +31,30 @@ before(async () => {
       created_at timestamptz NOT NULL DEFAULT now()
     )`);
   await db.query("CREATE INDEX ON item USING gin (normalized_name gin_trgm_ops)");
+  // Enough of the real shape to catch a wrong column, a broken foreign key or
+  // a write that lands in the wrong table.
+  await db.query(`
+    CREATE TABLE line_item (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      invoice_id uuid NOT NULL,
+      raw_description text NOT NULL,
+      hsn_code text,
+      quantity numeric(12,3) NOT NULL,
+      unit text,
+      unit_price numeric(14,4) NOT NULL,
+      amount numeric(14,2) NOT NULL,
+      item_id uuid REFERENCES item (id),
+      match_confidence numeric(4,3)
+    )`);
+  await db.query(`
+    CREATE TABLE match_suggestion (
+      line_item_id uuid PRIMARY KEY REFERENCES line_item (id) ON DELETE CASCADE,
+      item_id uuid NOT NULL REFERENCES item (id) ON DELETE CASCADE,
+      score numeric(4,3) NOT NULL,
+      decision text CHECK (decision IN ('accepted', 'rejected')),
+      created_at timestamptz NOT NULL DEFAULT now(),
+      decided_at timestamptz
+    )`);
 });
 
 after(async () => {
@@ -142,4 +167,97 @@ test("thresholds that would contradict each other are refused", { skip }, () => 
   assert.deepEqual(match!.checkThresholds({ link: 0.85, suggest: 0.6 }), { link: 0.85, suggest: 0.6 });
   // Equal is allowed: it means no band at all, link or create, nothing to ask.
   assert.deepEqual(match!.checkThresholds({ link: 0.7, suggest: 0.7 }), { link: 0.7, suggest: 0.7 });
+});
+
+// --- what actually gets written --------------------------------------------
+
+const INVOICE = "11111111-1111-4111-8111-111111111111";
+
+/**
+ * These tests assert which item was linked, so they need a catalogue they own.
+ * Earlier tests leave items with the same names behind, and the match would
+ * land on whichever was written first.
+ */
+async function emptyCatalogue() {
+  await db!.query("DELETE FROM match_suggestion");
+  await db!.query("DELETE FROM line_item");
+  await db!.query("DELETE FROM item");
+}
+
+const line = (description: string) => ({
+  description,
+  hsn_code: "8305",
+  quantity: 2,
+  unit: "pc",
+  unit_price: 320,
+  amount: 640,
+});
+
+/** Saves one line the way a confirmed invoice does, then rolls it back. */
+async function saved(description: string, over = thresholds) {
+  const client = await db!.pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await saving!.saveLine(client, INVOICE, line(description), over);
+    const [row] = (
+      await client.query<{ item_id: string | null; match_confidence: string | null }>(
+        "SELECT item_id, match_confidence FROM line_item WHERE id = $1",
+        [result.lineItemId],
+      )
+    ).rows;
+    const suggestions = (
+      await client.query<{ item_id: string; score: string }>(
+        "SELECT item_id, score FROM match_suggestion WHERE line_item_id = $1",
+        [result.lineItemId],
+      )
+    ).rows;
+    const items = (await client.query<{ n: string }>("SELECT count(*) AS n FROM item")).rows[0].n;
+    return { result, row, suggestions, items: Number(items) };
+  } finally {
+    await client.query("ROLLBACK");
+    client.release();
+  }
+}
+
+test("a clear match is linked to the item already in the catalogue", { skip }, async () => {
+  await emptyCatalogue();
+  const id = await catalogue("Stapler HD-45");
+  const before = (await db!.query<{ n: string }>("SELECT count(*) AS n FROM item"))[0].n;
+
+  const { row, suggestions, items } = await saved("stapler hd-45");
+  assert.equal(row.item_id, id);
+  assert.equal(Number(row.match_confidence), 1);
+  assert.equal(suggestions.length, 0, "a clear match asks nobody anything");
+  assert.equal(items, Number(before), "and creates no second catalogue entry");
+});
+
+test("a borderline line is saved unlinked, with the candidate recorded", { skip }, async () => {
+  await emptyCatalogue();
+  const id = await catalogue("Stapler HD-45");
+  const before = (await db!.query<{ n: string }>("SELECT count(*) AS n FROM item"))[0].n;
+
+  const { result, row, suggestions, items } = await saved("Stapler HD45");
+
+  // Unlinked: linking would merge two products on a guess.
+  assert.equal(row.item_id, null);
+  assert.equal(row.match_confidence, null);
+  // And no new item: creating one would split a price history on the same guess.
+  assert.equal(items, Number(before));
+  // The question is recorded against the candidate, at the score that raised it.
+  assert.equal(suggestions.length, 1);
+  assert.equal(suggestions[0].item_id, id);
+  assert.ok(Number(suggestions[0].score) > 0.6 && Number(suggestions[0].score) < 0.85);
+  assert.equal(result.suggested, true);
+});
+
+test("something unlike anything in the catalogue becomes its own item", { skip }, async () => {
+  await emptyCatalogue();
+  await catalogue("Stapler HD-45");
+  const before = (await db!.query<{ n: string }>("SELECT count(*) AS n FROM item"))[0].n;
+
+  const { row, suggestions, items } = await saved("Office Chair Mesh Black");
+  assert.ok(row.item_id, "a new item is created and linked");
+  assert.equal(row.match_confidence, null, "a new item is not a confidence score");
+  assert.equal(items, Number(before) + 1);
+  assert.equal(suggestions.length, 0);
 });
