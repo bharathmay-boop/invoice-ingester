@@ -285,3 +285,20 @@ test("only models that can actually read an invoice are offered", () => {
   // Free is fine, if it can do the job.
   assert.equal(usable(entry({ pricing: { prompt: "0", completion: "0" } })), true);
 });
+
+// --- opening an original ---------------------------------------------------
+
+const { originalHref, originalSrc } = await import("../lib/original.ts");
+
+test("an original opens at the page its invoice starts on", () => {
+  const url = "https://blob.example/invoices/a b.pdf";
+  // The blob URL is a query parameter, so it has to survive being one.
+  assert.equal(originalSrc(url), `/api/original?url=${encodeURIComponent(url)}`);
+
+  assert.equal(originalHref(url, "application/pdf", 3), `${originalSrc(url)}#page=3`);
+  // Page one is where it opens anyway.
+  assert.equal(originalHref(url, "application/pdf", 1), originalSrc(url));
+  assert.equal(originalHref(url, "application/pdf", null), originalSrc(url));
+  // An image viewer does nothing with #page, so it is not added.
+  assert.equal(originalHref(url, "image/jpeg", 2), originalSrc(url));
+});

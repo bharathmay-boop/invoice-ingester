@@ -51,7 +51,15 @@ export async function getVendor(id: string): Promise<VendorDetail | null> {
   return rows[0] ?? null;
 }
 
-export type InvoiceRow = {
+/** What the screens need to show an invoice and open its original. */
+export type Original = {
+  blob_url: string | null;
+  content_type: string | null;
+  /** Where this invoice starts in a file holding several. */
+  first_page: number | null;
+};
+
+export type InvoiceRow = Original & {
   id: string;
   invoice_number: string;
   invoice_date: string;
@@ -61,7 +69,8 @@ export type InvoiceRow = {
 
 export function listVendorInvoices(vendorId: string): Promise<InvoiceRow[]> {
   return query<InvoiceRow>(
-    `SELECT id, invoice_number, invoice_date, total::float, status
+    `SELECT id, invoice_number, invoice_date, total::float, status,
+            blob_url, content_type, first_page
      FROM invoice WHERE vendor_id = $1
      ORDER BY invoice_date DESC`,
     [vendorId],
@@ -114,7 +123,7 @@ export function listItems(search?: string): Promise<ItemRow[]> {
   );
 }
 
-export type PurchaseRow = {
+export type PurchaseRow = Original & {
   invoice_id: string;
   invoice_number: string;
   invoice_date: string;
@@ -139,7 +148,8 @@ export async function getItem(id: string) {
     `SELECT i.id AS invoice_id, i.invoice_number, i.invoice_date,
             v.id AS vendor_id, v.name AS vendor_name,
             li.raw_description, li.quantity::float, li.unit,
-            li.unit_price::float, li.amount::float, i.status
+            li.unit_price::float, li.amount::float, i.status,
+            i.blob_url, i.content_type, i.first_page
      FROM line_item li
      JOIN invoice i ON i.id = li.invoice_id
      JOIN vendor v ON v.id = i.vendor_id

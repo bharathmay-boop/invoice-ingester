@@ -65,8 +65,13 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
     // GSTIN each would create its own vendor, so the
     // UNIQUE (vendor_id, invoice_number) constraint would not see a duplicate
     // and the same invoice would be stored twice.
-    const claimed = await client.query<{ blob_url: string; extraction_meta: unknown }>(
-      "SELECT blob_url, extraction_meta FROM draft WHERE id = $1 FOR UPDATE",
+    const claimed = await client.query<{
+      blob_url: string;
+      extraction_meta: unknown;
+      content_type: string;
+      first_page: number | null;
+    }>(
+      "SELECT blob_url, extraction_meta, content_type, first_page FROM draft WHERE id = $1 FOR UPDATE",
       [draftId],
     );
     if (!claimed.rows.length) {
@@ -101,8 +106,9 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
 
     const saved = await client.query<{ id: string }>(
       `INSERT INTO invoice (vendor_id, invoice_number, invoice_date, subtotal, cgst,
-                            sgst, igst, total, blob_url, status, extraction_meta)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+                            sgst, igst, total, blob_url, status, extraction_meta,
+                            content_type, first_page)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
       [
         vendorId,
         invoice.invoice_number,
@@ -115,6 +121,10 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
         draft.blob_url,
         checks.status,
         JSON.stringify(draft.extraction_meta ?? {}),
+        // Carried over so the original can be shown from the vendor and item
+        // screens: how to render it, and which page this invoice starts on.
+        draft.content_type,
+        draft.first_page,
       ],
     );
     savedId = saved.rows[0].id;

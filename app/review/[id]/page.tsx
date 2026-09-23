@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { query } from "@/lib/db.ts";
+import { originalHref, originalSrc } from "@/lib/original.ts";
 import type { ExtractedInvoice } from "@/lib/extract/schema.ts";
 import { describeDiscrepancy, isValidityWarning, type Discrepancy } from "@/lib/extract/validate.ts";
 import { ReviewForm } from "./review-form.tsx";
@@ -34,10 +35,10 @@ export default async function Review({ params }: { params: Promise<{ id: string 
   );
   if (!draft) notFound();
 
-  const original = `/api/original?url=${encodeURIComponent(draft.blob_url)}`;
+  const original = originalSrc(draft.blob_url);
   // The browser's PDF viewer opens at a page given in the fragment, so the
   // invoice being reviewed is the one on screen.
-  const atPage = draft.first_page ? `${original}#page=${draft.first_page}` : original;
+  const atPage = originalHref(draft.blob_url, draft.content_type, draft.first_page);
   const pages =
     draft.first_page && draft.last_page && draft.last_page > draft.first_page
       ? `pages ${draft.first_page} to ${draft.last_page}`
