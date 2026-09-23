@@ -28,10 +28,12 @@ type Props = {
  * for, printing it or reading it full size.
  */
 export function InvoiceOriginal({ invoiceNumber, date, blobUrl, contentType, firstPage }: Props) {
-  // Seeded demo invoices and anything saved before the originals were kept
-  // have nothing to show, and an icon that opens an empty box is worse than no
-  // icon.
-  if (!blobUrl) return null;
+  // Nothing to show, or no way to know how to show it. Seeded demo invoices
+  // have no original at all; an invoice saved before the content type was
+  // recorded, and whose file name did not say what it was, cannot be rendered
+  // without guessing, and a PDF guessed as an image renders as a broken box.
+  // An icon that opens one of those is worse than no icon.
+  if (!blobUrl || !contentType) return null;
 
   const src = originalSrc(blobUrl);
   const isPdf = contentType === "application/pdf";
