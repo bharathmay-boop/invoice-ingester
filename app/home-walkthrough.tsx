@@ -39,7 +39,12 @@ export function HomeWalkthrough() {
   // the server and the first client render agree on "not reduced".
   const reducedMotion = useSyncExternalStore(subscribeToMotion, motionIsReduced, () => false);
   const [choice, setChoice] = useState<boolean | null>(null);
-  const playing = choice ?? !reducedMotion;
+  // Held still while someone is actually on it: reading a panel, or tabbing
+  // through the controls. The Pause button is the lasting answer, this is the
+  // courtesy in between.
+  const [touched, setTouched] = useState(false);
+  const wanted = choice ?? !reducedMotion;
+  const playing = wanted && !touched;
 
   useEffect(() => {
     if (!playing) return;
@@ -50,7 +55,12 @@ export function HomeWalkthrough() {
   }, [stage, playing]);
 
   return (
-    <div>
+    <div
+      onMouseEnter={() => setTouched(true)}
+      onMouseLeave={() => setTouched(false)}
+      onFocus={() => setTouched(true)}
+      onBlur={() => setTouched(false)}
+    >
       <Tabs value={stage} onValueChange={setStage}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <TabsList>
@@ -64,8 +74,8 @@ export function HomeWalkthrough() {
           {/* Anything that changes on its own needs a way to stop it, and a
               hover is not one: it does not exist on a phone and it does not
               help someone reading with a screen reader. */}
-          <Button variant="ghost" size="sm" onClick={() => setChoice(!playing)}>
-            {playing ? (
+          <Button variant="ghost" size="sm" onClick={() => setChoice(!wanted)}>
+            {wanted ? (
               <>
                 <PauseIcon /> Pause
               </>
