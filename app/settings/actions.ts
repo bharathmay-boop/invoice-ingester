@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { deleteSecret, setSecret, setSetting } from "@/lib/settings/store.ts";
+import { checkThresholds } from "@/lib/items/match.ts";
+import { checkTolerance } from "@/lib/extract/validate.ts";
 import {
   isProvider,
   MODEL_SETTING,
@@ -102,4 +104,76 @@ export async function checkConnection(
   if (!isProvider(provider)) return { ok: false, error: "Unknown provider." };
 
   return testConnection(provider);
+}
+
+/**
+ * The two matching thresholds, saved together.
+ *
+ * Together because they are one decision: a suggest threshold above the link
+ * threshold would mean a band that links and suggests at once, and saving them
+ * one at a time would pass through that state on the way to a valid pair.
+ */
+export async function saveThresholds(
+  _previous: ActionResult | null,
+  form: FormData,
+): Promise<ActionResult> {
+  await requireSession();
+
+  const link = Number(form.get("link"));
+  const suggest = Number(form.get("suggest"));
+
+  try {
+    checkThresholds({ link, suggest });
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "Those thresholds do not work together.",
+    };
+  }
+
+  await setSetting("match_link", link);
+  await setSetting("match_suggest", suggest);
+  revalidatePath("/settings");
+
+  return {
+    ok: true,
+    message:
+      link === suggest
+        ? "Saved. With both the same there is no band, so every match either links or becomes a new item."
+        : "Saved. This applies to the next invoice you save, not to matches already decided.",
+  };
+}
+
+/**
+ * How much rounding to forgive before an invoice is held for checking.
+ *
+ * Read by the arithmetic checks at extraction and again at save, so a change
+ * here is the difference between an invoice counting and an invoice waiting.
+ */
+export async function saveTolerance(
+  _previous: ActionResult | null,
+  form: FormData,
+): Promise<ActionResult> {
+  await requireSession();
+
+  const rupees = Number(form.get("tolerance"));
+  try {
+    checkTolerance(rupees);
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "That tolerance will not do.",
+    };
+  }
+
+  await setSetting("rounding_tolerance", rupees);
+  revalidatePath("/settings");
+
+  return {
+    ok: true,
+    message:
+      rupees === 0
+        ? "Saved. With no tolerance at all, a one paisa rounding difference will hold an invoice."
+        : "Saved. This applies to the next invoice you read or save.",
+  };
 }
