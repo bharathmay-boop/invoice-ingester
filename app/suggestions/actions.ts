@@ -8,11 +8,9 @@ import { track } from "@/lib/analytics/server.ts";
 
 export type Decision = { ok: true; message: string } | { ok: false; message: string };
 
-async function requireSession() {
+async function signedIn() {
   const jar = await cookies();
-  if (!(await isValidSession(jar.get(sessionCookie.name)?.value))) {
-    throw new Error("Sign in to decide a suggestion.");
-  }
+  return isValidSession(jar.get(sessionCookie.name)?.value);
 }
 
 /**
@@ -30,7 +28,11 @@ export async function decideSuggestion(
   _previous: Decision | null,
   form: FormData,
 ): Promise<Decision> {
-  await requireSession();
+  // Answered rather than thrown: a throw reaches the browser as an unhandled
+  // server error, which tells someone nothing about what to do next.
+  if (!(await signedIn())) {
+    return { ok: false, message: "Sign in to decide a suggestion." };
+  }
 
   const lineItemId = form.get("lineItemId");
   const verdict = form.get("verdict");
@@ -42,10 +44,11 @@ export async function decideSuggestion(
   try {
     applied = await applyDecision(lineItemId, verdict);
   } catch (error) {
-    return {
-      ok: false,
-      message: error instanceof Error ? error.message : "Could not save that decision.",
-    };
+    // Logged, not shown. A database message can carry column names, constraint
+    // names or a malformed id straight back to the screen, and none of it
+    // helps the person reading it.
+    console.error("could not decide suggestion", error instanceof Error ? error.message : error);
+    return { ok: false, message: "Could not save that decision. Try again." };
   }
   if (!applied.ok) return { ok: false, message: "That one has already been decided." };
 

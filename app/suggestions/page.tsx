@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { listSuggestions } from "@/lib/queries.ts";
 import { formatDate, money } from "@/lib/format.ts";
 import { Empty, Page } from "../ui.tsx";
@@ -16,6 +18,11 @@ export const metadata = { title: "Suggestions" };
  */
 export default async function Suggestions() {
   const waiting = await listSuggestions();
+  // Deciding needs a session, so a reader without one is shown the questions
+  // and not the buttons. A control that refuses on click is worse than one
+  // that is not offered.
+  const jar = await cookies();
+  const canDecide = await isValidSession(jar.get(sessionCookie.name)?.value);
 
   return (
     <Page
@@ -32,6 +39,7 @@ export default async function Suggestions() {
           {waiting.map((suggestion) => (
             <li key={suggestion.line_item_id}>
               <SuggestionCard
+                canDecide={canDecide}
                 lineItemId={suggestion.line_item_id}
                 rawDescription={suggestion.raw_description}
                 canonicalName={suggestion.canonical_name}
