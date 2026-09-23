@@ -18,25 +18,43 @@ const LINKS = [
 function SignOut() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   async function signOut() {
     setBusy(true);
+    setFailed(false);
     try {
-      // The cookie is httpOnly, so only the server can clear it. Clearing it
-      // in the browser is not possible and would not end the session anyway.
-      await fetch("/api/session", { method: "DELETE" });
+      // The cookie is httpOnly, so only the server can clear it, and only a
+      // response that actually carries the expired cookie has ended the
+      // session. Navigating away on a failed request would look signed out
+      // while the session stayed valid, which on a shared machine is the whole
+      // problem this button exists to solve.
+      const response = await fetch("/api/session", { method: "DELETE" });
+      if (!response.ok) {
+        setFailed(true);
+        return;
+      }
       capture("signed_out");
       router.push("/");
       router.refresh();
+    } catch {
+      setFailed(true);
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Button variant="ghost" size="sm" onClick={signOut} disabled={busy}>
-      {busy ? "Signing out…" : "Sign out"}
-    </Button>
+    <span className="flex items-center gap-2">
+      {failed && (
+        <span role="alert" className="text-destructive text-xs">
+          Could not sign out. Still signed in.
+        </span>
+      )}
+      <Button variant="ghost" size="sm" onClick={signOut} disabled={busy}>
+        {busy ? "Signing out…" : failed ? "Try again" : "Sign out"}
+      </Button>
+    </span>
   );
 }
 

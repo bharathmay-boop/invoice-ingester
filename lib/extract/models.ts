@@ -196,5 +196,12 @@ export async function costOf(
 export async function resolveModel(configured: string): Promise<string> {
   const cached = await getSetting<Cached>(CACHE_KEY);
   if (!cached?.models.length) return configured;
-  return cached.models.some((m) => m.id === configured) ? configured : DEFAULT_OPENROUTER_MODEL;
+
+  const qualifies = (id: string) => cached.models.some((m) => m.id === id);
+  if (qualifies(configured)) return configured;
+  // The default can be retired or lose PDF support like any other model, so it
+  // is checked too. The list is sorted recommended first, then cheapest, so
+  // its head is the best remaining choice rather than an arbitrary one.
+  if (qualifies(DEFAULT_OPENROUTER_MODEL)) return DEFAULT_OPENROUTER_MODEL;
+  return cached.models[0].id;
 }

@@ -10,6 +10,9 @@ const configured = Boolean(process.env.DATABASE_URL);
 const skip = configured ? false : "no DATABASE_URL, run `vercel env pull`";
 
 const SCHEMA = `test_${Math.random().toString(36).slice(2, 10)}`;
+// The settings store seals secrets with this, and resolveModel reads the model
+// cache through it.
+process.env.SETTINGS_MASTER_KEY ??= Buffer.alloc(32, 5).toString("base64");
 process.env.DATABASE_SCHEMA = SCHEMA;
 process.env.DATABASE_URL = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
 // No key, so the PostHog half of recordExtraction is a no-op and the test
@@ -22,8 +25,10 @@ const usage = configured ? await import("../lib/usage.ts") : null;
 before(async () => {
   if (!db) return;
   await db.query(`CREATE SCHEMA IF NOT EXISTS ${SCHEMA}`);
-  const file = fileURLToPath(new URL("../db/migrations/011_extraction_event.sql", import.meta.url));
-  await db.query(await readFile(file, "utf8"));
+  for (const name of ["002_settings.sql", "011_extraction_event.sql"]) {
+    const file = fileURLToPath(new URL(`../db/migrations/${name}`, import.meta.url));
+    await db.query(await readFile(file, "utf8"));
+  }
 });
 
 after(async () => {
@@ -82,4 +87,26 @@ test("a Claude call is priced from the local table, not the OpenRouter catalogue
   assert.equal(await costOf("claude-opus-5", { input: null, output: 500 }), null);
   // A model nobody has priced is unknown, not free.
   assert.equal(await costOf("someone/unlisted-model", { input: 1000, output: 500 }), null);
+});
+
+test("a model that no longer qualifies falls back to one that does", { skip }, async () => {
+  const { resolveModel, DEFAULT_OPENROUTER_MODEL } = await import("../lib/extract/models.ts");
+  const { setSetting } = await import("../lib/settings/store.ts");
+  const model = (id: string) => ({ id, name: id, cost: 0.001, prices: { prompt: 0, completion: 0 }, recommended: null });
+
+  // Nothing cached: nothing is known about the model, so it stands.
+  await setSetting("openrouter_models_cache", { at: Date.now(), models: [] });
+  assert.equal(await resolveModel("vendor/anything"), "vendor/anything");
+
+  await setSetting("openrouter_models_cache", {
+    at: Date.now(),
+    models: [model(DEFAULT_OPENROUTER_MODEL), model("vendor/good")],
+  });
+  assert.equal(await resolveModel("vendor/good"), "vendor/good");
+  assert.equal(await resolveModel("openrouter/free"), DEFAULT_OPENROUTER_MODEL);
+
+  // The default can be retired too. The list is sorted best first, so its head
+  // is the next choice rather than an upload that fails.
+  await setSetting("openrouter_models_cache", { at: Date.now(), models: [model("vendor/best"), model("vendor/other")] });
+  assert.equal(await resolveModel("openrouter/free"), "vendor/best");
 });
