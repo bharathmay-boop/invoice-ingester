@@ -135,11 +135,15 @@ OpenAI compatible endpoint with `response_format` set to a json_schema, using th
 `GET https://openrouter.ai/api/v1/models` returns, per model, an `architecture.input_modalities` array and a `supported_parameters` array. The app uses these rather than a maintained list:
 
 1. Fetch the catalogue server side, cache for 24 hours.
-2. Keep only models whose modalities include `image` and whose supported parameters include `structured_outputs`.
-3. Order by a short `RECOMMENDED` array in code, then by price.
-4. Show the top ten, with the first two carrying a badge and a line saying why.
+2. Keep only models that can actually do the job: modalities include both `image` and `file`, supported parameters include `structured_outputs`, the model is not a `:batch` variant, and it carries a real price.
+3. Order by price, cheapest first. The filter has already removed everything that cannot read an invoice, so price is the only question left.
+4. Show them all. The two models that have been tried on a real invoice carry a note on the option, not a position at the top.
 
 A pinned list of model IDs goes stale within weeks, and a retired ID does not fail when it is selected. It fails later during an upload, which is the worst place to discover it. Filtering against the live catalogue means every option in the dropdown is a model that exists and can do the job.
+
+`file` is not a detail. PDFs are sent as a file part, and a model without it fails on every PDF: `openrouter/free` passed the earlier filter, priced itself at 0 so it sorted to the top of the list, and broke extraction the moment it was selected. A `:batch` variant is queued rather than answered, which is wrong for someone waiting on an upload. A model saved before it stopped qualifying falls back to the default at call time, rather than failing during an upload.
+
+No free model qualifies. Every free model that does images and structured output lacks `file` support, so there is no free option for a product whose main input is a PDF. The default is `google/gemini-2.5-flash`, about $0.0026 an invoice.
 
 If OpenRouter is unreachable the app uses the last cached list, and if there is no cache it says so rather than showing an empty dropdown. The two recommended IDs are matched by string, so a retired one loses its badge instead of breaking the page.
 

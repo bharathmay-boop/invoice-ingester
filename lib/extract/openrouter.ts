@@ -3,7 +3,7 @@ import { getSecret, getSetting } from "../settings/store.ts";
 import { INSTRUCTIONS } from "./prompt.ts";
 import { extractionJsonSchema, parseResponse } from "./schema.ts";
 import { MODEL_SETTING } from "./provider.ts";
-import { DEFAULT_OPENROUTER_MODEL } from "./models.ts";
+import { DEFAULT_OPENROUTER_MODEL, resolveModel } from "./models.ts";
 import type { ExtractionOutcome } from "./anthropic.ts";
 
 /**
@@ -17,7 +17,7 @@ export async function extractWithOpenRouter(
   const key = await getSecret("openrouter_api_key");
   if (!key) return { ok: false, error: "No OpenRouter key is saved." };
 
-  const model = (await getSetting<string>(MODEL_SETTING)) ?? DEFAULT_OPENROUTER_MODEL;
+  const model = await resolveModel((await getSetting<string>(MODEL_SETTING)) ?? DEFAULT_OPENROUTER_MODEL);
   const dataUrl = `data:${source.contentType};base64,${source.data}`;
 
   // PDFs go through the file part, images through image_url.

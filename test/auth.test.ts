@@ -6,9 +6,8 @@ import { test } from "node:test";
 process.env.SETTINGS_MASTER_KEY = Buffer.alloc(32, 3).toString("base64");
 process.env.ADMIN_PASSWORD = "a-long-enough-test-password";
 
-const { mintSession, isValidSession, isCorrectPassword } = await import(
-  "../lib/auth.ts"
-);
+const { mintSession, isValidSession, isCorrectPassword, sessionCookie, clearedSessionCookie } =
+  await import("../lib/auth.ts");
 
 const NOW = Date.UTC(2026, 8, 21, 12, 0, 0);
 const DAY = 24 * 60 * 60 * 1000;
@@ -75,4 +74,17 @@ test("the password check accepts only the exact password", async () => {
   ]) {
     assert.equal(await isCorrectPassword(wrong), false, `accepted "${wrong}"`);
   }
+});
+
+test("signing out empties and expires the session cookie", () => {
+  const cleared = clearedSessionCookie();
+
+  // The same cookie, emptied and expired at once. Anything else leaves a
+  // session someone still holds working, since the cookie is httpOnly and the
+  // browser cannot clear it itself.
+  assert.equal(cleared.name, sessionCookie.name);
+  assert.equal(cleared.value, "");
+  assert.equal(cleared.options.maxAge, 0);
+  assert.equal(cleared.options.httpOnly, true);
+  assert.equal(cleared.options.path, sessionCookie.options.path);
 });

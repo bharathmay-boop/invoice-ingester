@@ -39,8 +39,6 @@ export function ModelPicker({
   );
 
   const current = models.find((m) => m.id === choice);
-  const recommended = models.filter((m) => m.recommended);
-  const rest = models.filter((m) => !m.recommended);
 
   return (
     <form action={save} className="space-y-3">
@@ -58,22 +56,15 @@ export function ModelPicker({
         {!models.some((m) => m.id === choice) && (
           <option value={choice}>{choice} (no longer listed)</option>
         )}
-        {recommended.length > 0 && (
-          <optgroup label="Recommended">
-            {recommended.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name} — {priceLabel(m.cost)}
-              </option>
-            ))}
-          </optgroup>
-        )}
-        <optgroup label={`Everything that can read an invoice (${rest.length}), cheapest first`}>
-          {rest.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name} — {priceLabel(m.cost)}
-            </option>
-          ))}
-        </optgroup>
+        {/* One list, cheapest first. Everything here can read an invoice, so
+            price is the only thing left to sort on. A note is a label on the
+            option rather than a place near the top. */}
+        {models.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.name} — {priceLabel(m.cost)}
+            {m.recommended ? " — tried on a real invoice" : ""}
+          </option>
+        ))}
       </select>
 
       {current?.recommended && (
@@ -82,9 +73,11 @@ export function ModelPicker({
 
       <p className="text-muted-foreground text-xs">
         Prices are a rough guide for one page and a short answer, so treat them
-        as a ratio between models rather than a bill. Only models that accept an
-        image and support structured output are listed, because the rest cannot
-        do this job.
+        as a ratio between models rather than a bill. Cheapest first. Only
+        models that take a PDF or an image and support structured output are
+        listed, because the rest cannot do this job. Cheaper is not the same as
+        better at reading an invoice: the arithmetic checks catch a total that
+        does not add up, but not a date or a description read wrong.
         {stale && " This list is the last one fetched; OpenRouter was unreachable just now."}
       </p>
 

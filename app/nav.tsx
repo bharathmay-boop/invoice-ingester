@@ -1,7 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { capture } from "./analytics-provider.tsx";
 
 // ponytail: no suggestions link and no waiting count until there is a
 // suggestions screen to point at. A nav item that goes nowhere is worse than
@@ -11,6 +14,49 @@ const LINKS = [
   { href: "/items", label: "Items" },
   { href: "/vendors", label: "Vendors" },
 ];
+
+function SignOut() {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  async function signOut() {
+    setBusy(true);
+    setFailed(false);
+    try {
+      // The cookie is httpOnly, so only the server can clear it, and only a
+      // response that actually carries the expired cookie has ended the
+      // session. Navigating away on a failed request would look signed out
+      // while the session stayed valid, which on a shared machine is the whole
+      // problem this button exists to solve.
+      const response = await fetch("/api/session", { method: "DELETE" });
+      if (!response.ok) {
+        setFailed(true);
+        return;
+      }
+      capture("signed_out");
+      router.push("/");
+      router.refresh();
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <span className="flex items-center gap-2">
+      {failed && (
+        <span role="alert" className="text-destructive text-xs">
+          Could not sign out. Still signed in.
+        </span>
+      )}
+      <Button variant="ghost" size="sm" onClick={signOut} disabled={busy}>
+        {busy ? "Signing out…" : failed ? "Try again" : "Sign out"}
+      </Button>
+    </span>
+  );
+}
 
 export function Nav({ signedIn }: { signedIn: boolean }) {
   const pathname = usePathname();
@@ -53,7 +99,7 @@ export function Nav({ signedIn }: { signedIn: boolean }) {
 
         <span className="ml-auto text-sm">
           {signedIn ? (
-            <span className="opacity-60">Signed in</span>
+            <SignOut />
           ) : (
             <Link href="/login" className="underline opacity-70 hover:opacity-100">
               Sign in
