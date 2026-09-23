@@ -59,7 +59,21 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
   // Read before taking a connection. Reading it inside the transaction means a
   // client holding one connection while asking the same pool for another, and
   // enough concurrent saves would each hold one and wait forever for the next.
-  const thresholds = await getThresholds();
+  //
+  // Guarded, because a saved pair that contradicts itself is refused on read,
+  // and that should come back as a message about settings rather than as an
+  // unhandled error on a save someone was in the middle of.
+  let thresholds;
+  try {
+    thresholds = await getThresholds();
+  } catch (error) {
+    return {
+      ok: false,
+      message: `The matching thresholds in settings cannot be used: ${
+        error instanceof Error ? error.message : "they do not make a valid pair"
+      }.`,
+    };
+  }
 
   const client = await pool.connect();
   let savedId: string;
