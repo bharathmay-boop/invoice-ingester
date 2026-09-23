@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { deleteSecret, setSecret, setSetting } from "@/lib/settings/store.ts";
-import { checkThresholds } from "@/lib/items/match.ts";
+import { checkThresholds, THRESHOLDS_SETTING } from "@/lib/items/match.ts";
 import { checkTolerance } from "@/lib/extract/validate.ts";
 import {
   isProvider,
@@ -131,8 +131,8 @@ export async function saveThresholds(
     };
   }
 
-  await setSetting("match_link", link);
-  await setSetting("match_suggest", suggest);
+  // One write, so the pair is never half changed.
+  await setSetting(THRESHOLDS_SETTING, { link, suggest });
   revalidatePath("/settings");
 
   return {
@@ -156,7 +156,14 @@ export async function saveTolerance(
 ): Promise<ActionResult> {
   await requireSession();
 
-  const rupees = Number(form.get("tolerance"));
+  const entered = form.get("tolerance");
+  if (typeof entered !== "string" || entered.trim() === "") {
+    // An empty box is not zero. Number("") is 0, which would quietly save the
+    // strictest possible setting and report success.
+    return { ok: false, message: "Enter a tolerance in rupees." };
+  }
+
+  const rupees = Number(entered);
   try {
     checkTolerance(rupees);
   } catch (error) {

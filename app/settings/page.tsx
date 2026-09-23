@@ -236,7 +236,10 @@ export default async function Settings() {
                     value: tolerance,
                     min: 0,
                     max: 100,
-                    step: 0.5,
+                    // Paise, because the checks compare in paise. A coarser
+                    // step would have the browser refuse figures the server
+                    // accepts, such as 4.99.
+                    step: 0.01,
                   },
                 ]}
               />

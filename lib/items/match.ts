@@ -26,10 +26,18 @@ export type Match =
  * Thresholds live in settings because the right values depend on how varied
  * the real invoices turn out to be, which nobody knows before there is data.
  */
+export const THRESHOLDS_SETTING = "matching";
+
 export async function getThresholds(): Promise<Thresholds> {
-  const link = (await getSetting<number>("match_link")) ?? DEFAULT_LINK;
-  const suggest = (await getSetting<number>("match_suggest")) ?? DEFAULT_SUGGEST;
-  return checkThresholds({ link, suggest });
+  // One row holding both, not one row each. They are only valid in relation to
+  // each other, and two writes can be interrupted between them, leaving a pair
+  // in the database that no request ever validated and that every later read
+  // then refuses.
+  const saved = await getSetting<Thresholds>(THRESHOLDS_SETTING);
+  return checkThresholds({
+    link: saved?.link ?? DEFAULT_LINK,
+    suggest: saved?.suggest ?? DEFAULT_SUGGEST,
+  });
 }
 
 /**

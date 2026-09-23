@@ -31,6 +31,10 @@ before(async () => {
       created_at timestamptz NOT NULL DEFAULT now()
     )`);
   await db.query("CREATE INDEX ON item USING gin (normalized_name gin_trgm_ops)");
+  await db.query(`CREATE TABLE setting (
+    key text PRIMARY KEY,
+    value jsonb NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now())`);
   // Enough of the real shape to catch a wrong column, a broken foreign key or
   // a write that lands in the wrong table.
   await db.query(`
@@ -260,4 +264,28 @@ test("something unlike anything in the catalogue becomes its own item", { skip }
   assert.equal(row.match_confidence, null, "a new item is not a confidence score");
   assert.equal(items, Number(before) + 1);
   assert.equal(suggestions.length, 0);
+});
+
+test("thresholds are stored as one value, so a pair is never half saved", { skip }, async () => {
+  const { THRESHOLDS_SETTING } = match!;
+  // Both numbers in one row: validated together, written together, read back
+  // together. Two rows could be interrupted between writes and leave a pair
+  // that every later read refuses.
+  assert.equal(typeof THRESHOLDS_SETTING, "string");
+
+  const { setSetting } = await import("../lib/settings/store.ts");
+  await setSetting(THRESHOLDS_SETTING, { link: 0.9, suggest: 0.55 });
+  assert.deepEqual(await match!.getThresholds(), { link: 0.9, suggest: 0.55 });
+
+  // A saved pair that somehow contradicts itself is refused on read rather
+  // than quietly matching on it.
+  await setSetting(THRESHOLDS_SETTING, { link: 0.4, suggest: 0.8 });
+  await assert.rejects(() => match!.getThresholds(), /threshold/);
+
+  // Nothing saved at all means the defaults.
+  await setSetting(THRESHOLDS_SETTING, null);
+  assert.deepEqual(await match!.getThresholds(), {
+    link: match!.DEFAULT_LINK,
+    suggest: match!.DEFAULT_SUGGEST,
+  });
 });
