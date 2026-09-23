@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { CheckIcon, FileTextIcon, TriangleAlertIcon } from "lucide-react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { CheckIcon, FileTextIcon, PauseIcon, PlayIcon, TriangleAlertIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 /**
  * The three things the product does, shown rather than described: a file being
@@ -16,56 +17,94 @@ import { Spinner } from "@/components/ui/spinner";
  */
 
 const STAGES = ["Read it", "Check it", "Ask it"] as const;
+type Stage = (typeof STAGES)[number];
 
 const HOLD_MS = 4200;
 
+const QUIET = "(prefers-reduced-motion: reduce)";
+
+function subscribeToMotion(onChange: () => void) {
+  const query = window.matchMedia(QUIET);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
+const motionIsReduced = () => window.matchMedia(QUIET).matches;
+
 export function HomeWalkthrough() {
-  const [stage, setStage] = useState(0);
-  const [paused, setPaused] = useState(false);
+  const [stage, setStage] = useState<string>(STAGES[0]);
+  // Nobody asked for this to move. Someone whose system asks for less motion
+  // gets the panels to read at their own pace, and the control below still
+  // lets them start it. Read as an external store rather than in an effect, so
+  // the server and the first client render agree on "not reduced".
+  const reducedMotion = useSyncExternalStore(subscribeToMotion, motionIsReduced, () => false);
+  const [choice, setChoice] = useState<boolean | null>(null);
+  const playing = choice ?? !reducedMotion;
 
   useEffect(() => {
-    if (paused) return;
-    const next = setTimeout(() => setStage((s) => (s + 1) % STAGES.length), HOLD_MS);
+    if (!playing) return;
+    const next = setTimeout(() => {
+      setStage((current) => STAGES[(STAGES.indexOf(current as Stage) + 1) % STAGES.length]);
+    }, HOLD_MS);
     return () => clearTimeout(next);
-  }, [stage, paused]);
-
-  const current = STAGES[stage];
+  }, [stage, playing]);
 
   return (
-    <div
-      // Stops advancing while someone is reading a panel, and while a keyboard
-      // user is on the buttons.
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-      onFocus={() => setPaused(true)}
-      onBlur={() => setPaused(false)}
-    >
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="What it does">
-        {STAGES.map((label, i) => (
-          <Button
-            key={label}
-            role="tab"
-            aria-selected={i === stage}
-            variant={i === stage ? "default" : "outline"}
-            size="sm"
-            onClick={() => setStage(i)}
-          >
-            {label}
-          </Button>
-        ))}
-      </div>
+    <div>
+      <Tabs value={stage} onValueChange={setStage}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <TabsList>
+            {STAGES.map((label) => (
+              <TabsTrigger key={label} value={label}>
+                {label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
 
-      <div className="border-border bg-card mt-4 min-h-[19rem] rounded-xl border p-5 sm:p-6">
-        {current === "Read it" && <ReadIt />}
-        {current === "Check it" && <CheckIt />}
-        {current === "Ask it" && <AskIt />}
-      </div>
+          {/* Anything that changes on its own needs a way to stop it, and a
+              hover is not one: it does not exist on a phone and it does not
+              help someone reading with a screen reader. */}
+          <Button variant="ghost" size="sm" onClick={() => setChoice(!playing)}>
+            {playing ? (
+              <>
+                <PauseIcon /> Pause
+              </>
+            ) : (
+              <>
+                <PlayIcon /> Play
+              </>
+            )}
+          </Button>
+        </div>
+
+        <TabsContent value="Read it" className="mt-4">
+          <Panel>
+            <ReadIt />
+          </Panel>
+        </TabsContent>
+        <TabsContent value="Check it" className="mt-4">
+          <Panel>
+            <CheckIt />
+          </Panel>
+        </TabsContent>
+        <TabsContent value="Ask it" className="mt-4">
+          <Panel>
+            <AskIt />
+          </Panel>
+        </TabsContent>
+      </Tabs>
 
       <p className="text-muted-foreground mt-3 text-xs">
         Invented invoices, so every figure here is a demonstration rather than
         anyone&rsquo;s real spending.
       </p>
     </div>
+  );
+}
+
+function Panel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="border-border bg-card min-h-[19rem] rounded-xl border p-5 sm:p-6">{children}</div>
   );
 }
 
