@@ -133,3 +133,17 @@ export const sessionCookie = {
     secure: process.env.NODE_ENV === "production",
   },
 };
+
+/**
+ * What to set to end a session: the same cookie, emptied and expired at once.
+ * The cookie is httpOnly, so only the server can do this. A sign out that only
+ * forgot the cookie in the browser would leave the session valid for anyone
+ * who still had it.
+ */
+export function clearedSessionCookie() {
+  return {
+    name: sessionCookie.name,
+    value: "",
+    options: { ...sessionCookie.options, maxAge: 0 },
+  };
+}

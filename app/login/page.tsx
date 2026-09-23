@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { capture } from "../analytics-provider.tsx";
 import { useState } from "react";
 
 export default function Login() {
@@ -30,6 +31,7 @@ export default function Login() {
     }
 
     if (response.ok) {
+      capture("signed_in");
       router.push("/");
       router.refresh();
       return;

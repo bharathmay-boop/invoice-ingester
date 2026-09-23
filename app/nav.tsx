@@ -1,7 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { capture } from "./analytics-provider.tsx";
 
 // ponytail: no suggestions link and no waiting count until there is a
 // suggestions screen to point at. A nav item that goes nowhere is worse than
@@ -11,6 +14,31 @@ const LINKS = [
   { href: "/items", label: "Items" },
   { href: "/vendors", label: "Vendors" },
 ];
+
+function SignOut() {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+
+  async function signOut() {
+    setBusy(true);
+    try {
+      // The cookie is httpOnly, so only the server can clear it. Clearing it
+      // in the browser is not possible and would not end the session anyway.
+      await fetch("/api/session", { method: "DELETE" });
+      capture("signed_out");
+      router.push("/");
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Button variant="ghost" size="sm" onClick={signOut} disabled={busy}>
+      {busy ? "Signing out…" : "Sign out"}
+    </Button>
+  );
+}
 
 export function Nav({ signedIn }: { signedIn: boolean }) {
   const pathname = usePathname();
@@ -53,7 +81,7 @@ export function Nav({ signedIn }: { signedIn: boolean }) {
 
         <span className="ml-auto text-sm">
           {signedIn ? (
-            <span className="opacity-60">Signed in</span>
+            <SignOut />
           ) : (
             <Link href="/login" className="underline opacity-70 hover:opacity-100">
               Sign in

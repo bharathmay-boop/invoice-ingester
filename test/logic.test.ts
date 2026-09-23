@@ -257,3 +257,31 @@ test("the mask shows the last four and nothing else", () => {
   assert.equal(maskKey("ab"), "****");
   assert.equal(maskKey(KEY).includes(KEY.slice(0, 8)), false);
 });
+
+// --- the model list --------------------------------------------------------
+
+const { usable } = await import("../lib/extract/models.ts");
+
+const entry = (over: Record<string, unknown> = {}) => ({
+  id: "vendor/model",
+  architecture: { input_modalities: ["text", "image", "file"] },
+  supported_parameters: ["structured_outputs"],
+  pricing: { prompt: "0.0000003", completion: "0.0000025" },
+  ...over,
+});
+
+test("only models that can actually read an invoice are offered", () => {
+  assert.equal(usable(entry()), true);
+
+  // openrouter/free: images and structured output, but no PDFs. Selecting it
+  // broke every PDF upload.
+  assert.equal(usable(entry({ architecture: { input_modalities: ["text", "image"] } })), false);
+  assert.equal(usable(entry({ architecture: { input_modalities: ["text", "file"] } })), false);
+  assert.equal(usable(entry({ supported_parameters: [] })), false);
+  // Queued rather than answered, and the cheapest rows in the catalogue.
+  assert.equal(usable(entry({ id: "openai/gpt-5-nano:batch" })), false);
+  // A router with no price of its own.
+  assert.equal(usable(entry({ pricing: { prompt: "-1", completion: "-1" } })), false);
+  // Free is fine, if it can do the job.
+  assert.equal(usable(entry({ pricing: { prompt: "0", completion: "0" } })), true);
+});

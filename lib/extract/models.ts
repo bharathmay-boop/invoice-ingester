@@ -43,7 +43,7 @@ export type Model = {
 
 type Cached = { at: number; models: Model[] };
 
-type CatalogueEntry = {
+export type CatalogueEntry = {
   id: string;
   name?: string;
   architecture?: { input_modalities?: string[] };
@@ -51,7 +51,7 @@ type CatalogueEntry = {
   pricing?: { prompt?: string; completion?: string };
 };
 
-function usable(entry: CatalogueEntry): boolean {
+export function usable(entry: CatalogueEntry): boolean {
   const modalities = entry.architecture?.input_modalities ?? [];
   const params = entry.supported_parameters ?? [];
   const prompt = Number(entry.pricing?.prompt ?? -1);
@@ -59,7 +59,15 @@ function usable(entry: CatalogueEntry): boolean {
 
   return (
     modalities.includes("image") &&
+    // PDFs are sent as a file part, and most invoices arrive as PDFs. Without
+    // this the list offered models that fail on every PDF, which is how
+    // `openrouter/free` came to be selected and broke extraction outright.
+    modalities.includes("file") &&
     params.includes("structured_outputs") &&
+    // Batch variants are queued rather than answered. They are the cheapest
+    // rows in the catalogue, so they would sort to the top of a list meant for
+    // someone waiting on an upload.
+    !entry.id.endsWith(":batch") &&
     // Routers price at -1 because the cost depends on where they route. Without
     // a number there is nothing to compare, so they are left out.
     prompt >= 0 &&
@@ -175,4 +183,18 @@ export async function costOf(
   const prices = cached?.models.find((m) => m.id === modelId)?.prices;
   if (!prices) return null;
   return usage.input * prices.prompt + usage.output * prices.completion;
+}
+
+/**
+ * The model to actually call. A model saved before it stopped qualifying, or
+ * before this filter existed, falls back to the default rather than failing at
+ * upload time, which is the worst place to find out.
+ *
+ * An empty cache means nothing is known, not that the model is bad, so the
+ * configured one is used as it stands.
+ */
+export async function resolveModel(configured: string): Promise<string> {
+  const cached = await getSetting<Cached>(CACHE_KEY);
+  if (!cached?.models.length) return configured;
+  return cached.models.some((m) => m.id === configured) ? configured : DEFAULT_OPENROUTER_MODEL;
 }

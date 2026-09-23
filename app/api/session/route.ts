@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server.js";
-import { isCorrectPassword, mintSession, sessionCookie } from "@/lib/auth.ts";
+import { clearedSessionCookie, isCorrectPassword, mintSession, sessionCookie } from "@/lib/auth.ts";
 import { clearLoginAttempts, registerLoginAttempt } from "@/lib/rate-limit.ts";
 
 export const runtime = "nodejs";
@@ -50,9 +50,7 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE() {
   const response = NextResponse.json({ ok: true });
-  response.cookies.set(sessionCookie.name, "", {
-    ...sessionCookie.options,
-    maxAge: 0,
-  });
+  const cleared = clearedSessionCookie();
+  response.cookies.set(cleared.name, cleared.value, cleared.options);
   return response;
 }
