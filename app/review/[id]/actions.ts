@@ -10,6 +10,7 @@ import { validateArithmetic, DEFAULT_TOLERANCE_RUPEES } from "@/lib/extract/vali
 import { getSetting } from "@/lib/settings/store.ts";
 import { normalize } from "@/lib/items/normalize.ts";
 import { releaseDraft } from "@/lib/blob.ts";
+import { track } from "@/lib/analytics/server.ts";
 
 export type SaveResult = { ok: false; message: string; duplicateId?: string } | null;
 
@@ -182,6 +183,14 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
     client.release();
   }
 
+  // Sent here rather than from the click, so the event means an invoice was
+  // saved rather than that someone tried.
+  await track("invoice_saved", {
+    line_items: invoice.line_items.length,
+    flagged: checks.status !== "confirmed",
+    had_gstin: invoice.gstin !== null,
+  });
+
   revalidatePath("/");
   revalidatePath("/items");
   revalidatePath("/vendors");
@@ -199,7 +208,8 @@ export async function discardDraft(_previous: SaveResult, form: FormData): Promi
     "SELECT blob_url FROM draft WHERE id = $1",
     [draftId],
   );
-  await releaseDraft(draftId);
+  const released = await releaseDraft(draftId);
+  if (released) await track("draft_discarded", {});
 
   redirect(draft ? await nextFromSameFile(draft.blob_url, "/upload") : "/upload");
 }

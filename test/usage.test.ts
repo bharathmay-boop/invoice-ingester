@@ -73,3 +73,13 @@ test("a failure to record never throws at the caller", { skip }, async () => {
     await db!.query("ALTER TABLE extraction_event_hidden RENAME TO extraction_event");
   }
 });
+
+test("a Claude call is priced from the local table, not the OpenRouter catalogue", { skip }, async () => {
+  const { costOf } = await import("../lib/extract/models.ts");
+  // $5 per million in, $25 per million out.
+  assert.equal(await costOf("claude-opus-5", { input: 1000, output: 500 }), 0.0175);
+  // Usage the provider did not report cannot be priced.
+  assert.equal(await costOf("claude-opus-5", { input: null, output: 500 }), null);
+  // A model nobody has priced is unknown, not free.
+  assert.equal(await costOf("someone/unlisted-model", { input: 1000, output: 500 }), null);
+});

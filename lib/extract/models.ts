@@ -141,19 +141,36 @@ export function formatCost(cost: number): string {
 }
 
 /**
- * What one call cost, in US dollars, from the price the catalogue carried when
- * it was last cached. Null when the model is not in the cache or the usage was
- * not reported: an unknown cost is recorded as unknown, never as zero, which
- * would quietly understate a month.
+ * The Claude models this app can be pointed at, in US dollars per token. The
+ * OpenRouter catalogue prices its own IDs, `anthropic/claude-opus-5` and the
+ * like, and knows nothing about a call made straight to Anthropic, so those
+ * prices are kept here. Anthropic publishes per million tokens.
  *
- * Reads the cache only. This runs just after an extraction, and a spend figure
- * is not worth making the user wait on a catalogue fetch.
+ * Checked against Anthropic's pricing on 2026-09-23. A model missing from here
+ * is recorded as unpriced rather than free.
+ */
+const ANTHROPIC_PRICES: Record<string, { prompt: number; completion: number }> = {
+  "claude-opus-5": { prompt: 5 / 1_000_000, completion: 25 / 1_000_000 },
+};
+
+/**
+ * What one call cost, in US dollars, at the price in force when it was made.
+ * Null when the model has no known price or the provider did not report usage:
+ * an unknown cost is recorded as unknown, never as zero, which would quietly
+ * understate a month.
+ *
+ * Reads the cached catalogue only. This runs just after an extraction, and a
+ * spend figure is not worth making the user wait on a catalogue fetch.
  */
 export async function costOf(
   modelId: string,
   usage: { input: number | null; output: number | null },
 ): Promise<number | null> {
   if (usage.input === null || usage.output === null) return null;
+
+  const direct = ANTHROPIC_PRICES[modelId];
+  if (direct) return usage.input * direct.prompt + usage.output * direct.completion;
+
   const cached = await getSetting<Cached>(CACHE_KEY);
   const prices = cached?.models.find((m) => m.id === modelId)?.prices;
   if (!prices) return null;

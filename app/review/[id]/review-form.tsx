@@ -11,7 +11,6 @@ import { Separator } from "@/components/ui/separator";
 import { money } from "@/lib/format.ts";
 import type { ExtractedInvoice } from "@/lib/extract/schema.ts";
 import { confirmDraft, discardDraft, type SaveResult } from "./actions.ts";
-import { capture } from "../../analytics-provider.tsx";
 
 type Props = {
   draftId: string;
@@ -174,23 +173,13 @@ export function ReviewForm({ draftId, initial, problems, warnings }: Props) {
         <form action={save}>
           <input type="hidden" name="draftId" value={draftId} />
           <input type="hidden" name="invoice" value={JSON.stringify(invoice)} />
-          <Button
-            type="submit"
-            disabled={saving}
-            onClick={() =>
-              capture("invoice_saved", {
-                line_items: invoice.line_items.length,
-                flagged: subtotalOff || totalOff,
-                warnings: warnings.length,
-              })
-            }
-          >
+          <Button type="submit" disabled={saving}>
             {saving ? "Saving…" : subtotalOff || totalOff ? "Save and flag for checking" : "Confirm and save"}
           </Button>
         </form>
         <form action={discard}>
           <input type="hidden" name="draftId" value={draftId} />
-          <Button type="submit" variant="ghost" onClick={() => capture("draft_discarded", { warnings: warnings.length })}>
+          <Button type="submit" variant="ghost">
             Discard
           </Button>
         </form>
