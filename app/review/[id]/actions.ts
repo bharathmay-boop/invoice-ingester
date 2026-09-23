@@ -9,6 +9,7 @@ import { parseExtraction } from "@/lib/extract/schema.ts";
 import { validateArithmetic, DEFAULT_TOLERANCE_RUPEES } from "@/lib/extract/validate.ts";
 import { getSetting } from "@/lib/settings/store.ts";
 import { normalize } from "@/lib/items/normalize.ts";
+import { findMatch, getThresholds } from "@/lib/items/match.ts";
 import { releaseDraft } from "@/lib/blob.ts";
 import { track } from "@/lib/analytics/server.ts";
 
@@ -129,37 +130,54 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
     );
     savedId = saved.rows[0].id;
 
+    const thresholds = await getThresholds();
+
     for (const line of invoice.line_items) {
       const key = normalize(line.description);
-      // Exact match on the normalised name for now. Trigram matching and the
-      // suggestion band are #24 and #25.
-      const existing = await client.query<{ id: string }>(
-        "SELECT id FROM item WHERE normalized_name = $1 LIMIT 1",
-        [key],
-      );
-      const item = existing.rows.length
-        ? existing
-        : await client.query<{ id: string }>(
-            "INSERT INTO item (canonical_name, normalized_name) VALUES ($1,$2) RETURNING id",
-            [line.description, key],
-          );
+      const match = await findMatch(client, key, thresholds);
 
-      await client.query(
-        `INSERT INTO line_item (invoice_id, raw_description, hsn_code, quantity, unit,
-                                unit_price, amount, item_id, match_confidence)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [
-          savedId,
-          line.description,
-          line.hsn_code,
-          line.quantity,
-          line.unit,
-          line.unit_price,
-          line.amount,
-          item.rows[0].id,
-          existing.rows.length ? 1 : null,
-        ],
-      );
+      // Three outcomes, and only two of them touch the catalogue. A clear
+      // match links. Nothing close enough becomes a new item. The band between
+      // leaves the line unlinked with the candidate recorded, because guessing
+      // either way is exactly what the band exists to avoid: link and two
+      // products merge, create and one product's history splits in two.
+      const itemId =
+        match.kind === "linked"
+          ? match.itemId
+          : match.kind === "new"
+            ? (
+                await client.query<{ id: string }>(
+                  "INSERT INTO item (canonical_name, normalized_name) VALUES ($1,$2) RETURNING id",
+                  [line.description, key],
+                )
+              ).rows[0].id
+            : null;
+
+      const [savedLine] = (
+        await client.query<{ id: string }>(
+          `INSERT INTO line_item (invoice_id, raw_description, hsn_code, quantity, unit,
+                                  unit_price, amount, item_id, match_confidence)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+          [
+            savedId,
+            line.description,
+            line.hsn_code,
+            line.quantity,
+            line.unit,
+            line.unit_price,
+            line.amount,
+            itemId,
+            match.kind === "linked" ? match.score : null,
+          ],
+        )
+      ).rows;
+
+      if (match.kind === "suggested") {
+        await client.query(
+          `INSERT INTO match_suggestion (line_item_id, item_id, score) VALUES ($1,$2,$3)`,
+          [savedLine.id, match.itemId, match.score],
+        );
+      }
     }
 
     await client.query("DELETE FROM draft WHERE id = $1", [draftId]);
