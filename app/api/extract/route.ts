@@ -6,7 +6,8 @@ import { pool, query } from "@/lib/db.ts";
 import { discardUpload } from "@/lib/blob.ts";
 import { extractWithAnthropic } from "@/lib/extract/anthropic.ts";
 import { extractWithOpenRouter } from "@/lib/extract/openrouter.ts";
-import { getProvider } from "@/lib/extract/provider.ts";
+import { DEFAULT_ANTHROPIC_MODEL, getProvider, MODEL_SETTING } from "@/lib/extract/provider.ts";
+import { DEFAULT_OPENROUTER_MODEL } from "@/lib/extract/models.ts";
 import {
   DEFAULT_TOLERANCE_RUPEES,
   describeDiscrepancy,
@@ -18,6 +19,8 @@ import type { ExtractedInvoice } from "@/lib/extract/schema.ts";
 import { MAX_INVOICES_PER_FILE } from "@/lib/upload.ts";
 import { normalize } from "@/lib/items/normalize.ts";
 import { countPages } from "@/lib/pdf.ts";
+import { recordExtraction } from "@/lib/usage.ts";
+import { trackError } from "@/lib/analytics/server.ts";
 import { getSetting } from "@/lib/settings/store.ts";
 
 export const runtime = "nodejs";
@@ -95,10 +98,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Could not open the stored PDF." }, { status: 422 });
     }
 
+    // Kept for the record below, so a failed call is still attributable to the
+    // model that failed, where the provider told us nothing.
+    const configuredModel =
+      provider === "anthropic"
+        ? DEFAULT_ANTHROPIC_MODEL
+        : ((await getSetting<string>(MODEL_SETTING)) ?? DEFAULT_OPENROUTER_MODEL);
+
+    const startedAt = Date.now();
     const outcome =
       provider === "anthropic"
         ? await extractWithAnthropic({ data, contentType, pages })
         : await extractWithOpenRouter({ data, contentType, pages });
+
+    // Recorded for every call, including the ones that came to nothing. A
+    // failure is paid for too, and a month of them is worth seeing.
+    const meta = outcome.ok ? outcome.meta : {};
+    await recordExtraction({
+      provider,
+      model: String(meta.model ?? configuredModel),
+      inputTokens: (meta.input_tokens as number | null) ?? null,
+      outputTokens: (meta.output_tokens as number | null) ?? null,
+      pages,
+      invoices: outcome.ok ? outcome.invoices.length : 0,
+      durationMs: Date.now() - startedAt,
+      outcome: outcome.ok ? "extracted" : outcome.notInvoice ? "not_an_invoice" : "failed",
+      reason: outcome.ok ? undefined : outcome.error,
+    });
 
     if (!outcome.ok) {
       // A file that is not an invoice leaves nothing behind either: no draft
@@ -174,6 +200,7 @@ export async function POST(request: NextRequest) {
     // nothing owning the file.
     await discardUpload(url);
     console.error("extraction failed after claiming the upload", error);
+    await trackError(error, { route: "extract", content_type: contentType });
     return NextResponse.json({ error: "Could not read that invoice." }, { status: 500 });
   }
 }

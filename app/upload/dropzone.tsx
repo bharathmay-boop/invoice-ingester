@@ -6,6 +6,7 @@ import { CheckIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { ACCEPT_ATTRIBUTE, MAX_INVOICES_PER_FILE, reject } from "@/lib/upload.ts";
+import { capture } from "../analytics-provider.tsx";
 
 type Stage = "queued" | "uploading" | "extracting" | "ready" | "rejected" | "not_invoice" | "failed";
 
@@ -123,6 +124,7 @@ export function Dropzone({ enabled }: { enabled: boolean }) {
 
       try {
         update(item.id, { stage: "uploading", startedAt: Date.now() });
+        capture("upload_started", { content_type: file.type, size_bytes: file.size });
         const body = new FormData();
         body.append("file", file);
 
@@ -141,6 +143,7 @@ export function Dropzone({ enabled }: { enabled: boolean }) {
         });
         const outcome = await extracted.json().catch(() => ({}));
         if (!extracted.ok) {
+          capture("upload_rejected", { not_an_invoice: outcome.notInvoice === true });
           update(item.id, {
             stage: outcome.notInvoice ? "not_invoice" : "failed",
             note: outcome.error ?? "Extraction failed.",
@@ -149,6 +152,7 @@ export function Dropzone({ enabled }: { enabled: boolean }) {
         }
 
         const drafts: Draft[] = outcome.drafts ?? [];
+        capture("upload_extracted", { invoices: drafts.length, over_limit: outcome.overLimit === true });
         update(item.id, {
           stage: "ready",
           drafts,

@@ -36,6 +36,8 @@ export type Model = {
   name: string;
   /** Rough US dollars for one invoice. */
   cost: number;
+  /** US dollars per token, as the catalogue priced it when this was cached. */
+  prices: { prompt: number; completion: number };
   recommended: string | null;
 };
 
@@ -74,6 +76,10 @@ function toModel(entry: CatalogueEntry): Model {
     id: entry.id,
     name: entry.name ?? entry.id,
     cost,
+    prices: {
+      prompt: Number(entry.pricing?.prompt ?? 0),
+      completion: Number(entry.pricing?.completion ?? 0),
+    },
     recommended: RECOMMENDED[entry.id] ?? null,
   };
 }
@@ -132,4 +138,41 @@ export function formatCost(cost: number): string {
   if (cost === 0) return "free";
   if (cost < 0.01) return `$${cost.toFixed(4)}`;
   return `$${cost.toFixed(3)}`;
+}
+
+/**
+ * The Claude models this app can be pointed at, in US dollars per token. The
+ * OpenRouter catalogue prices its own IDs, `anthropic/claude-opus-5` and the
+ * like, and knows nothing about a call made straight to Anthropic, so those
+ * prices are kept here. Anthropic publishes per million tokens.
+ *
+ * Checked against Anthropic's pricing on 2026-09-23. A model missing from here
+ * is recorded as unpriced rather than free.
+ */
+const ANTHROPIC_PRICES: Record<string, { prompt: number; completion: number }> = {
+  "claude-opus-5": { prompt: 5 / 1_000_000, completion: 25 / 1_000_000 },
+};
+
+/**
+ * What one call cost, in US dollars, at the price in force when it was made.
+ * Null when the model has no known price or the provider did not report usage:
+ * an unknown cost is recorded as unknown, never as zero, which would quietly
+ * understate a month.
+ *
+ * Reads the cached catalogue only. This runs just after an extraction, and a
+ * spend figure is not worth making the user wait on a catalogue fetch.
+ */
+export async function costOf(
+  modelId: string,
+  usage: { input: number | null; output: number | null },
+): Promise<number | null> {
+  if (usage.input === null || usage.output === null) return null;
+
+  const direct = ANTHROPIC_PRICES[modelId];
+  if (direct) return usage.input * direct.prompt + usage.output * direct.completion;
+
+  const cached = await getSetting<Cached>(CACHE_KEY);
+  const prices = cached?.models.find((m) => m.id === modelId)?.prices;
+  if (!prices) return null;
+  return usage.input * prices.prompt + usage.output * prices.completion;
 }
