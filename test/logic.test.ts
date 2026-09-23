@@ -284,6 +284,8 @@ test("only models that can actually read an invoice are offered", () => {
   assert.equal(usable(entry({ pricing: { prompt: "-1", completion: "-1" } })), false);
   // Free is fine, if it can do the job.
   assert.equal(usable(entry({ pricing: { prompt: "0", completion: "0" } })), true);
+});
+
 // --- opening an original ---------------------------------------------------
 
 const { originalHref, originalSrc } = await import("../lib/original.ts");
