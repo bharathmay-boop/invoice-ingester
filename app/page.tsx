@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { listItems, listVendors } from "@/lib/queries.ts";
 import { money, moneyRounded } from "@/lib/format.ts";
-import { InvoiceSpecimen } from "./invoice-specimen.tsx";
+import { FlowHero } from "./flow-hero.tsx";
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +54,7 @@ export default async function Home() {
           </p>
         </div>
 
-        <InvoiceSpecimen />
+        <FlowHero />
       </section>
 
       <Separator />

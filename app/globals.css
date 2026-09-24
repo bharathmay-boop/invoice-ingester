@@ -12,6 +12,13 @@
     from { translate: -100% 0; }
     to { translate: 300% 0; }
   }
+  /* One-shot reveal for the homepage flow hero. `both` holds the end state,
+     so a row never snaps back to invisible or loops after it lands. */
+  --animate-reveal: reveal .5s cubic-bezier(.16,1,.3,1) both;
+  @keyframes reveal {
+    from { opacity: 0; translate: 0 6px; }
+    to { opacity: 1; translate: 0 0; }
+  }
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   /* Point at the variables next/font defines on <html>, so whatever family
