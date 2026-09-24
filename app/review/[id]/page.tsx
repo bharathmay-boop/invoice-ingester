@@ -37,10 +37,15 @@ export default async function Review({ params }: { params: Promise<{ id: string 
 
   // The next draft from the same file, so a batch can be walked without going
   // back to the upload list between invoices.
+  // The one after this, not merely another one. Ordering by the same pair the
+  // list uses and taking the first past this draft, so three invoices go
+  // first, second, third rather than bouncing between the first two.
   const [next] = await query<{ id: string }>(
     `SELECT id FROM draft
-     WHERE blob_url = $1 AND id <> $2
-     ORDER BY first_page NULLS FIRST, created_at
+     WHERE blob_url = $1
+       AND (coalesce(first_page, 0), created_at, id) >
+           (SELECT coalesce(first_page, 0), created_at, id FROM draft WHERE id = $2)
+     ORDER BY coalesce(first_page, 0), created_at, id
      LIMIT 1`,
     [draft.blob_url, draft.id],
   );

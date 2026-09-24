@@ -70,6 +70,7 @@ export function ReviewForm({ draftId, initial, problems, warnings, nextHref }: P
         ctrlKey: event.ctrlKey,
         metaKey: event.metaKey,
         tagName: (event.target as HTMLElement).tagName,
+        isComposing: event.nativeEvent.isComposing,
       },
       { addsUp, saving, hasNext: nextHref !== null },
     );

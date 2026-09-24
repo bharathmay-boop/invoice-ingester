@@ -28,9 +28,31 @@ test("Enter on a button is the button's own, not a save", () => {
 });
 
 test("a modified Enter is left alone", () => {
-  for (const modifier of ["shiftKey", "ctrlKey", "metaKey"] as const) {
+  for (const modifier of ["shiftKey", "ctrlKey", "metaKey", "altKey"] as const) {
     assert.equal(intentOf({ key: "Enter", tagName: "INPUT", [modifier]: true }, clean), null, modifier);
   }
+});
+
+test("the Enter that commits an input method candidate is not a save", () => {
+  // Typing a Hindi or Japanese vendor name ends in an Enter that belongs to
+  // the composition, not to this screen.
+  assert.equal(intentOf({ key: "Enter", tagName: "INPUT", isComposing: true }, clean), null);
+});
+
+test("Enter on a link follows the link", () => {
+  // After a duplicate save, the error offers a link to the invoice already
+  // stored. Enter there must open it, not save again.
+  assert.equal(intentOf({ key: "Enter", tagName: "A" }, clean), null);
+  assert.equal(intentOf({ key: "Enter", tagName: "SELECT" }, clean), null);
+});
+
+test("nothing moves on while a save is in flight", () => {
+  // Leaving the page mid save hides a failure and leaves the draft unsaved,
+  // or races the redirect a successful save is about to make.
+  assert.equal(
+    intentOf({ key: "ArrowRight", altKey: true, tagName: "INPUT" }, { ...clean, saving: true }),
+    null,
+  );
 });
 
 test("alt and right arrow moves to the next invoice in the file", () => {
