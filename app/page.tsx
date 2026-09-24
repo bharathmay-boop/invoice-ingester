@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { FileText, Sparkles, Search, CheckCircle2, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { listItems, listVendors } from "@/lib/queries.ts";
@@ -109,20 +110,21 @@ export default async function Home() {
       <Separator />
 
       <section className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6">
-        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-          <Step field="Upload">
+        <h2 className="text-2xl font-semibold tracking-tight">How it gets there</h2>
+        <div className="mt-8 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+          <Step icon={FileText} n={1} field="Upload">
             A PDF or a photo. Anything unreadable is refused at the dropzone,
             with the reason on that file.
           </Step>
-          <Step field="Extract">
+          <Step icon={Sparkles} n={2} field="Extract">
             A vision model reads it against a fixed schema. Claude or OpenRouter,
             your key, chosen in settings.
           </Step>
-          <Step field="Check">
+          <Step icon={Search} n={3} field="Check">
             Both arithmetic checks run before anything is stored. Failing either
             holds the invoice instead of confirming it.
           </Step>
-          <Step field="Confirm">
+          <Step icon={CheckCircle2} n={4} field="Confirm">
             The original sits beside the editable fields. Nothing is saved until
             you say so, and a duplicate is refused by the database.
           </Step>
@@ -201,14 +203,33 @@ function Answer({
 }
 
 /**
- * Labelled with the stage of the invoice's own journey rather than 01/02/03.
- * The order matters here, but the names carry more than the numbers would.
+ * Same icons as the hero pipeline (upload, extract, check, confirm map onto
+ * Invoice, AI Extraction, Cross-check, Auto-clear), so this reads as the
+ * same four stages already shown above rather than a second, separate list.
  */
-function Step({ field, children }: { field: string; children: React.ReactNode }) {
+function Step({
+  icon: Icon,
+  n,
+  field,
+  children,
+}: {
+  icon: LucideIcon;
+  n: number;
+  field: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="border-border border-t pt-4">
-      <h3 className="font-mono text-xs uppercase tracking-[0.15em]">{field}</h3>
-      <p className="text-muted-foreground mt-2 text-sm leading-relaxed">{children}</p>
+    <div>
+      <div className="flex items-center gap-2.5">
+        <span className="border-border bg-muted flex size-9 shrink-0 items-center justify-center rounded-md border">
+          <Icon className="text-foreground size-4" />
+        </span>
+        <span className="text-muted-foreground font-mono text-[11px] tracking-wide">
+          Step {n}
+        </span>
+      </div>
+      <h3 className="mt-3 text-sm font-medium">{field}</h3>
+      <p className="text-muted-foreground mt-1.5 text-sm leading-relaxed">{children}</p>
     </div>
   );
 }

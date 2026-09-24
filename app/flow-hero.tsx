@@ -15,46 +15,55 @@ import { cn } from "@/lib/utils";
 /**
  * The hero. Replaces the static invoice specimen with the pipeline itself:
  * source through extraction, cross-check, and the branch a mismatch takes
- * versus a match, ending at the ERP. Each row reveals once on load, in
- * order, rather than looping, so a repeat visitor isn't shown a flicker.
+ * versus a match, ending at the ERP. One continuous flow, not sectioned
+ * boxes — a connector dot between each stage instead of a group boundary.
+ * Each row reveals once on load, in order, rather than looping, so a
+ * repeat visitor isn't shown a flicker.
  */
-// Delays step by 0.13s per row, in the order rows appear, so the pipeline
-// reveals top to bottom instead of all at once.
 export function FlowHero() {
   return (
-    <div className="border-border bg-card flex flex-col gap-3 rounded-xl border p-4 shadow-sm sm:p-5">
-      <Group label="01 · Sources" delay={0}>
-        <Row icon={FileText} title="Invoice" subtitle="1 file" delay={0.13} />
-        <Row icon={Copy} title="Contract" subtitle="Coming soon" ghost delay={0.26} />
-      </Group>
+    <div className="border-border bg-card flex flex-col gap-2 rounded-xl border p-4 shadow-sm sm:p-5">
+      <Pair>
+        <Row icon={FileText} title="Invoice" subtitle="1 file" delay={0} />
+        <Row icon={Copy} title="Contract" subtitle="Coming soon" ghost delay={0.13} />
+      </Pair>
 
-      <Connector delay={0.39} />
+      <Connector delay={0.26} />
 
-      <Group label="02 · Extract" delay={0.52}>
-        <Row
-          icon={Sparkles}
-          title="AI Extraction"
-          subtitle="14 fields"
-          badge="reading → done"
-          highlight
-          delay={0.65}
-        />
-        <Row icon={Table2} title="Invoice fields" subtitle="₹18,400 · Q3" delay={0.78} />
-        <Row icon={Copy} title="Contract terms" subtitle="Coming soon" ghost delay={0.91} />
-      </Group>
+      <Row
+        icon={Sparkles}
+        title="AI Extraction"
+        subtitle="14 fields"
+        badge="reading → done"
+        highlight
+        delay={0.39}
+      />
 
-      <Connector delay={1.04} />
+      <Connector delay={0.52} />
 
-      <Group label="03 · Verify" delay={1.17}>
-        <Row
-          icon={Search}
-          title="Cross-check"
-          subtitle="3 of 3 matched"
-          badge="comparing → matched"
-          highlight
-          delay={1.3}
-        />
-        <Row icon={GitBranch} title="Condition" subtitle="value · period · item" delay={1.43} />
+      <Pair>
+        <Row icon={Table2} title="Invoice fields" subtitle="₹18,400 · Q3" delay={0.65} />
+        <Row icon={Copy} title="Contract terms" subtitle="Coming soon" ghost delay={0.78} />
+      </Pair>
+
+      <Connector delay={0.91} />
+
+      <Row
+        icon={Search}
+        title="Cross-check"
+        subtitle="3 of 3 matched"
+        badge="comparing → matched"
+        highlight
+        delay={1.04}
+      />
+
+      <Connector delay={1.17} />
+
+      <Row icon={GitBranch} title="Condition" subtitle="value · period · item" delay={1.3} />
+
+      <Connector delay={1.43} />
+
+      <Pair>
         <Row
           icon={AlertTriangle}
           title="Human intervention"
@@ -69,43 +78,23 @@ export function FlowHero() {
           tone="emerald"
           delay={1.69}
         />
-      </Group>
+      </Pair>
 
       <Connector delay={1.82} />
 
-      <Group label="04 · Output" delay={1.95}>
-        <Row icon={RefreshCw} title="ERP sync" subtitle="QuickBooks" badge="synced" delay={2.08} />
-      </Group>
+      <Row icon={RefreshCw} title="ERP sync" subtitle="QuickBooks" badge="synced" delay={1.95} />
     </div>
   );
 }
 
-function Group({
-  label,
-  delay,
-  children,
-}: {
-  label: string;
-  delay: number;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <p
-        className="animate-reveal text-muted-foreground motion-reduce:animate-none mb-2 font-mono text-[10px] uppercase tracking-[0.15em]"
-        style={{ animationDelay: `${delay}s` }}
-      >
-        {label}
-      </p>
-      <div className="grid grid-cols-2 gap-2">{children}</div>
-    </div>
-  );
+function Pair({ children }: { children: React.ReactNode }) {
+  return <div className="grid grid-cols-2 gap-2">{children}</div>;
 }
 
 function Connector({ delay }: { delay: number }) {
   return (
     <div
-      className="animate-reveal motion-reduce:animate-none flex justify-center"
+      className="animate-reveal motion-reduce:animate-none flex justify-center py-0.5"
       style={{ animationDelay: `${delay}s` }}
     >
       <span className="bg-primary/60 size-1.5 animate-pulse rounded-full" />
@@ -135,13 +124,12 @@ function Row({
   return (
     <div
       className={cn(
-        "animate-reveal motion-reduce:animate-none col-span-2 flex items-center gap-2.5 rounded-lg border px-2.5 py-2 sm:col-span-1",
+        "animate-reveal motion-reduce:animate-none flex items-center gap-2.5 rounded-lg border px-2.5 py-2",
         ghost && "border-dashed opacity-60",
         highlight && "border-primary/40 bg-primary/5",
         !ghost && !highlight && "border-border",
         tone === "amber" && "border-amber-500/40 bg-amber-500/10",
         tone === "emerald" && "border-emerald-500/40 bg-emerald-500/10",
-        badge && "col-span-2 sm:col-span-2",
       )}
       style={{ animationDelay: `${delay}s` }}
     >
