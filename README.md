@@ -111,6 +111,7 @@ Dark mode follows the system setting through `next-themes`, which puts the class
 
 ## Documentation
 
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) is how the work is done: stacked pull requests, the checks that run before one, migrations, and where secrets live.
 - [`docs/spec.md`](docs/spec.md) is the specification: scope, data model, architecture, and what is deliberately left out.
 - [The plan](https://bharathmay-boop.github.io/invoice-ingester/plan.html) is the same thing with wireframes and flow diagrams. Served through GitHub Pages, since GitHub shows HTML files in the repo as source.
 - [The board](https://github.com/users/bharathmay-boop/projects/1) holds the 33 issues, grouped into epics by label.
