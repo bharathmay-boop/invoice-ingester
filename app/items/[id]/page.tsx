@@ -3,11 +3,12 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { InvoiceOriginal } from "../../invoice-original.tsx";
-import { getItem } from "@/lib/queries.ts";
+import { getItem, listMergeCandidates } from "@/lib/queries.ts";
 import { changeSince, formatDate, money, moneyRounded } from "@/lib/format.ts";
 import { cheapestVendorNow, unitsAreComparable } from "@/lib/price.ts";
 import { DemoNotice, Empty, Page, Stat, StatusBadge } from "../../ui.tsx";
 import { PriceChart } from "./chart.tsx";
+import { MergeItem } from "./merge-item.tsx";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,9 @@ export default async function ItemDetail({
   // Originals need a session, so the column only exists with one.
   const jar = await cookies();
   const signedIn = await isValidSession(jar.get(sessionCookie.name)?.value);
+
+  // Only offered to someone who can act on it, and only fetched then.
+  const candidates = signedIn ? await listMergeCandidates(item.id) : [];
 
   const confirmed = item.purchases.filter((p) => p.status === "confirmed");
   const oldestFirst = [...confirmed].reverse();
@@ -102,6 +106,15 @@ export default async function ItemDetail({
             </>
           )}
         </>
+      )}
+
+      {signedIn && (
+        <MergeItem
+          itemId={item.id}
+          itemName={item.canonical_name}
+          purchases={item.purchases.length}
+          candidates={candidates}
+        />
       )}
 
       <h2 className="mt-10 text-lg font-semibold">Every purchase</h2>

@@ -166,3 +166,19 @@ export function countNeedsReview(): Promise<{ n: number }[]> {
     "SELECT count(*)::int AS n FROM invoice WHERE status = 'needs_review'",
   );
 }
+
+/**
+ * Every other catalogue item, for merging this one into one of them. Ordered
+ * by how much is behind each, since the entry with the most purchases is
+ * usually the one worth keeping.
+ */
+export function listMergeCandidates(exceptId: string) {
+  return query<{ id: string; name: string; purchases: number }>(
+    `SELECT it.id, it.canonical_name AS name,
+            (SELECT count(*)::int FROM line_item li WHERE li.item_id = it.id) AS purchases
+     FROM item it
+     WHERE it.id <> $1
+     ORDER BY purchases DESC, it.canonical_name`,
+    [exceptId],
+  );
+}
