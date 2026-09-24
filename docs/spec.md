@@ -194,6 +194,12 @@ A line in the band is saved unlinked, with the candidate recorded in `match_sugg
 
 Normalisation lowercases, strips punctuation, units and pack sizes, and drops filler words. It has its own tests because one change there shifts every score in the system.
 
+### Merging two items
+
+Two catalogue entries can be folded into one from the item screen: every purchase moves across, any unanswered suggestion moves with it, and the emptied entry goes. All in one transaction, with both rows locked in a fixed order so two merges naming the same pair from opposite sides cannot wait on each other forever.
+
+This is the undo for a wrong automatic link, and it is what makes automatic linking safe to offer at all. Without it one bad match is permanent and every threshold has to be set defensively. It is also the one thing in the app that cannot be undone, since afterwards nothing records which purchase came from which entry, so the confirmation says what will move, where, and that it is final.
+
 ## 7. Settings
 
 - **Extraction:** provider selection, API key entry, model dropdown for OpenRouter, and a test connection action.
