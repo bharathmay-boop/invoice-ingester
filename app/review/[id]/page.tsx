@@ -35,6 +35,16 @@ export default async function Review({ params }: { params: Promise<{ id: string 
   );
   if (!draft) notFound();
 
+  // The next draft from the same file, so a batch can be walked without going
+  // back to the upload list between invoices.
+  const [next] = await query<{ id: string }>(
+    `SELECT id FROM draft
+     WHERE blob_url = $1 AND id <> $2
+     ORDER BY first_page NULLS FIRST, created_at
+     LIMIT 1`,
+    [draft.blob_url, draft.id],
+  );
+
   const original = originalSrc(draft.blob_url);
   // The browser's PDF viewer opens at a page given in the fragment, so the
   // invoice being reviewed is the one on screen.
@@ -111,6 +121,7 @@ export default async function Review({ params }: { params: Promise<{ id: string 
                 .filter((d) => !isValidityWarning(d))
                 .map(describeDiscrepancy)}
               warnings={draft.discrepancies.filter(isValidityWarning).map(describeDiscrepancy)}
+              nextHref={next ? `/review/${next.id}` : null}
             />
           </div>
         </div>

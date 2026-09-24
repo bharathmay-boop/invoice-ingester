@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { TriangleAlertIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -11,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { money } from "@/lib/format.ts";
 import type { ExtractedInvoice } from "@/lib/extract/schema.ts";
 import { confirmDraft, discardDraft, type SaveResult } from "./actions.ts";
+import { intentOf } from "@/lib/review-keys.ts";
 
 type Props = {
   draftId: string;
@@ -19,14 +21,18 @@ type Props = {
   problems: string[];
   /** Not about the sums: a possible non invoice, a copy, or one already saved. */
   warnings: string[];
+  /** The next draft from the same file, for moving through a batch. */
+  nextHref: string | null;
 };
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-export function ReviewForm({ draftId, initial, problems, warnings }: Props) {
+export function ReviewForm({ draftId, initial, problems, warnings, nextHref }: Props) {
   const [invoice, setInvoice] = useState<ExtractedInvoice>(initial);
   const [saved, save, saving] = useActionState<SaveResult, FormData>(confirmDraft, null);
   const [, discard] = useActionState<SaveResult, FormData>(discardDraft, null);
+  const router = useRouter();
+  const saveForm = useRef<HTMLFormElement>(null);
 
   function field<K extends keyof ExtractedInvoice>(key: K, value: ExtractedInvoice[K]) {
     setInvoice((current) => ({ ...current, [key]: value }));
@@ -47,9 +53,40 @@ export function ReviewForm({ draftId, initial, problems, warnings }: Props) {
   );
   const subtotalOff = round2(Math.abs(lineTotal - invoice.subtotal)) > 1;
   const totalOff = round2(Math.abs(withTaxes - invoice.total)) > 1;
+  const addsUp = !subtotalOff && !totalOff;
+
+  /**
+   * Reviewing twenty invoices by mouse is slow in a way one invoice never
+   * shows. Enter saves when the figures add up, since that is the answer for
+   * most of them; when they do not, Enter does nothing, because saving a
+   * flagged invoice should be a deliberate act rather than a reflex.
+   */
+  function onKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    const intent = intentOf(
+      {
+        key: event.key,
+        altKey: event.altKey,
+        shiftKey: event.shiftKey,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        tagName: (event.target as HTMLElement).tagName,
+      },
+      { addsUp, saving, hasNext: nextHref !== null },
+    );
+
+    if (intent === "save") {
+      event.preventDefault();
+      saveForm.current?.requestSubmit();
+    } else if (intent === "next" && nextHref) {
+      event.preventDefault();
+      router.push(nextHref);
+    }
+  }
 
   return (
-    <div className="space-y-6">
+    // Listening on the container rather than on each field: the shortcut
+    // belongs to the screen, and every input inside it bubbles here.
+    <div className="space-y-6" onKeyDown={onKeyDown}>
       {warnings.length > 0 && (
         <Alert>
           <TriangleAlertIcon />
@@ -87,7 +124,14 @@ export function ReviewForm({ draftId, initial, problems, warnings }: Props) {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Text label="Vendor" value={invoice.vendor_name} onChange={(v) => field("vendor_name", v)} />
+        {/* Focus starts on the first field, so a keyboard review begins by
+            reading rather than by hunting for a way in. */}
+        <Text
+          label="Vendor"
+          value={invoice.vendor_name}
+          onChange={(v) => field("vendor_name", v)}
+          autoFocus
+        />
         <Text
           label="GSTIN"
           value={invoice.gstin ?? ""}
@@ -170,7 +214,7 @@ export function ReviewForm({ draftId, initial, problems, warnings }: Props) {
       )}
 
       <div className="flex flex-wrap gap-2">
-        <form action={save}>
+        <form action={save} ref={saveForm}>
           <input type="hidden" name="draftId" value={draftId} />
           <input type="hidden" name="invoice" value={JSON.stringify(invoice)} />
           <Button type="submit" disabled={saving}>
@@ -184,6 +228,11 @@ export function ReviewForm({ draftId, initial, problems, warnings }: Props) {
           </Button>
         </form>
       </div>
+
+      <p className="text-muted-foreground text-xs">
+        {addsUp ? "Enter saves." : "Enter is off while the figures disagree."}
+        {nextHref && " Alt and right arrow opens the next invoice from this file."}
+      </p>
     </div>
   );
 }
@@ -194,12 +243,14 @@ function Text({
   onChange,
   type = "text",
   mono = false,
+  autoFocus = false,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: string;
   mono?: boolean;
+  autoFocus?: boolean;
 }) {
   const id = `f-${label.replace(/\s+/g, "-").toLowerCase()}`;
   return (
@@ -211,6 +262,7 @@ function Text({
         id={id}
         type={type}
         value={value}
+        autoFocus={autoFocus}
         className={mono ? "font-mono" : undefined}
         onChange={(e) => onChange(e.target.value)}
       />
