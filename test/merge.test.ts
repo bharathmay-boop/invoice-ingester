@@ -101,20 +101,34 @@ test("an unanswered suggestion moves rather than disappearing", { skip }, async 
   assert.equal(row.item_id, keep, "the question survives, pointed at the item that remains");
 });
 
-test("a suggestion that would collide is dropped with the item, not duplicated", { skip }, async () => {
+test("a line never holds two questions, so the move cannot collide", { skip }, async () => {
   const keep = await item("Ink Cartridge 803B");
   const gone = await item("Ink cartridge 803-B");
   const waiting = await line(null, "ink cart 803b");
-  // The same line already has a question about the item being kept.
   await db!.query("INSERT INTO match_suggestion (line_item_id, item_id, score) VALUES ($1,$2,0.7)", [
     waiting,
-    keep,
+    gone,
   ]);
 
-  const result = await merge!.mergeItems(keep, gone);
-  assert.equal(result.ok, true);
-  const rows = await db!.query("SELECT 1 FROM match_suggestion WHERE line_item_id = $1", [waiting]);
-  assert.equal(rows.length, 1, "one question about one line, not two identical ones");
+  // The invariant the merge relies on: one row per line, enforced by the
+  // primary key. A second question about the same line cannot be written, so
+  // moving one onto the kept item has nothing to clash with.
+  await assert.rejects(
+    () =>
+      db!.query("INSERT INTO match_suggestion (line_item_id, item_id, score) VALUES ($1,$2,0.7)", [
+        waiting,
+        keep,
+      ]),
+    /duplicate key|unique/i,
+  );
+
+  assert.equal((await merge!.mergeItems(keep, gone)).ok, true);
+  const rows = await db!.query<{ item_id: string }>(
+    "SELECT item_id FROM match_suggestion WHERE line_item_id = $1",
+    [waiting],
+  );
+  assert.equal(rows.length, 1, "one question about one line, before and after");
+  assert.equal(rows[0].item_id, keep);
 });
 
 test("merging an item into itself is refused", { skip }, async () => {

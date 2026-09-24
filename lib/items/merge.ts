@@ -52,13 +52,12 @@ export async function mergeItems(keepId: string, mergeId: string): Promise<Merge
 
     // Suggestions pointing at the item that is going would otherwise be
     // deleted with it, taking an unanswered question with them.
+    //
+    // No collision to guard against: line_item_id is the primary key, so a
+    // line holds one suggestion at most and there is never a second row for
+    // the same line to clash with.
     const suggestions = await client.query(
-      `UPDATE match_suggestion SET item_id = $1
-       WHERE item_id = $2
-         AND NOT EXISTS (
-           SELECT 1 FROM match_suggestion held
-           WHERE held.line_item_id = match_suggestion.line_item_id AND held.item_id = $1
-         )`,
+      "UPDATE match_suggestion SET item_id = $1 WHERE item_id = $2",
       [keepId, mergeId],
     );
 
