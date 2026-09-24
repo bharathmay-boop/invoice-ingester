@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
     // Recorded for every call, including the ones that came to nothing. A
     // failure is paid for too, and a month of them is worth seeing.
     const meta = outcome.ok ? outcome.meta : {};
-    await recordExtraction({
+    const { cost } = await recordExtraction({
       provider,
       model: String(meta.model ?? configuredModel),
       inputTokens: (meta.input_tokens as number | null) ?? null,
@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
       // to confirm by accident, no original kept for a file nobody wanted read.
       await discardUpload(url);
       return NextResponse.json(
-        { error: outcome.error, notInvoice: outcome.notInvoice === true },
+        { error: outcome.error, notInvoice: outcome.notInvoice === true, cost },
         { status: 422 },
       );
     }
@@ -185,6 +185,9 @@ export async function POST(request: NextRequest) {
     // Ownership has transferred. The drafts share the blob from here, and it
     // goes when the last of them is discarded.
     return NextResponse.json({
+      // What this file actually cost, so the screen can put a real figure
+      // beside the estimate it gave before spending anything.
+      cost,
       drafts: drafts.map(({ found, discrepancies }, i) => ({
         id: ids[i],
         firstPage: found.first_page,
