@@ -147,6 +147,14 @@ No free model qualifies. Every free model that does images and structured output
 
 If OpenRouter is unreachable the app uses the last cached list, and if there is no cache it says so rather than showing an empty dropdown. The two recommended IDs are matched by string, so a retired one loses its badge instead of breaking the page.
 
+### When it does not work
+
+Every failure says what happened and what to do about it: a key that was never saved, a key the provider rejected, an account out of credit, a file too large for the model, a provider rate limiting or briefly broken, a call that never came back, and a model that answered with something other than an invoice. A message names the provider and the status, never a key, a token or the provider's own error body, which can quote the credential back.
+
+Only two of those are retried, once: rate limited, and briefly broken. A rejected key gives the same answer the second time, and a refusal costs money to be told the same thing. Calls carry a 90 second timeout, so a provider that never answers is reported rather than held until the platform kills the request.
+
+A password protected PDF is refused at upload. The page count is readable with encryption ignored, but the contents are not, and a model handed the same locked file would fail after being paid for it.
+
 ### Validation
 
 Two arithmetic checks run before any save:
