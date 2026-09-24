@@ -212,7 +212,15 @@ Keys are entered in settings and encrypted at rest with AES-256-GCM, using a mas
 | Suggestions | Queue of borderline item matches to accept or reject |
 | Settings | As above |
 
-The review screen puts the original beside the fields because checking an extraction means comparing it to its source. Any layout that makes you hold a number in your head while scrolling has already failed. Clicking a field highlights where it came from.
+The review screen puts the original beside the fields because checking an extraction means comparing it to its source. Any layout that makes you hold a number in your head while scrolling has already failed.
+
+**Clicking a field does not highlight where it came from, and will not.** Decided 2026-09-24, recorded here because the spec promised it and the schema never supported it. Three options were open: drop it, ask the model for a page number per field, or ask for bounding boxes per field.
+
+Bounding boxes are the version people picture, and they are the one to refuse. Every box is a guess by the same model that guessed the value, accuracy varies by model, and the cost lands on every extraction whether or not anyone clicks. A box drawn slightly wrong is worse than no box: it points confidently at the wrong line and invites someone to confirm a figure they have not actually checked, which is the failure mode this product spends its arithmetic checks avoiding.
+
+A page number per field was the middle option and is nearly free, but it answers a question few invoices ask. Most are one page, and the multi invoice work already opens the original at the page its invoice starts on, which is the part that was actually getting people lost.
+
+So: the original opens at the right page, the fields sit beside it, and neither claims to know where on the page a number came from. If real use shows people hunting within a long page, the page number per field is the next step, and bounding boxes stay refused until a model's boxes can be shown to be right more often than they are wrong.
 
 ### The original, from anywhere a figure appears
 
