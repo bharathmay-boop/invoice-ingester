@@ -89,6 +89,19 @@ export const BASE_UNIT: Record<Family, string> = {
  * treated as a count of one thing: a line for "3 staplers at Rs320" means the
  * same as "3 pc".
  */
+/**
+ * The printed unit, reduced to one spelling: lowercased, trimmed, without a
+ * trailing full stop, and singular. Used for units this cannot convert, so
+ * "ream" and "reams" are recognised as the same pack rather than as two.
+ */
+export function printedUnit(unit: string | null | undefined): string {
+  const key = (unit ?? "").trim().toLowerCase().replace(/\.$/, "");
+  // Only a trailing s, and never on a short word: "gms" is grams, "pcs" is
+  // pieces, and both are handled as real units above. This is for the pack
+  // names, where "boxes" and "box" are the same thing.
+  return key.length > 3 && key.endsWith("s") && !key.endsWith("ss") ? key.slice(0, -1) : key;
+}
+
 export function parseUnit(unit: string | null | undefined): Unit | null {
   if (unit === null || unit === undefined || unit.trim() === "") {
     return UNITS.each;

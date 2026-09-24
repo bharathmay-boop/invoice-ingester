@@ -1,6 +1,6 @@
 // Which vendor is cheapest is a sourcing recommendation, so it gets its own
 // function and its own tests rather than living inline in a page.
-import { perUnitLabel, toBaseUnit, type Family } from "./units.ts";
+import { perUnitLabel, printedUnit, toBaseUnit, type Family } from "./units.ts";
 
 export type Priced = {
   vendor_id: string;
@@ -16,9 +16,17 @@ export type Priced = {
  * Not the lowest price ever paid. That names a vendor who has since put their
  * price up, and sends you back to someone who is no longer the cheapest.
  *
+ * Null when the prices are not comparable, rather than a recommendation made
+ * by putting a price per gram against a price per ream. The check is here
+ * rather than left to the caller: a wrong cheapest vendor is a sourcing
+ * decision made on a number that means nothing, and every caller would have to
+ * remember to ask first.
+ *
  * `purchases` may be in any order; the latest per vendor is chosen by date.
  */
 export function cheapestVendorNow<T extends Priced>(purchases: T[]): T | null {
+  if (!comparePrices(purchases).comparable) return null;
+
   const latest = new Map<string, T>();
 
   for (const purchase of purchases) {
@@ -51,8 +59,7 @@ export type Comparison =
     }
   | { comparable: false; reason: string };
 
-const printed = (unit: string | null | undefined) =>
-  (unit ?? "").trim().toLowerCase().replace(/\.$/, "");
+
 
 /**
  * Prices in different units cannot be compared, but many of them can be
@@ -77,7 +84,7 @@ export function comparePrices(purchases: Priced[]): Comparison {
     // A pack size cannot be converted, but every line priced in the same one
     // can still be compared with the others: two prices per ream answer each
     // other, they just cannot answer a price per sheet.
-    const units = new Set(purchases.map((p) => printed(p.unit)));
+    const units = new Set(purchases.map((p) => printedUnit(p.unit)));
     if (units.size === 1) {
       const unit = unknown.purchase.unit?.trim() || "unit";
       return {

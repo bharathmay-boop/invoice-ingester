@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { parseUnit, perUnitLabel, toBaseUnit } from "../lib/units.ts";
+import { parseUnit, perUnitLabel, printedUnit, toBaseUnit } from "../lib/units.ts";
 import { cheapestVendorNow, comparePrices, unitsAreComparable } from "../lib/price.ts";
 
 test("the same unit written differently is the same unit", () => {
@@ -99,9 +99,7 @@ test("cheapest is decided per base unit, not per printed price", () => {
   assert.equal(best?.vendor_id, "kilo-vendor");
 });
 
-test("what cannot be converted falls back to the printed price", () => {
-  // Nothing better is available, and refusing to name anything would be less
-  // useful than naming the cheaper printed price with the warning alongside.
+test("prices in one pack size still name a cheapest vendor", () => {
   const best = cheapestVendorNow([buy("a", "ream", 285), buy("b", "ream", 260)]);
   assert.equal(best?.vendor_id, "b");
   assert.equal(unitsAreComparable([buy("a", "ream", 285), buy("b", "sheet", 1)]), false);
@@ -110,4 +108,32 @@ test("what cannot be converted falls back to the printed price", () => {
 test("the label reads like something a person would say", () => {
   assert.equal(perUnitLabel("mass"), "per g");
   assert.equal(perUnitLabel("count"), "each");
+});
+
+test("a pack size spelled plural is the same pack size", () => {
+  // "ream" and "reams" are one pack, so two prices in them still answer each
+  // other. Treating them as different suppressed the trend on the exact case
+  // this feature is about.
+  const result = comparePrices([buy("a", "ream", 285), buy("b", "Reams", 260)]);
+  assert.equal(result.comparable, true);
+  if (!result.comparable) return;
+  assert.equal(result.label, "per ream");
+});
+
+test("a real unit ending in s is not mangled into something else", () => {
+  // "gms" and "pcs" are grams and pieces, handled as real units, not as a
+  // plural to be trimmed.
+  assert.equal(parseUnit("gms")?.family, "mass");
+  assert.equal(parseUnit("pcs")?.family, "count");
+  assert.equal(printedUnit("box"), "box");
+  assert.equal(printedUnit("boxes"), "boxe", "only a trailing s is removed, not an English plural");
+});
+
+test("a cheapest vendor is never named across units that do not compare", () => {
+  // A price per ream against a price per sheet has no cheaper side, and
+  // answering anyway is a sourcing decision made on a meaningless number.
+  assert.equal(cheapestVendorNow([buy("a", "ream", 285), buy("b", "sheet", 0.57)]), null);
+  assert.equal(cheapestVendorNow([buy("a", "kg", 285), buy("b", "litre", 90)]), null);
+  // Convertible units still answer.
+  assert.equal(cheapestVendorNow([buy("a", "kg", 285), buy("b", "g", 0.3)])?.vendor_id, "a");
 });

@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { InvoiceOriginal } from "../../invoice-original.tsx";
 import { getItem } from "@/lib/queries.ts";
-import { changeSince, formatDate, money, moneyRounded } from "@/lib/format.ts";
+import { changeSince, formatDate, money, moneyRounded, unitMoney } from "@/lib/format.ts";
 import { cheapestVendorNow, comparePrices } from "@/lib/price.ts";
 import { TriangleAlertIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -73,12 +73,12 @@ export default async function ItemDetail({
             />
             <Stat
               label={comparable ? `Price ${comparison.label}` : "Unit price now"}
-              value={comparable ? money(basePriceAt(0)) : "Mixed units"}
+              value={comparable ? unitMoney(basePriceAt(0)) : "Mixed units"}
               note={comparable ? (movement ?? "Only one purchase so far") : "Not comparable"}
             />
             <Stat
               label="Cheapest vendor now"
-              value={cheapest ? money(basePriceAt(confirmed.indexOf(cheapest))) : "Not comparable"}
+              value={cheapest ? unitMoney(basePriceAt(confirmed.indexOf(cheapest))) : "Not comparable"}
               note={
                 cheapest
                   ? `${cheapest.vendor_name}, as at ${formatDate(cheapest.invoice_date)}`
