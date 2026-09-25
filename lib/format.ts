@@ -29,6 +29,21 @@ export function money(value: number | string): string {
   return rupees.format(Number(value));
 }
 
+/**
+ * A unit price, which can be far below a paisa once it is expressed per gram
+ * or per millilitre: ₹4 a kilogram is ₹0.004 a gram. The ordinary formatter
+ * shows that as ₹0.00, which reads as free and makes the movement figure
+ * beside it look invented. Small numbers get the digits they need, up to a
+ * point, and then a number that small is reported as such.
+ */
+export function unitMoney(value: number | string): string {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return money(0);
+  if (amount === 0 || Math.abs(amount) >= 0.01) return money(amount);
+  if (Math.abs(amount) < 0.00005) return "under ₹0.0001";
+  return `₹${amount.toFixed(4)}`;
+}
+
 /** ₹2,84,600 for headline figures, where the paise are noise. */
 export function moneyRounded(value: number | string): string {
   return rupeesWhole.format(Number(value));

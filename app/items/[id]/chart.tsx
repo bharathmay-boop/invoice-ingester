@@ -1,4 +1,4 @@
-import { formatDateShort, money } from "@/lib/format.ts";
+import { formatDateShort, unitMoney } from "@/lib/format.ts";
 
 export type Point = { date: string; price: number; vendor: string };
 
@@ -49,7 +49,7 @@ export function PriceChart({ points }: { points: Point[] }) {
         viewBox={`0 0 ${W} ${H}`}
         className="h-auto w-full max-w-[520px] text-[#0B6BCB] dark:text-[#4A93E8]"
         role="img"
-        aria-label={`Unit price from ${money(first.price)} on ${formatDateShort(first.date)} to ${money(last.price)} on ${formatDateShort(last.date)}. Every value is listed in the table below.`}
+        aria-label={`Unit price from ${unitMoney(first.price)} on ${formatDateShort(first.date)} to ${unitMoney(last.price)} on ${formatDateShort(last.date)}. Every value is listed in the table below.`}
       >
         {/* Recessive gridlines: three ticks, ink tokens at low opacity. */}
         {[rawMin, (rawMin + rawMax) / 2, rawMax].map((value) => (
@@ -87,7 +87,7 @@ export function PriceChart({ points }: { points: Point[] }) {
             stroke="var(--background)"
             strokeWidth="2"
           >
-            <title>{`${formatDateShort(c.date)} · ${c.vendor} · ${money(c.price)}`}</title>
+            <title>{`${formatDateShort(c.date)} · ${c.vendor} · ${unitMoney(c.price)}`}</title>
           </circle>
         ))}
 
