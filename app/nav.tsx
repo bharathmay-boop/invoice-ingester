@@ -59,10 +59,11 @@ function SignOut() {
 export function Nav({ signedIn, waiting = 0 }: { signedIn: boolean; waiting?: number }) {
   const pathname = usePathname();
 
-  // Settings does not exist when signed out, per the spec, so it is not linked
-  // either. Linking it would 404 on click and, because Next prefetches, log an
-  // error on every page load before anyone clicked anything.
-  const links = signedIn ? [...LINKS, { href: "/settings", label: "Settings" }] : LINKS;
+  // Signed out, none of these exist: the proxy sends every one of them to the
+  // sign in page. Linking them would promise screens that bounce, and Next
+  // prefetches, so it would also fire a redirect on every page load before
+  // anyone clicked anything.
+  const links = signedIn ? [...LINKS, { href: "/settings", label: "Settings" }] : [];
 
   return (
     <header className="border-b border-black/10 dark:border-white/15">

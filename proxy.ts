@@ -1,20 +1,15 @@
-// Reads are public, writes need the session cookie, settings does not exist
-// without it. See docs/spec.md section 2.
+// The home page and signing in are public. Everything else needs the session
+// cookie. See docs/spec.md section 2.
+//
+// Browsing used to be public against seeded demo data. It is not: a visitor
+// landing on tables of someone else's invoices learns nothing about the
+// product, so the home page carries the story and the app is for whoever signs
+// in.
 import { NextResponse, type NextRequest } from "next/server.js";
 import { isValidSession, sessionCookie } from "./lib/auth.ts";
 
-const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
-
 // Signing in has to be reachable while signed out, or there is no way in.
 const ALWAYS_OPEN = ["/api/session"];
-
-// Not rendered at all when signed out, rather than rendered and refused.
-//
-// /review is here because a draft holds a whole extracted invoice, vendor,
-// GSTIN, line items and totals. The proxy lets any GET through by default, so
-// without this a review URL out of someone's history reads all of it with no
-// session at all.
-const PRIVATE_PAGES = ["/settings", "/review"];
 
 function isUnder(pathname: string, prefixes: string[]): boolean {
   return prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
@@ -28,22 +23,23 @@ export async function proxy(request: NextRequest) {
   const authenticated = await isValidSession(
     request.cookies.get(sessionCookie.name)?.value,
   );
+  if (authenticated) return NextResponse.next();
 
-  if (isUnder(pathname, PRIVATE_PAGES)) {
-    // A 404 rather than a redirect: signed out, the page is not there at all.
-    return authenticated
-      ? NextResponse.next()
-      : NextResponse.rewrite(new URL("/404", request.url), { status: 404 });
+  // The home page is matched exactly, since as a prefix "/" would match
+  // everything. /login keeps its prefix so its own assets come with it.
+  if (pathname === "/" || isUnder(pathname, ["/login"])) return NextResponse.next();
+
+  // An API route answers rather than redirects, so a fetch gets a readable
+  // error instead of the HTML of the sign in page.
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.json({ error: "Sign in first." }, { status: 401 });
   }
 
-  if (!READ_METHODS.has(request.method) && !authenticated) {
-    return NextResponse.json(
-      { error: "Sign in to make changes." },
-      { status: 401 },
-    );
-  }
-
-  return NextResponse.next();
+  // A page sends the visitor somewhere they can act: sign in, and come back to
+  // where they were headed.
+  const login = new URL("/login", request.url);
+  login.searchParams.set("next", pathname + request.nextUrl.search);
+  return NextResponse.redirect(login);
 }
 
 export const config = {
