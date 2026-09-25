@@ -226,6 +226,12 @@ The review screen puts the original beside the fields because checking an extrac
 
 Every invoice row on the vendor and item screens carries an icon that opens the stored original in a dialog over the current screen. Checking one number should not cost your place in a list, and the dialog carries a link to open the file in a new tab for printing or reading it full size. A multi invoice PDF opens at the page that invoice starts on, which is why `content_type` and `first_page` are copied from the draft onto the invoice when it is saved. Rows with no stored original, the seeded demo data and anything saved before originals were kept, show no icon rather than an icon that opens nothing. The same goes for a row whose content type is unknown: a PDF rendered as an image is a broken box. Invoices saved before the column existed are backfilled by `npm run backfill-originals`, which reads the first bytes of each stored file and matches the signature. The file name is not evidence: uploads are accepted on the type the browser reports and keep whatever name they came with, so a JPEG called invoice.pdf is possible. Anything whose bytes match nothing is left unset, and shows no icon. Originals need a session, so the icon is only rendered for a signed in visitor.
 
+### Suggestions
+
+The borderline matches, one card each: what the invoice called it, what the catalogue calls the candidate, and how alike they are. The two names are what the decision is made on, so the score is a note rather than the headline.
+
+Accepting links the line at the score it was accepted on. Rejecting leaves it unlinked and records the answer, so the same question is not asked again tomorrow. Both write the decision and the link in one transaction, and the first answer wins if two arrive at once. The nav carries the waiting count, since a queue nobody can see is a queue nobody empties.
+
 ## 9. Version two, contracts
 
 A contract carries a vendor, a period, and agreed rates per catalogue item. Invoices link to the contract in force on their date, and a billed unit price that disagrees with the contracted rate is flagged.
