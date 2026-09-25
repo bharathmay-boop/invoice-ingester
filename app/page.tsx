@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { CheckCircle2, FileText, Search, Sparkles, type LucideIcon } from "lucide-react";
 import { cookies } from "next/headers";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { FlowHero } from "./flow-hero.tsx";
 import { HomeWalkthrough } from "./home-walkthrough.tsx";
+import { WhatItAnswers } from "./what-it-answers.tsx";
 
 export const dynamic = "force-dynamic";
 
@@ -95,43 +95,11 @@ export default async function Home() {
 
       <section className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6">
         <h2 className="text-2xl font-semibold tracking-tight">What it answers</h2>
-        <div className="mt-8 grid gap-8 sm:grid-cols-3">
-          <Answer question="What have I been paying for this?">
-            Every purchase of one thing, across vendors and dates, with the unit
-            price over time and which vendor is cheapest now.
-          </Answer>
-          <Answer question="Who am I paying the most?">
-            Every vendor by total spend, and each one&rsquo;s invoices, with the
-            ones still needing a look marked.
-          </Answer>
-          <Answer question="Which invoices do not add up?">
-            Anything whose own figures disagree is kept out of the totals and
-            flagged, with the disagreeing numbers shown next to the original.
-          </Answer>
-        </div>
-      </section>
-
-      <Separator />
-
-      <section className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6">
-        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-          <Step icon={FileText} field="Upload">
-            A PDF or a photo. Anything unreadable is refused at the dropzone,
-            with the reason on that file.
-          </Step>
-          <Step icon={Sparkles} field="Extract">
-            A vision model reads it against a fixed schema. Claude or OpenRouter,
-            your key, chosen in settings. A file holding several invoices comes
-            back as several.
-          </Step>
-          <Step icon={Search} field="Check">
-            Both arithmetic checks run before anything is stored. Failing either
-            holds the invoice instead of confirming it.
-          </Step>
-          <Step icon={CheckCircle2} field="Confirm">
-            The original sits beside the editable fields. Nothing is saved until
-            you say so, and a duplicate is refused by the database.
-          </Step>
+        <p className="text-muted-foreground mt-2 max-w-2xl text-sm leading-relaxed">
+          Pick a question.
+        </p>
+        <div className="mt-6">
+          <WhatItAnswers />
         </div>
       </section>
 
@@ -164,38 +132,5 @@ export default async function Home() {
         </div>
       </footer>
     </main>
-  );
-}
-
-function Answer({ question, children }: { question: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col">
-      <h3 className="text-base font-medium">{question}</h3>
-      <p className="text-muted-foreground mt-2 flex-1 text-sm leading-relaxed">{children}</p>
-    </div>
-  );
-}
-
-/**
- * Labelled with the stage of the invoice's own journey rather than 01/02/03.
- * The order matters here, but the names carry more than the numbers would.
- */
-function Step({
-  icon: Icon,
-  field,
-  children,
-}: {
-  icon: LucideIcon;
-  field: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="border-border border-t pt-4">
-      <h3 className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.15em]">
-        <Icon className="text-muted-foreground size-4" aria-hidden />
-        {field}
-      </h3>
-      <p className="text-muted-foreground mt-2 text-sm leading-relaxed">{children}</p>
-    </div>
   );
 }
