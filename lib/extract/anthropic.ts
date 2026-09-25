@@ -2,6 +2,13 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { getSecret } from "../settings/store.ts";
 import { INSTRUCTIONS } from "./prompt.ts";
+import {
+  CALL_TIMEOUT_MS,
+  describeStatus,
+  describeTimeout,
+  describeUnreachable,
+  describeUnusable,
+} from "./failure.ts";
 import { extractionJsonSchema, parseResponse, type FoundInvoice } from "./schema.ts";
 import { DEFAULT_ANTHROPIC_MODEL } from "./provider.ts";
 
@@ -22,9 +29,16 @@ export async function extractWithAnthropic(
   source: { data: string; contentType: string; pages: number },
 ): Promise<ExtractionOutcome> {
   const key = await getSecret("anthropic_api_key");
-  if (!key) return { ok: false, error: "No Claude API key is saved." };
+  if (!key) {
+    return {
+      ok: false,
+      error: "No Claude API key is saved. Add one in settings, then upload again.",
+    };
+  }
 
-  const client = new Anthropic({ apiKey: key });
+  // The SDK retries some failures itself; this keeps it to the same one retry
+  // the OpenRouter path makes, and bounds how long a hung call can hold on.
+  const client = new Anthropic({ apiKey: key, maxRetries: 1, timeout: CALL_TIMEOUT_MS });
 
   // Sent as base64 rather than a URL. The originals are stored privately, so
   // there is no URL the provider could fetch, and an invoice is not something
@@ -75,7 +89,7 @@ export async function extractWithAnthropic(
 
     const call = message.content.find((block) => block.type === "tool_use");
     if (!call || call.type !== "tool_use") {
-      return { ok: false, error: "The model did not return invoice fields." };
+      return { ok: false, error: describeUnusable("nothing").message };
     }
 
     const parsed = parseResponse(call.input, source.pages);
@@ -100,9 +114,12 @@ export async function extractWithAnthropic(
   } catch (error) {
     // Provider errors can quote the credential back, so only the message shape
     // is surfaced, never the raw body.
-    if (error instanceof Anthropic.APIError) {
-      return { ok: false, error: `Claude API returned ${error.status}.` };
+    if (error instanceof Anthropic.APIConnectionTimeoutError) {
+      return { ok: false, error: describeTimeout("The Claude API").message };
     }
-    return { ok: false, error: "Could not reach the Claude API." };
+    if (error instanceof Anthropic.APIError && typeof error.status === "number") {
+      return { ok: false, error: describeStatus("The Claude API", error.status).message };
+    }
+    return { ok: false, error: describeUnreachable("the Claude API").message };
   }
 }
