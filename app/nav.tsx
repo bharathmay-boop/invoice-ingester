@@ -6,13 +6,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { capture } from "./analytics-provider.tsx";
 
-// ponytail: no suggestions link and no waiting count until there is a
-// suggestions screen to point at. A nav item that goes nowhere is worse than
-// a missing one.
 const LINKS = [
   { href: "/upload", label: "Upload" },
   { href: "/items", label: "Items" },
   { href: "/vendors", label: "Vendors" },
+  { href: "/suggestions", label: "Suggestions" },
 ];
 
 function SignOut() {
@@ -58,13 +56,14 @@ function SignOut() {
   );
 }
 
-export function Nav({ signedIn }: { signedIn: boolean }) {
+export function Nav({ signedIn, waiting = 0 }: { signedIn: boolean; waiting?: number }) {
   const pathname = usePathname();
 
-  // Settings does not exist when signed out, per the spec, so it is not linked
-  // either. Linking it would 404 on click and, because Next prefetches, log an
-  // error on every page load before anyone clicked anything.
-  const links = signedIn ? [...LINKS, { href: "/settings", label: "Settings" }] : LINKS;
+  // Signed out, none of these exist: the proxy sends every one of them to the
+  // sign in page. Linking them would promise screens that bounce, and Next
+  // prefetches, so it would also fire a redirect on every page load before
+  // anyone clicked anything.
+  const links = signedIn ? [...LINKS, { href: "/settings", label: "Settings" }] : [];
 
   return (
     <header className="border-b border-black/10 dark:border-white/15">
@@ -93,6 +92,11 @@ export function Nav({ signedIn }: { signedIn: boolean }) {
               }`}
             >
               {link.label}
+              {link.href === "/suggestions" && waiting > 0 && (
+                <span className="bg-secondary text-secondary-foreground ml-1.5 rounded-full px-1.5 py-0.5 text-xs tabular-nums">
+                  {waiting}
+                </span>
+              )}
             </Link>
           );
         })}

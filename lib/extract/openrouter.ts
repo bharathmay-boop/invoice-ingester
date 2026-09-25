@@ -1,6 +1,16 @@
 import "server-only";
 import { getSecret, getSetting } from "../settings/store.ts";
 import { INSTRUCTIONS } from "./prompt.ts";
+import {
+  CALL_TIMEOUT_MS,
+  describeStatus,
+  describeTimeout,
+  describeUnreachable,
+  describeUnusable,
+  isRetryableStatus,
+  isTimeout,
+  withOneRetry,
+} from "./failure.ts";
 import { extractionJsonSchema, parseResponse } from "./schema.ts";
 import { MODEL_SETTING } from "./provider.ts";
 import { DEFAULT_OPENROUTER_MODEL, resolveModel } from "./models.ts";
@@ -15,7 +25,12 @@ export async function extractWithOpenRouter(
   source: { data: string; contentType: string; pages: number },
 ): Promise<ExtractionOutcome> {
   const key = await getSecret("openrouter_api_key");
-  if (!key) return { ok: false, error: "No OpenRouter key is saved." };
+  if (!key) {
+    return {
+      ok: false,
+      error: "No OpenRouter key is saved. Add one in settings, then upload again.",
+    };
+  }
 
   const model = await resolveModel((await getSetting<string>(MODEL_SETTING)) ?? DEFAULT_OPENROUTER_MODEL);
   const dataUrl = `data:${source.contentType};base64,${source.data}`;
@@ -27,28 +42,45 @@ export async function extractWithOpenRouter(
       : { type: "image_url", image_url: { url: dataUrl } };
 
   try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${key}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: "user", content: [part, { type: "text", text: INSTRUCTIONS }] }],
-        response_format: {
-          type: "json_schema",
-          json_schema: { name: "invoice", strict: true, schema: extractionJsonSchema },
-        },
-      }),
-    });
+    // Tried twice at most, and only when the first failure was the provider
+    // being busy or briefly broken. A rejected key or a refusal gives the same
+    // answer the second time, slower.
+    const response = await withOneRetry(
+      () =>
+        fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${key}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: "user", content: [part, { type: "text", text: INSTRUCTIONS }] }],
+            response_format: {
+              type: "json_schema",
+              json_schema: { name: "invoice", strict: true, schema: extractionJsonSchema },
+            },
+          }),
+          // Without this a hung provider holds the request until the platform
+          // kills it, and the person watching learns nothing for two minutes.
+          signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
+        }).catch((error: unknown) => error),
+      (result) =>
+        result instanceof Response
+          ? isRetryableStatus(result.status)
+          : isTimeout(result) || result instanceof TypeError,
+    );
+
+    if (!(response instanceof Response)) {
+      // Status and shape only. A provider's error body can quote the key back.
+      const failure = isTimeout(response)
+        ? describeTimeout("OpenRouter")
+        : describeUnreachable("OpenRouter");
+      return { ok: false, error: failure.message };
+    }
 
     if (!response.ok) {
-      // Status only. An error body from a provider can quote the key back.
-      if (response.status === 401 || response.status === 403) {
-        return { ok: false, error: "OpenRouter rejected that key." };
-      }
-      return { ok: false, error: `OpenRouter returned ${response.status}.` };
+      return { ok: false, error: describeStatus("OpenRouter", response.status).message };
     }
 
     const body = (await response.json()) as {
@@ -58,13 +90,13 @@ export async function extractWithOpenRouter(
     };
 
     const content = body.choices?.[0]?.message?.content;
-    if (!content) return { ok: false, error: "The model returned no invoice fields." };
+    if (!content) return { ok: false, error: describeUnusable("nothing").message };
 
     let raw: unknown;
     try {
       raw = JSON.parse(content);
     } catch {
-      return { ok: false, error: "The model did not return JSON." };
+      return { ok: false, error: describeUnusable("not_json").message };
     }
 
     const parsed = parseResponse(raw, source.pages);
@@ -84,7 +116,11 @@ export async function extractWithOpenRouter(
         output_tokens: body.usage?.completion_tokens ?? null,
       },
     };
-  } catch {
-    return { ok: false, error: "Could not reach OpenRouter." };
+  } catch (error) {
+    return {
+      ok: false,
+      error: (isTimeout(error) ? describeTimeout("OpenRouter") : describeUnreachable("OpenRouter"))
+        .message,
+    };
   }
 }

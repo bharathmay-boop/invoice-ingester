@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { getProvider, PROVIDER_LABEL, SECRET_FOR } from "@/lib/extract/provider.ts";
 import { describeSecret } from "@/lib/settings/store.ts";
+import { estimateBatch } from "@/lib/extract/estimate.ts";
 import { Dropzone } from "./dropzone.tsx";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,7 @@ export default async function Upload() {
   const signedIn = await isValidSession(jar.get(sessionCookie.name)?.value);
 
   const provider = await getProvider();
+  const estimate = await estimateBatch(provider);
   const key = await describeSecret(SECRET_FOR[provider]);
   const ready = signedIn && key.present;
 
@@ -47,7 +49,7 @@ export default async function Upload() {
       )}
 
       <div className="mt-8">
-        <Dropzone enabled={ready} />
+        <Dropzone enabled={ready} estimate={estimate} />
       </div>
     </main>
   );

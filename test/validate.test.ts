@@ -5,6 +5,7 @@ import { test } from "node:test";
 
 import {
   DEFAULT_TOLERANCE_RUPEES,
+  checkTolerance,
   describeDiscrepancy,
   findRepeats,
   isValidityWarning,
@@ -210,4 +211,16 @@ test("without a GSTIN the supplier name decides what counts as a repeat", () => 
   const copy = invoice({ gstin: null, vendor_name: " sharma stationers" });
   const other = invoice({ gstin: null, vendor_name: "Gupta Traders" });
   assert.deepEqual([...findRepeats([a, copy, other])], [1]);
+});
+
+test("a tolerance has to stay a tolerance", () => {
+  for (const good of [0, 0.5, 1, 100]) {
+    assert.equal(checkTolerance(good), good);
+  }
+  // Negative would forgive nothing and pass everything; past the cap the check
+  // stops catching anything worth catching; NaN would make every comparison
+  // false, which reads as "everything adds up".
+  for (const bad of [-1, 100.01, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.throws(() => checkTolerance(bad), /tolerance|catching/, String(bad));
+  }
 });

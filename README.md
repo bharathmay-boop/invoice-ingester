@@ -4,7 +4,9 @@ Drop in an invoice, get the particulars extracted and stored, then search what y
 
 Built for Indian invoices first: GSTIN, HSN codes, and the CGST, SGST and IGST split.
 
-**Status:** in build. Upload, extraction, review and save work end to end. Item matching is still exact-name only, and OpenRouter is not wired up yet. The spec is agreed and the work is broken into 33 issues on the [board](https://github.com/users/bharathmay-boop/projects/1).
+**Live:** [invoice-ingester.vercel.app](https://invoice-ingester.vercel.app). The home page shows what it does; the app itself is behind a password, because it holds real invoices.
+
+**Status:** in build, and working end to end. Upload, extraction, review, save, item matching, price history and vendor spend all work. Progress is tracked on the [board](https://github.com/users/bharathmay-boop/projects/1), and [`docs/spec.md`](docs/spec.md) says what is being built and why.
 
 ## The problem
 
@@ -19,7 +21,20 @@ Both are answerable from invoices you already have. They just need the line item
 
 Upload a PDF or an image. A vision model reads it and returns structured fields against a fixed schema. Two arithmetic checks run before anything saves: line items must sum to the subtotal, and subtotal plus taxes must equal the total. If either fails the invoice is held for review with the disagreeing figures highlighted, rather than saved as if it were fine.
 
-Vendors are resolved by GSTIN, which is a real unique business identifier, so vendor identity is an exact key lookup rather than a guess. Line items are normalised and matched against a catalogue using Postgres trigram similarity. Strong matches link on their own, borderline ones are shown as suggestions to accept or reject, and weak ones become new catalogue entries.
+Vendors are resolved by GSTIN, which is a real unique business identifier, so vendor identity is an exact key lookup rather than a guess. Line items are normalised and matched against a catalogue using Postgres trigram similarity. Strong matches link on their own, borderline ones wait in a queue to be accepted or rejected, and weak ones become new catalogue entries.
+
+One file can hold several invoices. A five page PDF of three invoices comes back as three, each with the pages it came from, each reviewed and saved on its own.
+
+## What it will not do
+
+Worth knowing before you clone it:
+
+- **It will not tell you two prices are comparable when they are not.** Kilograms and grams are converted; a ream against a sheet is refused with the reason, because a ream is 500 sheets of one particular paper rather than 500 of anything. Product specific pack sizes are not recorded yet.
+- **It will not merge two products on a guess.** Descriptions that are close but not clearly the same wait for a person. Measured on real invoices, two different cartridges scored higher than two spellings of one stapler, so no threshold separates them on its own.
+- **It will not save an invoice whose own figures disagree** without marking it. It is held for checking rather than folded into a spend total.
+- **It will not read a file that is not an invoice.** A photo or a bank statement is declined with a reason rather than turned into a draft of invented fields.
+- **It is one user with one password.** No accounts, no roles, no tenancy.
+- **Contracts are not built.** Checking a billed rate against a contracted one is the most useful thing this could eventually do, and it is deliberately last: a variance check on shaky extraction produces confident wrong answers.
 
 ## Extraction providers
 
@@ -54,7 +69,7 @@ npm run migrate
 
 Migrations use `DATABASE_URL_UNPOOLED`, since DDL in a transaction does not sit well behind the pooler.
 
-Signing in needs `ADMIN_PASSWORD`, which `vercel env pull` also brings down. Reading is open to everyone, so the password is only needed for uploads and settings.
+Signing in needs `ADMIN_PASSWORD`, which `vercel env pull` also brings down. Everything except the home page is behind it.
 
 `vercel env pull` also brings down `SETTINGS_MASTER_KEY`, the AES-256-GCM key that API keys are sealed with. It is held in the environment rather than the database, so a database dump on its own does not open anything. Losing it means re-entering the API keys, not losing invoice data.
 
@@ -74,9 +89,13 @@ Tests run on the Node test runner, no framework:
 npm test
 ```
 
-They cover the places a mistake would not announce itself: description normalisation, the match thresholds, the arithmetic checks, and key sealing.
+They cover the places a mistake would not announce itself: description normalisation, the match thresholds against real Postgres trigram scores, unit conversion, the arithmetic checks, key sealing, the access rules, and what a decision or a merge actually writes.
 
 The store tests need a database and skip themselves without one, so `npm test` still runs on a clean checkout. Run `vercel env pull` first to include them. They build a throwaway schema from the migration file and drop it afterwards, so running the suite cannot touch a saved API key.
+
+## Screenshots
+
+_To be added: the review screen with an invoice beside its extracted fields, and an item's price history._
 
 ## Using it
 
@@ -117,6 +136,10 @@ Dark mode follows the system setting through `next-themes`, which puts the class
 - [The board](https://github.com/users/bharathmay-boop/projects/1) holds the 33 issues, grouped into epics by label.
 
 Work is tracked on the board, not in these documents. The documents say what is being built and why, and change rarely. The board says what state each piece is in, and changes daily.
+
+## What it costs to run
+
+Reading an invoice costs about a quarter of a cent with Gemini 2.5 Flash through OpenRouter, or a few cents with Claude directly. The upload screen says what a batch will cost before it starts, and what it actually cost afterwards, from the token counts each call reported. Every call is recorded, so settings can show spend for today and this month.
 
 ## Scope
 
