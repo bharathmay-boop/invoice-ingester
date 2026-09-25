@@ -93,7 +93,16 @@ export default async function ItemDetail({
             </p>
           )}
 
-          {comparable && (
+          {comparable && confirmed.length === 1 && (
+            <p className="text-muted-foreground mt-6 text-sm">
+              One purchase so far, at {money(latest.unit_price)}
+              {latest.unit ? ` per ${latest.unit}` : ""} from {latest.vendor_name} on{" "}
+              {formatDate(latest.invoice_date)}. A trend needs a second one: a
+              line through a single point is a decoration, not a price history.
+            </p>
+          )}
+
+          {comparable && confirmed.length > 1 && (
             <>
               <h2 className="mt-10 text-lg font-semibold">Unit price over time</h2>
               <PriceChart
