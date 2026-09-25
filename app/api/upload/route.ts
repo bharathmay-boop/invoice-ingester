@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { getProvider, SECRET_FOR } from "@/lib/extract/provider.ts";
 import { describeSecret } from "@/lib/settings/store.ts";
-import { countPages } from "@/lib/pdf.ts";
+import { readPdf } from "@/lib/pdf.ts";
 import { MAX_INVOICES_PER_FILE, MAX_PDF_PAGES, reject } from "@/lib/upload.ts";
 import { query } from "@/lib/db.ts";
 import { discardUpload } from "@/lib/blob.ts";
@@ -44,7 +44,19 @@ export async function POST(request: NextRequest) {
 
   // Counted here, before the file is stored or any model is paid to read it.
   if (file.type === "application/pdf") {
-    const pages = await countPages(await file.arrayBuffer());
+    const pdf = await readPdf(await file.arrayBuffer());
+    const pages = pdf?.pages ?? null;
+
+    if (pdf?.encrypted) {
+      return NextResponse.json(
+        {
+          error:
+            "This PDF is password protected, so the model cannot read it either. Remove the password and upload it again.",
+        },
+        { status: 415 },
+      );
+    }
+
     // Refused rather than let through: a PDF that cannot be counted cannot be
     // held to the limit, and one pdf-lib cannot open is unlikely to extract.
     if (pages === null) {

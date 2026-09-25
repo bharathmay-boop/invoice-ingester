@@ -19,6 +19,17 @@
     from { opacity: 0; translate: 0 6px; }
     to { opacity: 1; translate: 0 0; }
   }
+  /* The walkthrough below it: panels arriving, and a price line being drawn.
+     Both are behind motion-safe at the point of use. The line is a sweep
+     rather than a second `reveal`, since the hero already owns that name. */
+  @keyframes fade-up {
+    from { opacity: 0; translate: 0 0.5rem; }
+    to { opacity: 1; translate: 0 0; }
+  }
+  @keyframes sweep {
+    from { clip-path: inset(0 100% 0 0); }
+    to { clip-path: inset(0 0 0 0); }
+  }
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   /* Point at the variables next/font defines on <html>, so whatever family

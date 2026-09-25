@@ -612,7 +612,7 @@ lib/extract/index.ts       reads settings, calls one of the two, returns one typ
     <div class="wf-row">
       <div class="wf-col" style="flex:1 1 230px">
         <span class="lbl-sm">Original</span>
-        <div class="doc-stub">rendered invoice<br>page 1 of 1<br><br>click a field on the right<br>to highlight it here</div>
+        <div class="doc-stub">rendered invoice<br>opens at this invoice's page<br><br>fields on the right,<br>original on the left</div>
       </div>
       <div class="wf-col" style="flex:1.3 1 280px">
         <span class="lbl-sm">Extracted &nbsp;<span class="chip n">everything editable</span></span>
@@ -639,7 +639,7 @@ lib/extract/index.ts       reads settings, calls one of the two, returns one typ
   </div>
 </div>
 
-<p>Side by side is the whole design here. Checking an extraction means comparing it to the source, and any layout that makes you remember a number while you scroll has already lost. Clicking a field highlights where it came from on the original.</p>
+<p>Side by side is the whole design here. Checking an extraction means comparing it to the source, and any layout that makes you remember a number while you scroll has already lost. The original opens at the page this invoice starts on. Clicking a field does not highlight where it came from: that needs bounding boxes guessed by the same model that guessed the value, and a box drawn slightly wrong points confidently at the wrong line. See spec section 8.</p>
 
 <h3>Flow B, matching</h3>
 
@@ -809,7 +809,7 @@ lib/extract/index.ts       reads settings, calls one of the two, returns one typ
   <ul class="issues">
     <li><span class="id">I1</span><span class="txt">Upload dropzone and Blob storage</span></li>
     <li><span class="id">I2</span><span class="txt">Extraction job with visible progress per file</span></li>
-    <li><span class="id">I3</span><span class="txt">Review screen, original beside editable fields<em>Clicking a field highlights its source on the original.</em></span></li>
+    <li><span class="id">I3</span><span class="txt">Review screen, original beside editable fields<em>The original opens at this invoice's page. No per field highlight: see spec section 8.</em></span></li>
     <li><span class="id">I4</span><span class="txt">Confirm and save, with the duplicate case handled<em>The constraint rejects it, the screen offers the existing invoice.</em></span></li>
   </ul>
 </div>

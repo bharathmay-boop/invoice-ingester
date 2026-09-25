@@ -1,20 +1,25 @@
 import Link from "next/link";
-import { FileText, Sparkles, Search, CheckCircle2, type LucideIcon } from "lucide-react";
+import { CheckCircle2, FileText, Search, Sparkles, type LucideIcon } from "lucide-react";
+import { cookies } from "next/headers";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { listItems, listVendors } from "@/lib/queries.ts";
-import { money, moneyRounded } from "@/lib/format.ts";
+import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { FlowHero } from "./flow-hero.tsx";
+import { HomeWalkthrough } from "./home-walkthrough.tsx";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * The one page a visitor without an account can reach, so it carries the whole
+ * story on its own.
+ *
+ * It shows no stored data, not even aggregates. Tables of someone else's
+ * invoices teach nobody what this is for, and the figures on this page are
+ * invented so nothing here is anyone's real spending.
+ */
 export default async function Home() {
-  const [vendors, items] = await Promise.all([listVendors(), listItems()]);
-
-  const spend = vendors.reduce((sum, v) => sum + v.spend, 0);
-  const toCheck = vendors.reduce((sum, v) => sum + v.needs_review, 0);
-  const invoices = vendors.reduce((sum, v) => sum + v.invoice_count, 0);
-  const topItem = items[0];
+  const jar = await cookies();
+  const signedIn = await isValidSession(jar.get(sessionCookie.name)?.value);
 
   return (
     <main className="flex-1">
@@ -43,16 +48,32 @@ export default async function Home() {
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">
-            <Button asChild size="lg">
-              <Link href="/items">See what things cost</Link>
-            </Button>
-            <Button asChild size="lg" variant="outline">
-              <Link href="/vendors">Browse vendors</Link>
-            </Button>
+            {signedIn ? (
+              <>
+                <Button asChild size="lg">
+                  <Link href="/upload">Upload an invoice</Link>
+                </Button>
+                <Button asChild size="lg" variant="outline">
+                  <Link href="/items">See what things cost</Link>
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button asChild size="lg">
+                  <Link href="/login">Sign in</Link>
+                </Button>
+                <Button asChild size="lg" variant="outline">
+                  <a href="#how">See how it works</a>
+                </Button>
+              </>
+            )}
           </div>
-          <p className="text-muted-foreground mt-3 text-xs">
-            Reading is open to everyone. Uploading needs the password.
-          </p>
+          {!signedIn && (
+            <p className="text-muted-foreground mt-3 text-xs">
+              The app itself is behind the password, since it holds real
+              invoices. Everything below shows what it does.
+            </p>
+          )}
         </div>
 
         <FlowHero />
@@ -60,22 +81,14 @@ export default async function Home() {
 
       <Separator />
 
-      {/* Real figures from the data actually in the database, not a mock. */}
-      <section className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
-        <h2 className="text-muted-foreground font-mono text-xs uppercase tracking-[0.2em]">
-          Currently stored
-        </h2>
-        <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-4">
-          <Figure label="Total spend" value={moneyRounded(spend)} note="Confirmed invoices only" />
-          <Figure label="Invoices" value={String(invoices)} note={`Across ${vendors.length} vendors`} />
-          <Figure label="Catalogue" value={String(items.length)} note="Distinct things bought" />
-          <Figure
-            label="Held"
-            value={String(toCheck)}
-            note={toCheck ? "Figures disagree" : "Everything adds up"}
-            flagged={toCheck > 0}
-          />
-        </dl>
+      <section id="how" className="mx-auto w-full max-w-6xl scroll-mt-8 px-4 py-12 sm:px-6">
+        <h2 className="text-2xl font-semibold tracking-tight">How it works</h2>
+        <p className="text-muted-foreground mt-2 max-w-2xl text-sm leading-relaxed">
+          Three steps, in the order you would do them.
+        </p>
+        <div className="mt-6">
+          <HomeWalkthrough />
+        </div>
       </section>
 
       <Separator />
@@ -83,26 +96,17 @@ export default async function Home() {
       <section className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6">
         <h2 className="text-2xl font-semibold tracking-tight">What it answers</h2>
         <div className="mt-8 grid gap-8 sm:grid-cols-3">
-          <Answer
-            question="What have I been paying for this?"
-            href="/items"
-            cta="Open items"
-          >
+          <Answer question="What have I been paying for this?">
             Every purchase of one thing, across vendors and dates, with the unit
             price over time and which vendor is cheapest now.
-            {topItem && (
-              <>
-                {" "}Most spent so far: {topItem.canonical_name}, {money(topItem.spend)}.
-              </>
-            )}
           </Answer>
-          <Answer question="Who am I paying the most?" href="/vendors" cta="Open vendors">
-            Every vendor by total spend, and each one&rsquo;s invoices with the
+          <Answer question="Who am I paying the most?">
+            Every vendor by total spend, and each one&rsquo;s invoices, with the
             ones still needing a look marked.
           </Answer>
-          <Answer question="Which invoices do not add up?" href="/vendors" cta="See what is held">
+          <Answer question="Which invoices do not add up?">
             Anything whose own figures disagree is kept out of the totals and
-            flagged, with the disagreeing numbers shown.
+            flagged, with the disagreeing numbers shown next to the original.
           </Answer>
         </div>
       </section>
@@ -110,32 +114,46 @@ export default async function Home() {
       <Separator />
 
       <section className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6">
-        <h2 className="text-2xl font-semibold tracking-tight">How it gets there</h2>
-        <div className="mt-8 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-          <Step icon={FileText} n={1} field="Upload">
+        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+          <Step icon={FileText} field="Upload">
             A PDF or a photo. Anything unreadable is refused at the dropzone,
             with the reason on that file.
           </Step>
-          <Step icon={Sparkles} n={2} field="Extract">
+          <Step icon={Sparkles} field="Extract">
             A vision model reads it against a fixed schema. Claude or OpenRouter,
-            your key, chosen in settings.
+            your key, chosen in settings. A file holding several invoices comes
+            back as several.
           </Step>
-          <Step icon={Search} n={3} field="Check">
+          <Step icon={Search} field="Check">
             Both arithmetic checks run before anything is stored. Failing either
             holds the invoice instead of confirming it.
           </Step>
-          <Step icon={CheckCircle2} n={4} field="Confirm">
+          <Step icon={CheckCircle2} field="Confirm">
             The original sits beside the editable fields. Nothing is saved until
             you say so, and a duplicate is refused by the database.
           </Step>
         </div>
       </section>
 
+      {!signedIn && (
+        <section className="mx-auto w-full max-w-6xl px-4 pb-14 sm:px-6">
+          <div className="border-border bg-card flex flex-wrap items-center justify-between gap-4 rounded-xl border p-6">
+            <p className="max-w-xl text-sm leading-relaxed">
+              The screens above are the real ones. To use them on your own
+              invoices, sign in.
+            </p>
+            <Button asChild>
+              <Link href="/login">Sign in</Link>
+            </Button>
+          </div>
+        </section>
+      )}
+
       <footer className="border-border mt-6 border-t">
         <div className="text-muted-foreground mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-6 text-xs sm:px-6">
           <p>
-            Built with made up invoices, so the figures above are a demonstration
-            rather than anyone&rsquo;s real spending.
+            Every figure on this page is invented, so none of it is anyone&rsquo;s
+            real spending.
           </p>
           <Link
             href="https://github.com/bharathmay-boop/invoice-ingester"
@@ -149,87 +167,35 @@ export default async function Home() {
   );
 }
 
-function Figure({
-  label,
-  value,
-  note,
-  flagged = false,
-}: {
-  label: string;
-  value: string;
-  note: string;
-  flagged?: boolean;
-}) {
-  return (
-    <div>
-      <dt className="text-muted-foreground text-[11px] uppercase tracking-wide">{label}</dt>
-      <dd
-        className={`mt-1 font-mono text-2xl tabular-nums sm:text-3xl ${
-          flagged ? "text-amber-700 dark:text-amber-400" : ""
-        }`}
-      >
-        {value}
-      </dd>
-      <dd className="text-muted-foreground mt-1 text-xs">{note}</dd>
-    </div>
-  );
-}
-
-function Answer({
-  question,
-  href,
-  cta,
-  children,
-}: {
-  question: string;
-  href: string;
-  cta: string;
-  children: React.ReactNode;
-}) {
+function Answer({ question, children }: { question: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col">
       <h3 className="text-base font-medium">{question}</h3>
       <p className="text-muted-foreground mt-2 flex-1 text-sm leading-relaxed">{children}</p>
-      <p className="mt-4">
-        <Link
-          href={href}
-          className="text-sm underline underline-offset-4 hover:no-underline"
-        >
-          {cta}
-        </Link>
-      </p>
     </div>
   );
 }
 
 /**
- * Same icons as the hero pipeline (upload, extract, check, confirm map onto
- * Invoice, AI Extraction, Cross-check, Auto-clear), so this reads as the
- * same four stages already shown above rather than a second, separate list.
+ * Labelled with the stage of the invoice's own journey rather than 01/02/03.
+ * The order matters here, but the names carry more than the numbers would.
  */
 function Step({
   icon: Icon,
-  n,
   field,
   children,
 }: {
   icon: LucideIcon;
-  n: number;
   field: string;
   children: React.ReactNode;
 }) {
   return (
-    <div>
-      <div className="flex items-center gap-2.5">
-        <span className="border-border bg-muted flex size-9 shrink-0 items-center justify-center rounded-md border">
-          <Icon className="text-foreground size-4" />
-        </span>
-        <span className="text-muted-foreground font-mono text-[11px] tracking-wide">
-          Step {n}
-        </span>
-      </div>
-      <h3 className="mt-3 text-sm font-medium">{field}</h3>
-      <p className="text-muted-foreground mt-1.5 text-sm leading-relaxed">{children}</p>
+    <div className="border-border border-t pt-4">
+      <h3 className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.15em]">
+        <Icon className="text-muted-foreground size-4" aria-hidden />
+        {field}
+      </h3>
+      <p className="text-muted-foreground mt-2 text-sm leading-relaxed">{children}</p>
     </div>
   );
 }

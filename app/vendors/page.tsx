@@ -13,8 +13,10 @@ export default async function Vendors() {
   return (
     <Page title="Vendors" lead="Everyone you have bought from, by what you have spent.">
       {vendors.length === 0 ? (
-        <Empty title="No vendors yet">
-          Vendors appear here once an invoice has been uploaded and saved.
+        <Empty title="No vendors yet" action={{ href: "/upload", label: "Upload an invoice" }}>
+          Vendors appear here once an invoice has been saved. Each one is
+          identified by its GSTIN, so the same supplier is one vendor however
+          their name was typed.
         </Empty>
       ) : (
         <ul className="divide-y divide-black/10 dark:divide-white/15">

@@ -44,14 +44,16 @@ export default async function Items({
 
       {items.length === 0 ? (
         searching ? (
-          <Empty title={`Nothing matches “${q}”`}>
+          <Empty title={`Nothing matches “${q}”`} action={{ href: "/items", label: "Clear the search" }}>
             Try fewer words. Descriptions are matched loosely, so “a4 paper”
-            finds “A4 Paper 500 Sheets”.
+            finds “A4 Paper 500 Sheets”. There are items here, just none like
+            that.
           </Empty>
         ) : (
-          <Empty title="No items yet">
+          <Empty title="No items yet" action={{ href: "/upload", label: "Upload an invoice" }}>
             Items appear here as invoices are saved, one per distinct thing you
-            have bought.
+            have bought. Upload one and its line items become the first
+            entries.
           </Empty>
         )
       ) : (
