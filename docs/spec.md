@@ -264,6 +264,12 @@ Every screen says something purposeful before it has data, and each one carries 
 
 Every invoice row on the vendor and item screens carries an icon that opens the stored original in a dialog over the current screen. Checking one number should not cost your place in a list, and the dialog carries a link to open the file in a new tab for printing or reading it full size. A multi invoice PDF opens at the page that invoice starts on, which is why `content_type` and `first_page` are copied from the draft onto the invoice when it is saved. Rows with no stored original, the seeded demo data and anything saved before originals were kept, show no icon rather than an icon that opens nothing. The same goes for a row whose content type is unknown: a PDF rendered as an image is a broken box. Invoices saved before the column existed are backfilled by `npm run backfill-originals`, which reads the first bytes of each stored file and matches the signature. The file name is not evidence: uploads are accepted on the type the browser reports and keep whatever name they came with, so a JPEG called invoice.pdf is possible. Anything whose bytes match nothing is left unset, and shows no icon. Originals need a session, so the icon is only rendered for a signed in visitor.
 
+### Reviewing without a mouse
+
+The review screen is used more than any other: every invoice passes through it, and a stack of twenty is slow by mouse in a way one invoice never shows.
+
+Focus starts on the first field, so a review begins by reading rather than by hunting for a way in. Enter saves when the figures agree, and does nothing when they do not, because saving a flagged invoice should be a deliberate act rather than a reflex. Alt and right arrow opens the next invoice from the same file, so a multi invoice PDF is walked without going back to the upload list. The shortcuts are stated on the screen rather than left to be discovered.
+
 ### Suggestions
 
 The borderline matches, one card each: what the invoice called it, what the catalogue calls the candidate, and how alike they are. The two names are what the decision is made on, so the score is a note rather than the headline.
