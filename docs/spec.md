@@ -22,7 +22,7 @@ Contracts are version two and are described in section 9.
 | Question | Decision | What it rules out |
 |---|---|---|
 | Contracts | Version two | Contract ingestion, term extraction, variance detection |
-| Users | Hosted, single user, public read only | Sign up, accounts, per tenant queries |
+| Users | Hosted, single user, one password | Sign up, accounts, per tenant queries |
 | Input | Drag and drop upload | Inbound email, chat interface |
 | Extraction | Vision model with a strict output schema | Regex and per vendor templates |
 | Provider | Claude API or OpenRouter, set in settings | Being locked to one vendor |
@@ -31,9 +31,13 @@ Contracts are version two and are described in section 9.
 | Item identity | Normalise, trigram match, confirm the middle band | Silent automatic merging |
 | Payoff | Price history per item, vendor spend totals | Alerts, which are version two |
 
-### Why hosted and public read only
+### Why hosted, and what a visitor sees
 
-The app is deployed with seeded demo data and is readable without logging in, so the link works for anyone who opens it. A single password, held in an environment variable, gates uploads and edits. This is middleware and a cookie, not an authentication system.
+The app is deployed so the link works for anyone who opens it. What they get is the home page: what the product does, shown with real screens and invented figures. Everything else needs the password, held in an environment variable. This is middleware and a cookie, not an authentication system.
+
+**Changed on 2026-09-23.** Browsing used to be public against seeded demo data. Tables of someone else's invoices teach a visitor nothing about the product, so the home page carries the story and the app is for whoever signs in. The cost is real: anyone who will not sign in never sees it working, which is why the home page has to be good and why screenshots (#30) matter more than they would otherwise.
+
+A page requested without a session redirects to sign in, carrying where you were going, so signing in lands you there rather than at the start. That return path is only ever a path on this site: it arrives in the URL, and a sign in page that forwards to another site on request is a phishing tool with your own domain on it. An API route answers 401 instead, so a fetch gets a readable error rather than the HTML of the sign in page.
 
 ## 3. Stack
 
@@ -147,6 +151,20 @@ No free model qualifies. Every free model that does images and structured output
 
 If OpenRouter is unreachable the app uses the last cached list, and if there is no cache it says so rather than showing an empty dropdown. The two recommended IDs are matched by string, so a retired one loses its badge instead of breaking the page.
 
+### What a batch costs
+
+Reading is paid for from the user's own key, whether or not they save what comes back, so the upload screen says what a run will cost before it starts rather than after. The figure is a range, from the configured model's catalogue price against the token counts real calls have used: a one page photo and a five page PDF holding three invoices are not the same call, and a single number would be a precision nobody should trust. A model with no known price says so instead of guessing.
+
+A batch at or above the confirm threshold, five files by default and a setting, asks before spending. After a run, the screen shows what was actually spent, added up from the tokens each call reported, beside the estimate it gave beforehand.
+
+### When it does not work
+
+Every failure says what happened and what to do about it: a key that was never saved, a key the provider rejected, an account out of credit, a file too large for the model, a provider rate limiting or briefly broken, a call that never came back, and a model that answered with something other than an invoice. A message names the provider and the status, never a key, a token or the provider's own error body, which can quote the credential back.
+
+Only two of those are retried, once: rate limited, and briefly broken. A rejected key gives the same answer the second time, and a refusal costs money to be told the same thing. Calls carry a 90 second timeout, so a provider that never answers is reported rather than held until the platform kills the request.
+
+A password protected PDF is refused at upload. The page count is readable with encryption ignored, but the contents are not, and a model handed the same locked file would fail after being paid for it.
+
 ### Validation
 
 Two arithmetic checks run before any save:
@@ -172,6 +190,14 @@ The same figures are written to `extraction_event`, which is the record that has
 
 ## 6. Matching
 
+### Units
+
+A price only means something with a unit attached, and two prices only answer each other in the same unit. Units that are genuinely convertible are converted to a base: grams, millilitres, centimetres, or one thing. A line with no unit printed is one thing, so "3 staplers at Rs320" and "3 pc at Rs320" are the same line.
+
+Pack sizes are not units and are not guessed at. A ream is 500 sheets of one particular paper rather than 500 of anything, and a box is whatever the supplier put in it. Two prices per ream still answer each other, so they are compared as printed; a ream against a sheet is refused, with the reason on screen and every purchase still listed at the price its invoice printed. Being told two prices cannot be compared is useful. A confident comparison that is wrong by a factor of 500 looks exactly like a right one, which is the same argument as holding a failed arithmetic check.
+
+Product specific pack sizes, "this vendor's ream is 500 of this paper's sheets", need a conversion recorded per item and a screen to record it. That is not built: guessing it is worse than saying so.
+
 ### Vendors
 
 GSTIN exact match resolves to an existing vendor. Where no GSTIN is printed, a normalised name comparison is used instead, and the result is flagged on the review screen for confirmation rather than accepted silently. New vendors are created from the review screen.
@@ -188,18 +214,28 @@ Normalise the description, then score it against `item.normalized_name` using tr
 
 Both thresholds are editable in settings. The right values depend on how varied the real invoices are, which is not knowable before there is data in the system.
 
+Measured against real descriptions, the bands overlap and no single threshold separates same from different: "HP 802 Cartridge" and "HP 803 Cartridge" are different products and score 0.79, while "Stapler HD-45" and "Stapler HD45" are one product and score 0.69. That is the argument for the middle band. At the defaults, a spelling difference that survives normalisation is offered for a decision rather than linked, and the two cartridges are never silently merged.
+
+A line in the band is saved unlinked, with the candidate recorded in `match_suggestion`. Linking it would merge two products on a guess and creating an item would split one product's history on the same guess, so neither happens until someone says which it is. Scoring runs in Postgres against the GIN index, with `pg_trgm.similarity_threshold` set per transaction to the suggest threshold so the index does the filtering.
+
 Normalisation lowercases, strips punctuation, units and pack sizes, and drops filler words. It has its own tests because one change there shifts every score in the system.
+
+### Merging two items
+
+Two catalogue entries can be folded into one from the item screen: every purchase moves across, any unanswered suggestion moves with it, and the emptied entry goes. All in one transaction, with both rows locked in a fixed order so two merges naming the same pair from opposite sides cannot wait on each other forever.
+
+This is the undo for a wrong automatic link, and it is what makes automatic linking safe to offer at all. Without it one bad match is permanent and every threshold has to be set defensively. It is also the one thing in the app that cannot be undone, since afterwards nothing records which purchase came from which entry, so the confirmation says what will move, where, and that it is final.
 
 ## 7. Settings
 
 - **Extraction:** provider selection, API key entry, model dropdown for OpenRouter, and a test connection action.
-- **Matching:** the automatic link and suggestion thresholds.
-- **Invoice defaults:** rounding tolerance, financial year start, duplicate policy.
+- **Matching:** the automatic link and suggestion thresholds, both editable and saved together, since a suggest threshold above the link threshold would mean a band that links and suggests at once.
+- **Invoice defaults:** the rounding tolerance, editable, refused below zero and above 100 rupees where the check stops catching anything worth catching. The financial year start is shown as a reading: nothing reads it yet, and a control for a value nothing reads looks like a setting and changes nothing.
 - **Data:** CSV export, reset demo data.
 
 ### Key handling
 
-Keys are entered in settings and encrypted at rest with AES-256-GCM, using a master key held in an environment variable rather than in the database. Once saved a key is never returned to the browser. The field shows a masked form with the last four characters and the only action is Replace. Test connection makes one cheap call and reports pass or fail without echoing the key. The public read only view does not render this page, and the routes behind it reject requests without the session cookie.
+Keys are entered in settings and encrypted at rest with AES-256-GCM, using a master key held in an environment variable rather than in the database. Once saved a key is never returned to the browser. The field shows a masked form with the last four characters and the only action is Replace. Test connection makes one cheap call and reports pass or fail without echoing the key. Settings is behind the session like every other screen, and the routes behind it reject requests without the cookie.
 
 ## 8. Screens
 
@@ -212,7 +248,17 @@ Keys are entered in settings and encrypted at rest with AES-256-GCM, using a mas
 | Suggestions | Queue of borderline item matches to accept or reject |
 | Settings | As above |
 
-The review screen puts the original beside the fields because checking an extraction means comparing it to its source. Any layout that makes you hold a number in your head while scrolling has already failed. Clicking a field highlights where it came from.
+The review screen puts the original beside the fields because checking an extraction means comparing it to its source. Any layout that makes you hold a number in your head while scrolling has already failed.
+
+**Clicking a field does not highlight where it came from, and will not.** Decided 2026-09-24, recorded here because the spec promised it and the schema never supported it. Three options were open: drop it, ask the model for a page number per field, or ask for bounding boxes per field.
+
+Bounding boxes are the version people picture, and they are the one to refuse. Every box is a guess by the same model that guessed the value, accuracy varies by model, and the cost lands on every extraction whether or not anyone clicks. A box drawn slightly wrong is worse than no box: it points confidently at the wrong line and invites someone to confirm a figure they have not actually checked, which is the failure mode this product spends its arithmetic checks avoiding.
+
+A page number per field was the middle option and is nearly free, but it answers a question few invoices ask. Most are one page, and the multi invoice work already opens the original at the page its invoice starts on, which is the part that was actually getting people lost.
+
+So: the original opens at the right page, the fields sit beside it, and neither claims to know where on the page a number came from. If real use shows people hunting within a long page, the page number per field is the next step, and bounding boxes stay refused until a model's boxes can be shown to be right more often than they are wrong.
+
+Every screen says something purposeful before it has data, and each one carries the action that fills it rather than a bare "no results". The demo data hides all of these, so they are first seen by whoever runs this on their own invoices, which is the worst moment to find a dead end. A search that matches nothing is worded differently from a screen with nothing in it, since the first means try again and the second means start. An item with one purchase says so instead of drawing a trend line through a single point.
 
 ### The original, from anywhere a figure appears
 
@@ -223,6 +269,12 @@ Every invoice row on the vendor and item screens carries an icon that opens the 
 The review screen is used more than any other: every invoice passes through it, and a stack of twenty is slow by mouse in a way one invoice never shows.
 
 Focus starts on the first field, so a review begins by reading rather than by hunting for a way in. Enter saves when the figures agree, and does nothing when they do not, because saving a flagged invoice should be a deliberate act rather than a reflex. Alt and right arrow opens the next invoice from the same file, so a multi invoice PDF is walked without going back to the upload list. The shortcuts are stated on the screen rather than left to be discovered.
+
+### Suggestions
+
+The borderline matches, one card each: what the invoice called it, what the catalogue calls the candidate, and how alike they are. The two names are what the decision is made on, so the score is a note rather than the headline.
+
+Accepting links the line at the score it was accepted on. Rejecting leaves it unlinked and records the answer, so the same question is not asked again tomorrow. Both write the decision and the link in one transaction, and the first answer wins if two arrive at once. The nav carries the waiting count, since a queue nobody can see is a queue nobody empties.
 
 ## 9. Version two, contracts
 
@@ -255,4 +307,4 @@ Everything else is a page rendering or a database query, and those fail loudly o
 Neither blocks the build.
 
 - Which two OpenRouter models get the recommended badge. Best decided by running the same ten invoices through the shortlist once extraction works, rather than picked in advance.
-- Whether the public demo lets a visitor upload their own invoice. It is the better demo and it spends API credit, so it is a flag, defaulted off.
+- Whether a visitor can try it without the password. A one click demo session would let a recruiter walk the flow without being handed the password, and it spends API credit, so it stays a question rather than a feature.

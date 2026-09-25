@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { unitMoney } from "../lib/format.ts";
 
 import { cheapestVendorNow, unitsAreComparable } from "../lib/price.ts";
 
@@ -80,4 +81,13 @@ test("units decide whether a comparison is allowed at all", () => {
     unitsAreComparable([p("a", "2026-01-01", 1, null), p("b", "2026-01-02", 1, "ream")]),
     false,
   );
+});
+
+test("a price too small for paise still shows a number", () => {
+  // Rs4 a kilogram is Rs0.004 a gram. The ordinary formatter shows Rs0.00,
+  // which reads as free and makes the movement figure beside it look invented.
+  assert.equal(unitMoney(0.004), "₹0.0040");
+  assert.equal(unitMoney(0.285), "₹0.29");
+  assert.equal(unitMoney(0), "₹0.00");
+  assert.match(unitMoney(0.00001), /under/);
 });
