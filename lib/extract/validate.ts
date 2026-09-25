@@ -33,6 +33,25 @@ export type ValidationResult = {
 
 export const DEFAULT_TOLERANCE_RUPEES = 1;
 
+/**
+ * The widest tolerance worth offering. Not a limit the checks need, but past
+ * this the check stops catching anything worth catching, and a setting that
+ * quietly disables a safeguard should say so rather than accept the number.
+ */
+export const MAX_TOLERANCE_RUPEES = 100;
+
+export function checkTolerance(rupees: number): number {
+  if (!Number.isFinite(rupees) || rupees < 0) {
+    throw new Error("the tolerance must be zero rupees or more");
+  }
+  if (rupees > MAX_TOLERANCE_RUPEES) {
+    throw new Error(
+      `over ${MAX_TOLERANCE_RUPEES} rupees the check stops catching anything worth catching`,
+    );
+  }
+  return rupees;
+}
+
 // Money arrives as JSON numbers, and adding those directly means 0.1 + 0.2.
 // Everything is compared in whole paise instead, which is exact for the two
 // decimal places the schema stores.

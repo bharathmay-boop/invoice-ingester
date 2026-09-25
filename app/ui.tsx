@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { STATUS, type InvoiceStatus } from "@/lib/format.ts";
+import { Button } from "@/components/ui/button";
 
 export function Page({
   title,
@@ -62,17 +63,34 @@ export function StatusBadge({ status }: { status: string }) {
  * An empty state says what goes here and how to fill it. A bare "no results"
  * tells you nothing you did not already know.
  */
+/**
+ * What a screen says before it has anything to show.
+ *
+ * `action` is the point of it: an empty screen that only says "nothing here"
+ * leaves someone to work out what would fill it. The demo data hides every one
+ * of these, so they are first seen by whoever runs this on their own invoices,
+ * which is the worst moment to find a dead end.
+ */
 export function Empty({
   title,
+  action,
   children,
 }: {
   title: string;
+  action?: { href: string; label: string };
   children?: React.ReactNode;
 }) {
   return (
     <div className="rounded-lg border border-dashed border-black/20 px-6 py-12 text-center dark:border-white/20">
       <p className="font-medium">{title}</p>
       {children && <p className="mx-auto mt-2 max-w-sm text-sm opacity-70">{children}</p>}
+      {action && (
+        <p className="mt-4">
+          <Button asChild size="sm">
+            <Link href={action.href}>{action.label}</Link>
+          </Button>
+        </p>
+      )}
     </div>
   );
 }
