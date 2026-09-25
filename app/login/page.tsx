@@ -1,11 +1,13 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { capture } from "../analytics-provider.tsx";
+import { safeNext } from "@/lib/next-path.ts";
 import { useState } from "react";
 
 export default function Login() {
   const router = useRouter();
+  const next = safeNext(useSearchParams().get("next"));
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -32,7 +34,7 @@ export default function Login() {
 
     if (response.ok) {
       capture("signed_in");
-      router.push("/");
+      router.push(next);
       router.refresh();
       return;
     }
@@ -47,8 +49,8 @@ export default function Login() {
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold">Sign in</h1>
         <p className="text-sm opacity-70">
-          Reading is open to everyone. The password is only needed to upload
-          invoices and change settings.
+          The app holds real invoices, so all of it is behind the password.
+          The home page shows what it does without one.
         </p>
       </div>
 
