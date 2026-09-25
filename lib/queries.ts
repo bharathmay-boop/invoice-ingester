@@ -182,3 +182,51 @@ export function listMergeCandidates(exceptId: string) {
     [exceptId],
   );
 }
+
+export type SuggestionRow = {
+  line_item_id: string;
+  item_id: string;
+  score: number;
+  /** What the invoice called it. */
+  raw_description: string;
+  /** What the catalogue calls the candidate. */
+  canonical_name: string;
+  invoice_id: string;
+  invoice_number: string;
+  invoice_date: string;
+  vendor_name: string;
+  quantity: number;
+  unit: string | null;
+  unit_price: number;
+  /** How much the candidate already has behind it, so a decision has context. */
+  item_purchases: number;
+};
+
+/**
+ * Undecided matches, oldest first. A rejected one keeps its row and never
+ * appears again: the queue is for questions nobody has answered, and asking
+ * twice is how a queue turns into noise.
+ */
+export function listSuggestions(): Promise<SuggestionRow[]> {
+  return query<SuggestionRow>(
+    `SELECT s.line_item_id, s.item_id, s.score::float,
+            li.raw_description, li.quantity::float, li.unit, li.unit_price::float,
+            it.canonical_name,
+            i.id AS invoice_id, i.invoice_number, i.invoice_date,
+            v.name AS vendor_name,
+            (SELECT count(*)::int FROM line_item l2 WHERE l2.item_id = it.id) AS item_purchases
+     FROM match_suggestion s
+     JOIN line_item li ON li.id = s.line_item_id
+     JOIN item it ON it.id = s.item_id
+     JOIN invoice i ON i.id = li.invoice_id
+     JOIN vendor v ON v.id = i.vendor_id
+     WHERE s.decision IS NULL
+     ORDER BY s.created_at`,
+  );
+}
+
+export function countWaitingSuggestions(): Promise<{ n: number }[]> {
+  return query<{ n: number }>(
+    "SELECT count(*)::int AS n FROM match_suggestion WHERE decision IS NULL",
+  );
+}

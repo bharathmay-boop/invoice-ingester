@@ -22,7 +22,7 @@ Contracts are version two and are described in section 9.
 | Question | Decision | What it rules out |
 |---|---|---|
 | Contracts | Version two | Contract ingestion, term extraction, variance detection |
-| Users | Hosted, single user, public read only | Sign up, accounts, per tenant queries |
+| Users | Hosted, single user, one password | Sign up, accounts, per tenant queries |
 | Input | Drag and drop upload | Inbound email, chat interface |
 | Extraction | Vision model with a strict output schema | Regex and per vendor templates |
 | Provider | Claude API or OpenRouter, set in settings | Being locked to one vendor |
@@ -31,9 +31,13 @@ Contracts are version two and are described in section 9.
 | Item identity | Normalise, trigram match, confirm the middle band | Silent automatic merging |
 | Payoff | Price history per item, vendor spend totals | Alerts, which are version two |
 
-### Why hosted and public read only
+### Why hosted, and what a visitor sees
 
-The app is deployed with seeded demo data and is readable without logging in, so the link works for anyone who opens it. A single password, held in an environment variable, gates uploads and edits. This is middleware and a cookie, not an authentication system.
+The app is deployed so the link works for anyone who opens it. What they get is the home page: what the product does, shown with real screens and invented figures. Everything else needs the password, held in an environment variable. This is middleware and a cookie, not an authentication system.
+
+**Changed on 2026-09-23.** Browsing used to be public against seeded demo data. Tables of someone else's invoices teach a visitor nothing about the product, so the home page carries the story and the app is for whoever signs in. The cost is real: anyone who will not sign in never sees it working, which is why the home page has to be good and why screenshots (#30) matter more than they would otherwise.
+
+A page requested without a session redirects to sign in, carrying where you were going, so signing in lands you there rather than at the start. That return path is only ever a path on this site: it arrives in the URL, and a sign in page that forwards to another site on request is a phishing tool with your own domain on it. An API route answers 401 instead, so a fetch gets a readable error rather than the HTML of the sign in page.
 
 ## 3. Stack
 
@@ -209,7 +213,7 @@ This is the undo for a wrong automatic link, and it is what makes automatic link
 
 ### Key handling
 
-Keys are entered in settings and encrypted at rest with AES-256-GCM, using a master key held in an environment variable rather than in the database. Once saved a key is never returned to the browser. The field shows a masked form with the last four characters and the only action is Replace. Test connection makes one cheap call and reports pass or fail without echoing the key. The public read only view does not render this page, and the routes behind it reject requests without the session cookie.
+Keys are entered in settings and encrypted at rest with AES-256-GCM, using a master key held in an environment variable rather than in the database. Once saved a key is never returned to the browser. The field shows a masked form with the last four characters and the only action is Replace. Test connection makes one cheap call and reports pass or fail without echoing the key. Settings is behind the session like every other screen, and the routes behind it reject requests without the cookie.
 
 ## 8. Screens
 
@@ -227,6 +231,12 @@ The review screen puts the original beside the fields because checking an extrac
 ### The original, from anywhere a figure appears
 
 Every invoice row on the vendor and item screens carries an icon that opens the stored original in a dialog over the current screen. Checking one number should not cost your place in a list, and the dialog carries a link to open the file in a new tab for printing or reading it full size. A multi invoice PDF opens at the page that invoice starts on, which is why `content_type` and `first_page` are copied from the draft onto the invoice when it is saved. Rows with no stored original, the seeded demo data and anything saved before originals were kept, show no icon rather than an icon that opens nothing. The same goes for a row whose content type is unknown: a PDF rendered as an image is a broken box. Invoices saved before the column existed are backfilled by `npm run backfill-originals`, which reads the first bytes of each stored file and matches the signature. The file name is not evidence: uploads are accepted on the type the browser reports and keep whatever name they came with, so a JPEG called invoice.pdf is possible. Anything whose bytes match nothing is left unset, and shows no icon. Originals need a session, so the icon is only rendered for a signed in visitor.
+
+### Suggestions
+
+The borderline matches, one card each: what the invoice called it, what the catalogue calls the candidate, and how alike they are. The two names are what the decision is made on, so the score is a note rather than the headline.
+
+Accepting links the line at the score it was accepted on. Rejecting leaves it unlinked and records the answer, so the same question is not asked again tomorrow. Both write the decision and the link in one transaction, and the first answer wins if two arrive at once. The nav carries the waiting count, since a queue nobody can see is a queue nobody empties.
 
 ## 9. Version two, contracts
 
@@ -259,4 +269,4 @@ Everything else is a page rendering or a database query, and those fail loudly o
 Neither blocks the build.
 
 - Which two OpenRouter models get the recommended badge. Best decided by running the same ten invoices through the shortlist once extraction works, rather than picked in advance.
-- Whether the public demo lets a visitor upload their own invoice. It is the better demo and it spends API credit, so it is a flag, defaulted off.
+- Whether a visitor can try it without the password. A one click demo session would let a recruiter walk the flow without being handed the password, and it spends API credit, so it stays a question rather than a feature.
