@@ -1,9 +1,10 @@
 import Link from "next/link";
+import { CheckCircle2, FileText, Search, Sparkles, type LucideIcon } from "lucide-react";
 import { cookies } from "next/headers";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
-import { InvoiceSpecimen } from "./invoice-specimen.tsx";
+import { FlowHero } from "./flow-hero.tsx";
 import { HomeWalkthrough } from "./home-walkthrough.tsx";
 
 export const dynamic = "force-dynamic";
@@ -75,7 +76,7 @@ export default async function Home() {
           )}
         </div>
 
-        <InvoiceSpecimen />
+        <FlowHero />
       </section>
 
       <Separator />
@@ -114,20 +115,20 @@ export default async function Home() {
 
       <section className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6">
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-          <Step field="Upload">
+          <Step icon={FileText} field="Upload">
             A PDF or a photo. Anything unreadable is refused at the dropzone,
             with the reason on that file.
           </Step>
-          <Step field="Extract">
+          <Step icon={Sparkles} field="Extract">
             A vision model reads it against a fixed schema. Claude or OpenRouter,
             your key, chosen in settings. A file holding several invoices comes
             back as several.
           </Step>
-          <Step field="Check">
+          <Step icon={Search} field="Check">
             Both arithmetic checks run before anything is stored. Failing either
             holds the invoice instead of confirming it.
           </Step>
-          <Step field="Confirm">
+          <Step icon={CheckCircle2} field="Confirm">
             The original sits beside the editable fields. Nothing is saved until
             you say so, and a duplicate is refused by the database.
           </Step>
@@ -179,10 +180,21 @@ function Answer({ question, children }: { question: string; children: React.Reac
  * Labelled with the stage of the invoice's own journey rather than 01/02/03.
  * The order matters here, but the names carry more than the numbers would.
  */
-function Step({ field, children }: { field: string; children: React.ReactNode }) {
+function Step({
+  icon: Icon,
+  field,
+  children,
+}: {
+  icon: LucideIcon;
+  field: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="border-border border-t pt-4">
-      <h3 className="font-mono text-xs uppercase tracking-[0.15em]">{field}</h3>
+      <h3 className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.15em]">
+        <Icon className="text-muted-foreground size-4" aria-hidden />
+        {field}
+      </h3>
       <p className="text-muted-foreground mt-2 text-sm leading-relaxed">{children}</p>
     </div>
   );

@@ -235,7 +235,7 @@ function AskIt() {
           {/* Revealed by a clip rather than a dash offset. The stroke does not
               scale with the stretched viewBox, so a dash pattern measured in
               user units draws the line as a row of gaps. */}
-          <g className="motion-safe:animate-[reveal_1.4s_ease-out_forwards]">
+          <g className="motion-safe:animate-[sweep_1.4s_ease-out_forwards]">
             <path
               d={path}
               fill="none"
