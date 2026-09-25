@@ -207,8 +207,8 @@ This is the undo for a wrong automatic link, and it is what makes automatic link
 ## 7. Settings
 
 - **Extraction:** provider selection, API key entry, model dropdown for OpenRouter, and a test connection action.
-- **Matching:** the automatic link and suggestion thresholds.
-- **Invoice defaults:** rounding tolerance, financial year start, duplicate policy.
+- **Matching:** the automatic link and suggestion thresholds, both editable and saved together, since a suggest threshold above the link threshold would mean a band that links and suggests at once.
+- **Invoice defaults:** the rounding tolerance, editable, refused below zero and above 100 rupees where the check stops catching anything worth catching. The financial year start is shown as a reading: nothing reads it yet, and a control for a value nothing reads looks like a setting and changes nothing.
 - **Data:** CSV export, reset demo data.
 
 ### Key handling
