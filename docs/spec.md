@@ -184,6 +184,14 @@ The same figures are written to `extraction_event`, which is the record that has
 
 ## 6. Matching
 
+### Units
+
+A price only means something with a unit attached, and two prices only answer each other in the same unit. Units that are genuinely convertible are converted to a base: grams, millilitres, centimetres, or one thing. A line with no unit printed is one thing, so "3 staplers at Rs320" and "3 pc at Rs320" are the same line.
+
+Pack sizes are not units and are not guessed at. A ream is 500 sheets of one particular paper rather than 500 of anything, and a box is whatever the supplier put in it. Two prices per ream still answer each other, so they are compared as printed; a ream against a sheet is refused, with the reason on screen and every purchase still listed at the price its invoice printed. Being told two prices cannot be compared is useful. A confident comparison that is wrong by a factor of 500 looks exactly like a right one, which is the same argument as holding a failed arithmetic check.
+
+Product specific pack sizes, "this vendor's ream is 500 of this paper's sheets", need a conversion recorded per item and a screen to record it. That is not built: guessing it is worse than saying so.
+
 ### Vendors
 
 GSTIN exact match resolves to an existing vendor. Where no GSTIN is printed, a normalised name comparison is used instead, and the result is flagged on the review screen for confirmation rather than accepted silently. New vendors are created from the review screen.

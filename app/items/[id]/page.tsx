@@ -4,8 +4,10 @@ import { notFound } from "next/navigation";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { InvoiceOriginal } from "../../invoice-original.tsx";
 import { getItem, listMergeCandidates } from "@/lib/queries.ts";
-import { changeSince, formatDate, money, moneyRounded } from "@/lib/format.ts";
-import { cheapestVendorNow, unitsAreComparable } from "@/lib/price.ts";
+import { changeSince, formatDate, money, moneyRounded, unitMoney } from "@/lib/format.ts";
+import { cheapestVendorNow, comparePrices } from "@/lib/price.ts";
+import { TriangleAlertIcon } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { DemoNotice, Empty, Page, Stat, StatusBadge } from "../../ui.tsx";
 import { PriceChart } from "./chart.tsx";
 import { MergeItem } from "./merge-item.tsx";
@@ -37,17 +39,25 @@ export default async function ItemDetail({
   const latest = confirmed[0];
   const earliest = oldestFirst[0];
 
-  // #36: prices measured in different units are not comparable, and a confident
-  // wrong comparison is worse than no comparison. Until conversions exist, say
-  // so rather than drawing a line through incomparable numbers.
-  const units = new Set(confirmed.map((p) => p.unit ?? "each"));
-  const comparable = unitsAreComparable(confirmed);
+  // Prices are reconciled to one unit where the units convert, and refused
+  // where they do not. A confident wrong comparison is worse than none: a
+  // ream against a sheet is out by a factor of 500, and the number looks
+  // exactly like a right one.
+  const comparison = comparePrices(confirmed);
+  const comparable = comparison.comparable;
+
+  // Prices per base unit, in the order they were given, so a kilo and a gram
+  // sit on one line rather than two. Indexed rather than matched on values:
+  // two purchases can share a vendor, a date and a price.
+  const basePrices = comparable ? comparison.priced.map((p) => p.basePrice) : [];
+  const basePriceAt = (index: number) => basePrices[index] ?? confirmed[index]?.unit_price ?? 0;
 
   const cheapest = comparable ? cheapestVendorNow(confirmed) : null;
 
+  // `confirmed` is newest first, so the last entry is the earliest purchase.
   const movement =
     comparable && latest && earliest && latest !== earliest
-      ? changeSince(latest.unit_price, earliest.unit_price)
+      ? changeSince(basePriceAt(0), basePriceAt(confirmed.length - 1))
       : null;
 
   return (
@@ -66,17 +76,13 @@ export default async function ItemDetail({
               note={`${confirmed.length} ${confirmed.length === 1 ? "purchase" : "purchases"}, ${new Set(confirmed.map((p) => p.vendor_id)).size} vendors`}
             />
             <Stat
-              label="Unit price now"
-              value={comparable ? money(latest.unit_price) : "Mixed units"}
-              note={
-                comparable
-                  ? (movement ?? "Only one purchase so far")
-                  : `Bought by ${[...units].join(" and ")}`
-              }
+              label={comparable ? `Price ${comparison.label}` : "Unit price now"}
+              value={comparable ? unitMoney(basePriceAt(0)) : "Mixed units"}
+              note={comparable ? (movement ?? "Only one purchase so far") : "Not comparable"}
             />
             <Stat
               label="Cheapest vendor now"
-              value={cheapest ? money(cheapest.unit_price) : "Not comparable"}
+              value={cheapest ? unitMoney(basePriceAt(confirmed.indexOf(cheapest))) : "Not comparable"}
               note={
                 cheapest
                   ? `${cheapest.vendor_name}, as at ${formatDate(cheapest.invoice_date)}`
@@ -86,11 +92,17 @@ export default async function ItemDetail({
           </div>
 
           {!comparable && (
-            <p className="mt-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
-              This item has been bought by {[...units].join(" and ")}. Those
-              prices are not comparable until a conversion is recorded, so no
-              trend is shown rather than a misleading one.
-            </p>
+            <Alert className="mt-4">
+              <TriangleAlertIcon />
+              <AlertTitle>These prices cannot be compared</AlertTitle>
+              <AlertDescription>
+                <p>{comparison.reason}</p>
+                <p>
+                  No trend is drawn rather than a misleading one. Every purchase
+                  is still listed below, at the price its invoice printed.
+                </p>
+              </AlertDescription>
+            </Alert>
           )}
 
           {comparable && confirmed.length === 1 && (
@@ -104,11 +116,15 @@ export default async function ItemDetail({
 
           {comparable && confirmed.length > 1 && (
             <>
-              <h2 className="mt-10 text-lg font-semibold">Unit price over time</h2>
+              <h2 className="mt-10 text-lg font-semibold">
+                Price over time, {comparison.label}
+              </h2>
               <PriceChart
-                points={oldestFirst.map((p) => ({
+                // oldestFirst is `confirmed` reversed, so its index counts
+                // back from the end of the prices computed above.
+                points={oldestFirst.map((p, i) => ({
                   date: p.invoice_date,
-                  price: p.unit_price,
+                  price: basePriceAt(confirmed.length - 1 - i),
                   vendor: p.vendor_name,
                 }))}
               />
