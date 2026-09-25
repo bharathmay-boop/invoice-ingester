@@ -192,6 +192,10 @@ Normalise the description, then score it against `item.normalized_name` using tr
 
 Both thresholds are editable in settings. The right values depend on how varied the real invoices are, which is not knowable before there is data in the system.
 
+Measured against real descriptions, the bands overlap and no single threshold separates same from different: "HP 802 Cartridge" and "HP 803 Cartridge" are different products and score 0.79, while "Stapler HD-45" and "Stapler HD45" are one product and score 0.69. That is the argument for the middle band. At the defaults, a spelling difference that survives normalisation is offered for a decision rather than linked, and the two cartridges are never silently merged.
+
+A line in the band is saved unlinked, with the candidate recorded in `match_suggestion`. Linking it would merge two products on a guess and creating an item would split one product's history on the same guess, so neither happens until someone says which it is. Scoring runs in Postgres against the GIN index, with `pg_trgm.similarity_threshold` set per transaction to the suggest threshold so the index does the filtering.
+
 Normalisation lowercases, strips punctuation, units and pack sizes, and drops filler words. It has its own tests because one change there shifts every score in the system.
 
 ## 7. Settings
