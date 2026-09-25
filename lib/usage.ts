@@ -28,7 +28,7 @@ export type ExtractionCall = {
  * Never throws. A call that has already been paid for should not also fail the
  * user's upload because its bookkeeping did.
  */
-export async function recordExtraction(call: ExtractionCall): Promise<void> {
+export async function recordExtraction(call: ExtractionCall): Promise<{ cost: number | null }> {
   const cost = await costOf(call.model, { input: call.inputTokens, output: call.outputTokens }).catch(
     () => null,
   );
@@ -66,6 +66,10 @@ export async function recordExtraction(call: ExtractionCall): Promise<void> {
     outcome: call.outcome,
     reason: call.reason,
   });
+
+  // Handed back so the upload screen can report what a batch actually cost,
+  // beside the estimate it gave beforehand.
+  return { cost };
 }
 
 export type Usage = {

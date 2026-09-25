@@ -151,6 +151,12 @@ No free model qualifies. Every free model that does images and structured output
 
 If OpenRouter is unreachable the app uses the last cached list, and if there is no cache it says so rather than showing an empty dropdown. The two recommended IDs are matched by string, so a retired one loses its badge instead of breaking the page.
 
+### What a batch costs
+
+Reading is paid for from the user's own key, whether or not they save what comes back, so the upload screen says what a run will cost before it starts rather than after. The figure is a range, from the configured model's catalogue price against the token counts real calls have used: a one page photo and a five page PDF holding three invoices are not the same call, and a single number would be a precision nobody should trust. A model with no known price says so instead of guessing.
+
+A batch at or above the confirm threshold, five files by default and a setting, asks before spending. After a run, the screen shows what was actually spent, added up from the tokens each call reported, beside the estimate it gave beforehand.
+
 ### When it does not work
 
 Every failure says what happened and what to do about it: a key that was never saved, a key the provider rejected, an account out of credit, a file too large for the model, a provider rate limiting or briefly broken, a call that never came back, and a model that answered with something other than an invoice. A message names the provider and the status, never a key, a token or the provider's own error body, which can quote the credential back.

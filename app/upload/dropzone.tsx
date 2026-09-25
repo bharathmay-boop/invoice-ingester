@@ -7,6 +7,15 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { ACCEPT_ATTRIBUTE, MAX_INVOICES_PER_FILE, reject } from "@/lib/upload.ts";
 import { capture } from "../analytics-provider.tsx";
+import type { Estimate } from "@/lib/extract/estimate.ts";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 type Stage = "queued" | "uploading" | "extracting" | "ready" | "rejected" | "not_invoice" | "failed";
 
@@ -23,6 +32,28 @@ type Item = {
 };
 
 type Draft = { id: string; firstPage: number; lastPage: number; summary: string };
+
+/** Dollars, at the precision the figure deserves rather than more. */
+function money(amount: number): string {
+  return amount < 0.01 ? `$${amount.toFixed(4)}` : `$${amount.toFixed(2)}`;
+}
+
+const formatSpend = money;
+
+function priceEach({ low, high, model }: Estimate): string {
+  if (low === null || high === null) {
+    return `Cost per file is not known for ${model}.`;
+  }
+  return `About ${money(low)} to ${money(high)} a file with ${model}.`;
+}
+
+function estimateFor(estimate: Estimate, files: number): string {
+  const { low, high } = estimate;
+  if (low === null || high === null) {
+    return `Cost per file is not known for ${estimate.model}, so this batch cannot be priced beforehand.`;
+  }
+  return `That is roughly ${money(low * files)} to ${money(high * files)}, at ${money(low)} to ${money(high)} a file.`;
+}
 
 const pagesOf = (d: Draft) =>
   d.lastPage > d.firstPage ? `Pages ${d.firstPage} to ${d.lastPage}` : `Page ${d.firstPage}`;
@@ -90,17 +121,35 @@ const STAGE_TEXT: Record<Stage, string> = {
   failed: "Failed",
 };
 
-export function Dropzone({ enabled }: { enabled: boolean }) {
+export function Dropzone({ enabled, estimate }: { enabled: boolean; estimate: Estimate }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
+  // What this session has actually spent, added up from what each call cost.
+  const [spent, setSpent] = useState(0);
+  // A batch big enough to be worth asking about, held until it is confirmed.
+  const [pending, setPending] = useState<File[] | null>(null);
 
   function update(id: string, patch: Partial<Item>) {
     setItems((current) => current.map((i) => (i.id === id ? { ...i, ...patch } : i)));
   }
 
-  async function handle(files: FileList | null) {
+  /**
+   * Big batches ask first. Thirty files is real money out of someone's own
+   * key, and an estimate nobody had to go looking for is the whole point.
+   */
+  function offer(files: FileList | null) {
+    if (!files || !enabled) return;
+    const chosen = [...files];
+    if (chosen.length >= estimate.confirmAt) {
+      setPending(chosen);
+      return;
+    }
+    void handle(chosen);
+  }
+
+  async function handle(files: File[] | FileList | null) {
     if (!files || !enabled) return;
 
     const queued: Item[] = [...files].map((file) => {
@@ -142,6 +191,7 @@ export function Dropzone({ enabled }: { enabled: boolean }) {
           body: JSON.stringify({ url: result.url, name: result.name, contentType: result.contentType }),
         });
         const outcome = await extracted.json().catch(() => ({}));
+        if (typeof outcome.cost === "number") setSpent((total) => total + outcome.cost);
         if (!extracted.ok) {
           capture("upload_rejected", { not_an_invoice: outcome.notInvoice === true });
           update(item.id, {
@@ -186,7 +236,7 @@ export function Dropzone({ enabled }: { enabled: boolean }) {
         onDrop={(e) => {
           e.preventDefault();
           setOver(false);
-          void handle(e.dataTransfer.files);
+          offer(e.dataTransfer.files);
         }}
         className={`rounded-lg border border-dashed px-6 py-12 text-center transition-colors ${
           over ? "border-primary bg-accent/50" : "border-border"
@@ -199,6 +249,10 @@ export function Dropzone({ enabled }: { enabled: boolean }) {
           PDF or image (JPEG, PNG, WebP), up to {MAX_INVOICES_PER_FILE} invoices per file.
           Several files at once is fine.
         </p>
+        <p className="text-muted-foreground mt-2 text-xs">
+          {priceEach(estimate)} Reading is paid for from your own key, whether
+          or not you save what comes back.
+        </p>
 
         <input
           ref={input}
@@ -208,7 +262,7 @@ export function Dropzone({ enabled }: { enabled: boolean }) {
           className="sr-only"
           disabled={!enabled}
           onChange={(e) => {
-            void handle(e.target.files);
+            offer(e.target.files);
             e.target.value = "";
           }}
         />
@@ -223,6 +277,40 @@ export function Dropzone({ enabled }: { enabled: boolean }) {
           Choose files
         </Button>
       </div>
+
+      <Dialog open={pending !== null} onOpenChange={(open) => !open && setPending(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Read {pending?.length} files?</DialogTitle>
+            <DialogDescription>
+              {estimateFor(estimate, pending?.length ?? 0)} Each file is read
+              once, with your {estimate.model} key, whether or not you save what
+              comes back.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setPending(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                const files = pending;
+                setPending(null);
+                void handle(files);
+              }}
+            >
+              Read them
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {spent > 0 && (
+        <p className="text-muted-foreground text-xs">
+          Spent {formatSpend(spent)} so far this session, from what each call
+          actually used.
+        </p>
+      )}
 
       {items.length > 0 && (
         <ul className="divide-border divide-y">
