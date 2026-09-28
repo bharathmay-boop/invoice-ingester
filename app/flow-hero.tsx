@@ -28,7 +28,7 @@ export function FlowHero() {
         <Row icon={Copy} title="Contract" subtitle="Coming soon" ghost delay={0.13} />
       </Pair>
 
-      <Connector delay={0.26} />
+      <Connector delay={0.26} branch="converge" />
 
       <Row
         icon={Sparkles}
@@ -39,14 +39,14 @@ export function FlowHero() {
         delay={0.39}
       />
 
-      <Connector delay={0.52} />
+      <Connector delay={0.52} branch="diverge" />
 
       <Pair>
         <Row icon={Table2} title="Invoice fields" subtitle="₹18,400 · Q3" delay={0.65} />
         <Row icon={Copy} title="Contract terms" subtitle="Coming soon" ghost delay={0.78} />
       </Pair>
 
-      <Connector delay={0.91} />
+      <Connector delay={0.91} branch="converge" />
 
       <Row
         icon={Search}
@@ -61,7 +61,7 @@ export function FlowHero() {
 
       <Row icon={GitBranch} title="Condition" subtitle="value · period · item" delay={1.3} />
 
-      <Connector delay={1.43} />
+      <Connector delay={1.43} branch="diverge" />
 
       <Pair>
         <Row
@@ -80,7 +80,7 @@ export function FlowHero() {
         />
       </Pair>
 
-      <Connector delay={1.82} />
+      <Connector delay={1.82} branch="converge" />
 
       <Row icon={RefreshCw} title="ERP sync" subtitle="QuickBooks" badge="synced" delay={1.95} />
     </div>
@@ -91,13 +91,51 @@ function Pair({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-2 gap-2">{children}</div>;
 }
 
-function Connector({ delay }: { delay: number }) {
+/**
+ * A dashed wire with a dot travelling along it on a loop, rather than the
+ * static pulsing dot this replaced. `branch` draws two wires meeting in the
+ * middle for the places two rows become one (or one becomes two), so the
+ * shape of the pipeline reads even at this size. Sized to match its own
+ * fixed viewBox (40x22) so `preserveAspectRatio`'s default scaling never
+ * distorts the dash pattern.
+ */
+function Connector({
+  delay,
+  branch = "straight",
+}: {
+  delay: number;
+  branch?: "straight" | "converge" | "diverge";
+}) {
+  const paths =
+    branch === "converge"
+      ? ["M10 0 V10 H20 V22", "M30 0 V10 H20 V22"]
+      : branch === "diverge"
+        ? ["M20 0 V10 H10 V22", "M20 0 V10 H30 V22"]
+        : ["M20 0 V22"];
+
   return (
     <div
-      className="animate-reveal motion-reduce:animate-none flex justify-center py-0.5"
+      className="animate-reveal motion-reduce:animate-none flex justify-center"
       style={{ animationDelay: `${delay}s` }}
     >
-      <span className="bg-primary/60 size-1.5 animate-pulse rounded-full" />
+      <svg viewBox="0 0 40 22" width={40} height={22} aria-hidden>
+        {paths.map((d) => (
+          <path
+            key={d}
+            d={d}
+            fill="none"
+            stroke="var(--color-border)"
+            strokeWidth="1.5"
+            strokeDasharray="1.5 3.5"
+            strokeLinecap="round"
+          />
+        ))}
+        {paths.map((d) => (
+          <circle key={`dot-${d}`} r="2" className="fill-primary motion-reduce:hidden">
+            <animateMotion dur="1.1s" begin={`${delay + 0.4}s`} repeatCount="indefinite" path={d} />
+          </circle>
+        ))}
+      </svg>
     </div>
   );
 }
