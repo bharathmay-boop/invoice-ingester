@@ -109,7 +109,13 @@ const LEDGERS = ["Tally", "Zoho Books", "QuickBooks", "Xero"];
  * Whoever asks for less motion gets the first name and nothing moving, which
  * is why the animation is behind `motion-safe` and the rest are hidden rather
  * than merely transparent.
+ *
+ * Every name starts a fade past its own beginning, so the first one is already
+ * opaque on the first frame. Without that the row is blank for the length of
+ * one fade before anything appears, since the loop opens on the transparent
+ * end of the fade-in.
  */
+const FADE_IN = 0.32;
 function LedgerNames() {
   return (
     <span className="grid grid-cols-1 grid-rows-1">
@@ -122,7 +128,7 @@ function LedgerNames() {
             "motion-safe:animate-[name-cycle_8s_ease-in-out_infinite] motion-safe:opacity-0",
             i > 0 && "motion-reduce:hidden",
           )}
-          style={{ animationDelay: `${-i * 2}s` }}
+          style={{ animationDelay: `${-i * 2 - FADE_IN}s` }}
         >
           {name}
         </span>
