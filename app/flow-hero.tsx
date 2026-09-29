@@ -82,13 +82,53 @@ export function FlowHero() {
 
       <Connector delay={1.82} branch="converge" />
 
-      <Row icon={RefreshCw} title="ERP sync" subtitle="QuickBooks" badge="synced" delay={1.95} />
+      <Row
+        icon={RefreshCw}
+        title="Your ledger"
+        subtitle={<LedgerNames />}
+        badge="coming soon"
+        ghost
+        delay={1.95}
+      />
     </div>
   );
 }
 
 function Pair({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-2 gap-2">{children}</div>;
+}
+
+/** The ledgers people actually keep, named in turn rather than picking one. */
+const LEDGERS = ["Tally", "Zoho Books", "QuickBooks", "Xero"];
+
+/**
+ * The names take turns on one CSS loop, stacked in a grid cell so the row
+ * never changes height, each offset a quarter of the loop further in. No
+ * state and no timer, so the hero stays a server component.
+ *
+ * Whoever asks for less motion gets the first name and nothing moving, which
+ * is why the animation is behind `motion-safe` and the rest are hidden rather
+ * than merely transparent.
+ */
+function LedgerNames() {
+  return (
+    <span className="grid grid-cols-1 grid-rows-1">
+      {LEDGERS.map((name, i) => (
+        <span
+          key={name}
+          aria-hidden={i > 0 || undefined}
+          className={cn(
+            "col-start-1 row-start-1 block truncate",
+            "motion-safe:animate-[name-cycle_8s_ease-in-out_infinite] motion-safe:opacity-0",
+            i > 0 && "motion-reduce:hidden",
+          )}
+          style={{ animationDelay: `${-i * 2}s` }}
+        >
+          {name}
+        </span>
+      ))}
+    </span>
+  );
 }
 
 /**
@@ -152,7 +192,7 @@ function Row({
 }: {
   icon: LucideIcon;
   title: string;
-  subtitle: string;
+  subtitle: React.ReactNode;
   badge?: string;
   ghost?: boolean;
   highlight?: boolean;
