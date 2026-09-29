@@ -31,20 +31,15 @@ export default async function Home() {
           <h1 className="mt-4 text-balance text-4xl font-semibold leading-[1.05] tracking-tight sm:text-5xl">
             Invoices you have already paid, turned into answers.
           </h1>
-          <p className="text-muted-foreground mt-5 max-w-lg text-base leading-relaxed">
-            Drop in a PDF or a photo. The particulars come out, the vendor is
-            resolved by GSTIN, and line items are matched once their
-            descriptions are normalised, so a ream of A4 is the same thing
-            whether it was typed as a pack or a box. Then you can ask what a
-            thing has cost you over time, and who you pay the most.
-          </p>
-
-          {/* The thesis, stated once, next to the invoice that demonstrates it. */}
-          <p className="mt-5 max-w-lg text-base leading-relaxed">
-            Every invoice has to add up before it counts. The line items must
-            sum to the subtotal, and the subtotal plus taxes must equal the
-            total. One that disagrees with itself is held for you to look at
-            rather than quietly folded into a spend figure.
+          {/*
+            One line, because the diagram beside it already shows the pipeline
+            and the tabs below already demonstrate each answer. Saying it in
+            prose as well meant a visitor read the same thing three times
+            before reaching a button.
+          */}
+          <p className="text-muted-foreground mt-5 max-w-md text-lg leading-relaxed">
+            Drop them in. Find out what things really cost, who charges least,
+            and which bills do not add up.
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">
@@ -70,8 +65,8 @@ export default async function Home() {
           </div>
           {!signedIn && (
             <p className="text-muted-foreground mt-3 text-xs">
-              The app itself is behind the password, since it holds real
-              invoices. Everything below shows what it does.
+              Behind a password, since it holds real invoices. Everything below
+              is the real screens.
             </p>
           )}
         </div>
@@ -84,7 +79,7 @@ export default async function Home() {
       <section id="how" className="mx-auto w-full max-w-6xl scroll-mt-8 px-4 py-12 sm:px-6">
         <h2 className="text-2xl font-semibold tracking-tight">How it works</h2>
         <p className="text-muted-foreground mt-2 max-w-2xl text-sm leading-relaxed">
-          Three steps, in the order you would do them.
+          What happens to a file before it counts.
         </p>
         <div className="mt-6">
           <HomeWalkthrough />

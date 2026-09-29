@@ -7,8 +7,13 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 /**
- * The three things the product does, shown rather than described: a file being
- * read, a figure being caught, and a price history worth having.
+ * The two things that happen to a file before it counts, shown rather than
+ * described: a file being read, and a figure being caught.
+ *
+ * What you can then ask of it used to be a third panel here, and it drew the
+ * same price history the questions section below draws. One of the two had to
+ * go, and this is the section about mechanism, so the answer went to the
+ * section about answers.
  *
  * It runs on a timer because a signed out visitor cannot do any of it
  * themselves, and a screenshot of a progress row says nothing about what
@@ -16,7 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
  * so, so nobody mistakes it for real spending.
  */
 
-const STAGES = ["Read it", "Check it", "Ask it"] as const;
+const STAGES = ["Read it", "Check it"] as const;
 type Stage = (typeof STAGES)[number];
 
 const HOLD_MS = 4200;
@@ -95,11 +100,6 @@ export function HomeWalkthrough() {
         <TabsContent value="Check it" className="mt-4">
           <Panel>
             <CheckIt />
-          </Panel>
-        </TabsContent>
-        <TabsContent value="Ask it" className="mt-4">
-          <Panel>
-            <AskIt />
           </Panel>
         </TabsContent>
       </Tabs>
@@ -209,58 +209,6 @@ function CheckIt() {
 }
 
 /** What the whole thing is for: one item, one price, over time. */
-function AskIt() {
-  const points = [
-    { date: "Apr", price: 212 },
-    { date: "May", price: 230 },
-    { date: "Jul", price: 228 },
-    { date: "Sep", price: 249 },
-  ];
-  const max = 260;
-  const min = 200;
-  const x = (i: number) => (i / (points.length - 1)) * 100;
-  const y = (p: number) => 100 - ((p - min) / (max - min)) * 100;
-  const path = points.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${y(p.price)}`).join(" ");
-
-  return (
-    <div>
-      <Caption>
-        Line items are matched to one catalogue entry however they were typed,
-        so a price history survives the spelling.
-      </Caption>
-
-      <p className="mt-5 text-sm font-medium">Microgreens, per kg</p>
-      <div className="mt-3">
-        <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-32 w-full" role="img" aria-label="Unit price rising from ₹212 in April to ₹249 in September">
-          {/* Revealed by a clip rather than a dash offset. The stroke does not
-              scale with the stretched viewBox, so a dash pattern measured in
-              user units draws the line as a row of gaps. */}
-          <g className="motion-safe:animate-[sweep_1.4s_ease-out_forwards]">
-            <path
-              d={path}
-              fill="none"
-              stroke="var(--color-primary)"
-              strokeWidth="1.5"
-              vectorEffect="non-scaling-stroke"
-            />
-          </g>
-        </svg>
-        <div className="text-muted-foreground mt-1 flex justify-between text-xs">
-          {points.map((p) => (
-            <span key={p.date}>{p.date}</span>
-          ))}
-        </div>
-      </div>
-
-      <dl className="mt-4 grid grid-cols-3 gap-3 text-sm">
-        <Figure label="Now" value="₹249" />
-        <Figure label="Since April" value="+17%" />
-        <Figure label="Cheapest" value="Gupta Traders" />
-      </dl>
-    </div>
-  );
-}
-
 function Caption({ children }: { children: React.ReactNode }) {
   return <p className="text-muted-foreground max-w-xl text-sm leading-relaxed">{children}</p>;
 }
@@ -270,15 +218,6 @@ function Row({ label, value, off = false }: { label: string; value: string; off?
     <div className="flex items-baseline justify-between gap-4">
       <dt className="text-muted-foreground">{label}</dt>
       <dd className={`tabular-nums ${off ? "text-destructive font-medium" : ""}`}>{value}</dd>
-    </div>
-  );
-}
-
-function Figure({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="border-border rounded-lg border p-3">
-      <dt className="text-muted-foreground text-xs">{label}</dt>
-      <dd className="mt-0.5 font-medium tabular-nums">{value}</dd>
     </div>
   );
 }
