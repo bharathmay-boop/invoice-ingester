@@ -66,9 +66,12 @@ export function unitMoney(value: number | string, currency: Currency): string {
   if (!Number.isFinite(amount)) return money(0, currency);
   if (amount === 0 || Math.abs(amount) >= 0.01) return money(amount, currency);
   if (Math.abs(amount) < 0.00005) return `under ${symbolFor(currency)}0.0001`;
-  return moneyFormatter(currency).format(amount) === "-₹0.0000"
-    ? `-${symbolFor(currency)}${Math.abs(amount).toFixed(4)}`
-    : `${symbolFor(currency)}${amount.toFixed(4)}`;
+
+  // The sign goes outside the symbol. Formatting the number first and pasting
+  // the symbol on the front gives "₹-0.0030", which is not how anyone writes
+  // money, so the minus is taken off and put back in the right place.
+  const sign = amount < 0 ? "-" : "";
+  return `${sign}${symbolFor(currency)}${Math.abs(amount).toFixed(4)}`;
 }
 
 /** ₹2,84,600 for headline figures, where the paise are noise. */

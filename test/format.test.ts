@@ -23,6 +23,15 @@ test("unit money keeps four decimals and uses the requested symbol", () => {
   assert.equal(unitMoney(0.00001, "EUR"), "under €0.0001");
 });
 
+// Nobody writes a negative price as "₹-0.0030", and pasting a symbol onto an
+// already formatted number is how you get one. This is the check that fails if
+// the sign drifts back inside the symbol.
+test("a negative unit price puts the minus before the symbol", () => {
+  assert.equal(unitMoney(-0.003, "INR"), "-₹0.0030");
+  assert.equal(unitMoney(-0.003, "USD"), "-$0.0030");
+  assert.equal(unitMoney(-0.003, "EUR"), "-€0.0030");
+});
+
 test("an invoice without a readable currency is refused", () => {
   const result = parseExtraction({
     vendor_name: "Example Traders",
