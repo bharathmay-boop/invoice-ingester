@@ -42,7 +42,7 @@ export const vendors: SeedVendor[] = [
 
 type Line = {
   description: string;
-  hsn: string | null;
+  itemCode: string | null;
   quantity: number;
   unit: string;
   unitPrice: number;
@@ -53,20 +53,17 @@ type Draft = {
   number: string;
   date: string;
   lines: Line[];
-  /** Set only on the invoice that is meant to fail its arithmetic check. */
   brokenTotal?: number;
 };
 
-// Descriptions vary the way real invoices do. Every spelling of the paper here
-// normalises to the same key, which is the point.
 const drafts: Draft[] = [
   {
     gstin: "29AABCA1234F1Z5",
     number: "INV-8021",
     date: "2026-03-04",
     lines: [
-      { description: "A4 Paper 500 Sheets", hsn: "4802", quantity: 20, unit: "ream", unitPrice: 262 },
-      { description: "Ballpoint Pen Blue (Pack of 10)", hsn: "9608", quantity: 15, unit: "pack", unitPrice: 84 },
+      { description: "A4 Paper 500 Sheets", itemCode: "4802", quantity: 20, unit: "ream", unitPrice: 262 },
+      { description: "Ballpoint Pen Blue (Pack of 10)", itemCode: "9608", quantity: 15, unit: "pack", unitPrice: 84 },
     ],
   },
   {
@@ -74,8 +71,8 @@ const drafts: Draft[] = [
     number: "NS/0884",
     date: "2026-03-18",
     lines: [
-      { description: "Paper, A4, 1 ream", hsn: "4802", quantity: 30, unit: "ream", unitPrice: 258 },
-      { description: "File Folder A4", hsn: "4820", quantity: 50, unit: "pc", unitPrice: 22 },
+      { description: "Paper, A4, 1 ream", itemCode: "4802", quantity: 30, unit: "ream", unitPrice: 258 },
+      { description: "File Folder A4", itemCode: "4820", quantity: 50, unit: "pc", unitPrice: 22 },
     ],
   },
   {
@@ -83,8 +80,8 @@ const drafts: Draft[] = [
     number: "SPB/2026/114",
     date: "2026-04-02",
     lines: [
-      { description: "A4 PAPER (500 sheets)", hsn: "4802", quantity: 40, unit: "ream", unitPrice: 254 },
-      { description: "Envelope DL White", hsn: "4817", quantity: 500, unit: "pc", unitPrice: 2.4 },
+      { description: "A4 PAPER (500 sheets)", itemCode: "4802", quantity: 40, unit: "ream", unitPrice: 254 },
+      { description: "Envelope DL White", itemCode: "4817", quantity: 500, unit: "pc", unitPrice: 2.4 },
     ],
   },
   {
@@ -92,9 +89,9 @@ const drafts: Draft[] = [
     number: "VOS-311",
     date: "2026-04-21",
     lines: [
-      { description: "Whiteboard Marker Black", hsn: "9608", quantity: 24, unit: "pc", unitPrice: 38 },
-      { description: "Sticky Notes 3x3", hsn: "4820", quantity: 40, unit: "pad", unitPrice: 31 },
-      { description: "Stapler HD-45", hsn: "8305", quantity: 4, unit: "pc", unitPrice: 320 },
+      { description: "Whiteboard Marker Black", itemCode: "9608", quantity: 24, unit: "pc", unitPrice: 38 },
+      { description: "Sticky Notes 3x3", itemCode: "4820", quantity: 40, unit: "pad", unitPrice: 31 },
+      { description: "Stapler HD-45", itemCode: "8305", quantity: 4, unit: "pc", unitPrice: 320 },
     ],
   },
   {
@@ -102,8 +99,8 @@ const drafts: Draft[] = [
     number: "INV-8155",
     date: "2026-05-11",
     lines: [
-      { description: "Ink Cartridge 803B", hsn: "8443", quantity: 6, unit: "pc", unitPrice: 545 },
-      { description: "A4 Paper 500 Sheets", hsn: "4802", quantity: 10, unit: "ream", unitPrice: 271 },
+      { description: "Ink Cartridge 803B", itemCode: "8443", quantity: 6, unit: "pc", unitPrice: 545 },
+      { description: "A4 Paper 500 Sheets", itemCode: "4802", quantity: 10, unit: "ream", unitPrice: 271 },
     ],
   },
   {
@@ -111,9 +108,9 @@ const drafts: Draft[] = [
     number: "NS/0991",
     date: "2026-06-08",
     lines: [
-      { description: "Paper, A4, 1 ream", hsn: "4802", quantity: 25, unit: "ream", unitPrice: 265 },
-      { description: "Ballpoint Pen Blue (Pack of 10)", hsn: "9608", quantity: 20, unit: "pack", unitPrice: 86 },
-      { description: "File Folder A4", hsn: "4820", quantity: 60, unit: "pc", unitPrice: 23 },
+      { description: "Paper, A4, 1 ream", itemCode: "4802", quantity: 25, unit: "ream", unitPrice: 265 },
+      { description: "Ballpoint Pen Blue (Pack of 10)", itemCode: "9608", quantity: 20, unit: "pack", unitPrice: 86 },
+      { description: "File Folder A4", itemCode: "4820", quantity: 60, unit: "pc", unitPrice: 23 },
     ],
   },
   {
@@ -121,8 +118,8 @@ const drafts: Draft[] = [
     number: "INV-8402",
     date: "2026-07-02",
     lines: [
-      { description: "A4 Paper 500 Sheets", hsn: "4802", quantity: 20, unit: "ream", unitPrice: 279 },
-      { description: "Stapler HD-45", hsn: "8305", quantity: 2, unit: "pc", unitPrice: 330 },
+      { description: "A4 Paper 500 Sheets", itemCode: "4802", quantity: 20, unit: "ream", unitPrice: 279 },
+      { description: "Stapler HD-45", itemCode: "8305", quantity: 2, unit: "pc", unitPrice: 330 },
     ],
   },
   {
@@ -130,7 +127,7 @@ const drafts: Draft[] = [
     number: "SPB/2026/288",
     date: "2026-07-19",
     lines: [
-      { description: "A4 PAPER (500 sheets)", hsn: "4802", quantity: 50, unit: "ream", unitPrice: 268 },
+      { description: "A4 PAPER (500 sheets)", itemCode: "4802", quantity: 50, unit: "ream", unitPrice: 268 },
     ],
   },
   {
@@ -138,8 +135,8 @@ const drafts: Draft[] = [
     number: "VOS-407",
     date: "2026-08-05",
     lines: [
-      { description: "Ink Cartridge 803B", hsn: "8443", quantity: 4, unit: "pc", unitPrice: 559 },
-      { description: "Whiteboard Marker Black", hsn: "9608", quantity: 36, unit: "pc", unitPrice: 39 },
+      { description: "Ink Cartridge 803B", itemCode: "8443", quantity: 4, unit: "pc", unitPrice: 559 },
+      { description: "Whiteboard Marker Black", itemCode: "9608", quantity: 36, unit: "pc", unitPrice: 39 },
     ],
   },
   {
@@ -147,8 +144,8 @@ const drafts: Draft[] = [
     number: "NS/1129",
     date: "2026-08-18",
     lines: [
-      { description: "Paper, A4, 1 ream", hsn: "4802", quantity: 20, unit: "ream", unitPrice: 262 },
-      { description: "Sticky Notes 3x3", hsn: "4820", quantity: 25, unit: "pad", unitPrice: 33 },
+      { description: "Paper, A4, 1 ream", itemCode: "4802", quantity: 20, unit: "ream", unitPrice: 262 },
+      { description: "Sticky Notes 3x3", itemCode: "4820", quantity: 25, unit: "pad", unitPrice: 33 },
     ],
   },
   {
@@ -156,9 +153,9 @@ const drafts: Draft[] = [
     number: "INV-8841",
     date: "2026-09-04",
     lines: [
-      { description: "A4 Paper 500 Sheets", hsn: "4802", quantity: 10, unit: "ream", unitPrice: 285 },
-      { description: "Stapler HD-45", hsn: "8305", quantity: 2, unit: "pc", unitPrice: 320 },
-      { description: "Ink Cartridge 803B", hsn: "8443", quantity: 3, unit: "pc", unitPrice: 545 },
+      { description: "A4 Paper 500 Sheets", itemCode: "4802", quantity: 10, unit: "ream", unitPrice: 285 },
+      { description: "Stapler HD-45", itemCode: "8305", quantity: 2, unit: "pc", unitPrice: 320 },
+      { description: "Ink Cartridge 803B", itemCode: "8443", quantity: 3, unit: "pc", unitPrice: 545 },
     ],
   },
   {
@@ -166,20 +163,17 @@ const drafts: Draft[] = [
     number: "VOS-455",
     date: "2026-09-12",
     lines: [
-      { description: "File Folder A4", hsn: "4820", quantity: 40, unit: "pc", unitPrice: 24 },
-      { description: "Envelope DL White", hsn: "4817", quantity: 300, unit: "pc", unitPrice: 2.5 },
+      { description: "File Folder A4", itemCode: "4820", quantity: 40, unit: "pc", unitPrice: 24 },
+      { description: "Envelope DL White", itemCode: "4817", quantity: 300, unit: "pc", unitPrice: 2.5 },
     ],
   },
   {
-    // The one that does not add up. A model read the total off a smudged line
-    // and got it wrong by Rs450, which is exactly the case needs_review exists
-    // for: nothing else in the system would have said a word.
     gstin: "29AACFN5678G1Z2",
     number: "NS/1207",
     date: "2026-09-16",
     lines: [
-      { description: "Paper, A4, 1 ream", hsn: "4802", quantity: 15, unit: "ream", unitPrice: 264 },
-      { description: "Ballpoint Pen Blue (Pack of 10)", hsn: "9608", quantity: 10, unit: "pack", unitPrice: 88 },
+      { description: "Paper, A4, 1 ream", itemCode: "4802", quantity: 15, unit: "ream", unitPrice: 264 },
+      { description: "Ballpoint Pen Blue (Pack of 10)", itemCode: "9608", quantity: 10, unit: "pack", unitPrice: 88 },
     ],
     brokenTotal: 5_000,
   },
@@ -190,11 +184,18 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 export type SeedLineItem = {
   description: string;
   normalizedName: string;
-  hsn: string | null;
+  itemCode: string | null;
   quantity: number;
   unit: string;
   unitPrice: number;
   amount: number;
+};
+
+export type SeedTax = {
+  label: string;
+  rate: number | null;
+  amount: number;
+  included: boolean;
 };
 
 export type SeedInvoice = {
@@ -203,9 +204,7 @@ export type SeedInvoice = {
   date: string;
   lines: SeedLineItem[];
   subtotal: number;
-  cgst: number;
-  sgst: number;
-  igst: number;
+  taxes: SeedTax[];
   total: number;
   status: "confirmed" | "needs_review";
 };
@@ -214,7 +213,7 @@ function build(draft: Draft): SeedInvoice {
   const lines = draft.lines.map((line) => ({
     description: line.description,
     normalizedName: normalize(line.description),
-    hsn: line.hsn,
+    itemCode: line.itemCode,
     quantity: line.quantity,
     unit: line.unit,
     unitPrice: line.unitPrice,
@@ -223,10 +222,14 @@ function build(draft: Draft): SeedInvoice {
 
   const subtotal = round2(lines.reduce((sum, l) => sum + l.amount, 0));
   const interState = !draft.gstin.startsWith(HOME_STATE);
-
   const cgst = interState ? 0 : round2(subtotal * 0.09);
   const sgst = interState ? 0 : round2(subtotal * 0.09);
   const igst = interState ? round2(subtotal * 0.18) : 0;
+  const taxes: SeedTax[] = [
+    ...(cgst > 0 ? [{ label: "CGST", rate: 0.09, amount: cgst, included: false }] : []),
+    ...(sgst > 0 ? [{ label: "SGST", rate: 0.09, amount: sgst, included: false }] : []),
+    ...(igst > 0 ? [{ label: "IGST", rate: 0.18, amount: igst, included: false }] : []),
+  ];
 
   return {
     gstin: draft.gstin,
@@ -234,9 +237,7 @@ function build(draft: Draft): SeedInvoice {
     date: draft.date,
     lines,
     subtotal,
-    cgst,
-    sgst,
-    igst,
+    taxes,
     total: draft.brokenTotal ?? round2(subtotal + cgst + sgst + igst),
     status: draft.brokenTotal ? "needs_review" : "confirmed",
   };

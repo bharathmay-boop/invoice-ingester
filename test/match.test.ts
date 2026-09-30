@@ -190,7 +190,7 @@ async function emptyCatalogue() {
 
 const line = (description: string) => ({
   description,
-  hsn_code: "8305",
+  item_code: "8305",
   quantity: 2,
   unit: "pc",
   unit_price: 320,

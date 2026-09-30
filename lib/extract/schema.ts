@@ -4,9 +4,6 @@ import { z } from "zod";
 
 import type { Currency } from "@/lib/format.ts";
 
-// 15 characters: state code, PAN, entity number, 'Z', checksum character.
-const GSTIN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
-
 // Bounds match the database columns, so an absurd figure fails here with a
 // readable error instead of at save time, or worse, sailing through the
 // arithmetic checks as Infinity. numeric(14,2) holds twelve digits before the
@@ -25,32 +22,56 @@ const currency = z
 
 export const lineItemSchema = z.object({
   description: z.string().min(1),
-  hsn_code: z.string().regex(/^\d{4,8}$/).nullable(),
+  item_code: z.string().regex(/^\d{4,8}$/).nullable(),
   quantity: z.number().finite().positive().max(MAX_QUANTITY),
   unit: z.string().min(1).nullable(),
   unit_price: z.number().finite().nonnegative().max(MAX_UNIT_PRICE),
-  amount: amount,
+  amount,
 });
 
-export const extractedInvoiceSchema = z.object({
-  vendor_name: z.string().min(1),
-  gstin: z.string().regex(GSTIN, "not a valid 15 character GSTIN").nullable(),
-  invoice_number: z.string().min(1),
-  invoice_date: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD")
-    .refine((d) => !Number.isNaN(Date.parse(d)), "not a real date"),
-  currency,
-  line_items: z.array(lineItemSchema).min(1),
-  subtotal: amount,
-  cgst: amount,
-  sgst: amount,
-  igst: amount,
-  total: amount,
+export const taxSchema = z.object({
+  label: z.string().min(1),
+  rate: z.number().finite().nonnegative().nullable(),
+  amount,
+  included: z.boolean(),
 });
+
+export const extractedInvoiceSchema = z
+  .object({
+    vendor_name: z.string().min(1),
+    tax_id: z.string().min(1).nullable(),
+    invoice_number: z.string().min(1),
+    invoice_date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD")
+      .refine((d) => !Number.isNaN(Date.parse(d)), "not a real date"),
+    currency,
+    line_items: z.array(lineItemSchema).min(1),
+    subtotal: amount,
+    taxes: z.array(taxSchema),
+    taxes_read: z.boolean(),
+    total: amount,
+  })
+  .refine((invoice) => invoice.taxes_read || invoice.taxes.length === 0, {
+    message: "taxes must be empty when the tax area could not be read",
+    path: ["taxes"],
+  });
 
 export type ExtractedInvoice = z.infer<typeof extractedInvoiceSchema>;
 export type ExtractedLineItem = z.infer<typeof lineItemSchema>;
+export type ExtractedTax = z.infer<typeof taxSchema>;
+
+export type TaxModel = "gst" | "vat" | "us_sales_tax";
+
+/** The tax model is a read of the labels the model actually found. */
+export function classifyTaxes(taxes: ExtractedTax[]): TaxModel | null {
+  const labels = taxes.map((tax) => tax.label.toUpperCase());
+  if (labels.some((label) => label.includes("IGST"))) return "gst";
+  if (labels.some((label) => label.includes("CGST") || label.includes("SGST"))) return "gst";
+  if (labels.some((label) => label.includes("VAT"))) return "vat";
+  if (labels.some((label) => label.includes("SALES TAX"))) return "us_sales_tax";
+  return null;
+}
 
 export type ParseResult =
   | { ok: true; data: ExtractedInvoice }

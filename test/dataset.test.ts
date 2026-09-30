@@ -20,22 +20,21 @@ test("every invoice agrees with the status it claims", () => {
   for (const invoice of invoices) {
     const result = validateArithmetic({
       vendor_name: "",
-      gstin: invoice.gstin,
+      tax_id: invoice.gstin,
       invoice_number: invoice.number,
       invoice_date: invoice.date,
       currency: "INR",
       line_items: invoice.lines.map((line) => ({
         description: line.description,
-        hsn_code: line.hsn,
+        item_code: line.itemCode,
         quantity: line.quantity,
         unit: line.unit,
         unit_price: line.unitPrice,
         amount: line.amount,
       })),
       subtotal: invoice.subtotal,
-      cgst: invoice.cgst,
-      sgst: invoice.sgst,
-      igst: invoice.igst,
+      taxes: invoice.taxes,
+      taxes_read: true,
       total: invoice.total,
     });
     assert.equal(result.status, invoice.status, invoice.number);
@@ -52,13 +51,10 @@ test("tax follows the vendor's state", () => {
   for (const invoice of invoices) {
     const interState = !invoice.gstin.startsWith("29");
     if (interState) {
-      assert.equal(invoice.cgst, 0, invoice.number);
-      assert.equal(invoice.sgst, 0, invoice.number);
-      assert.ok(invoice.igst > 0, invoice.number);
+      assert.equal(invoice.taxes.length, 1, invoice.number);
+      assert.equal(invoice.taxes[0].label, "IGST", invoice.number);
     } else {
-      assert.equal(invoice.igst, 0, invoice.number);
-      assert.equal(invoice.cgst, invoice.sgst, invoice.number);
-      assert.ok(invoice.cgst > 0, invoice.number);
+      assert.deepEqual(invoice.taxes.map((tax) => tax.label), ["CGST", "SGST"], invoice.number);
     }
   }
 });

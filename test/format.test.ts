@@ -35,13 +35,13 @@ test("a negative unit price puts the minus before the symbol", () => {
 test("an invoice without a readable currency is refused", () => {
   const result = parseExtraction({
     vendor_name: "Example Traders",
-    gstin: null,
+    tax_id: null,
     invoice_number: "INV-1",
     invoice_date: "2026-09-04",
     line_items: [
       {
         description: "Coffee",
-        hsn_code: null,
+        item_code: null,
         quantity: 1,
         unit: "kg",
         unit_price: 400,
@@ -49,9 +49,8 @@ test("an invoice without a readable currency is refused", () => {
       },
     ],
     subtotal: 400,
-    cgst: 0,
-    sgst: 0,
-    igst: 0,
+    taxes: [],
+    taxes_read: true,
     total: 400,
   });
 
@@ -62,14 +61,14 @@ test("an invoice without a readable currency is refused", () => {
 test("currency is canonicalized to uppercase before it is accepted", () => {
   const result = parseExtraction({
     vendor_name: "Example Traders",
-    gstin: null,
+    tax_id: null,
     invoice_number: "INV-2",
     invoice_date: "2026-09-04",
     currency: "eur",
     line_items: [
       {
         description: "Coffee",
-        hsn_code: null,
+        item_code: null,
         quantity: 1,
         unit: "kg",
         unit_price: 400,
@@ -77,9 +76,8 @@ test("currency is canonicalized to uppercase before it is accepted", () => {
       },
     ],
     subtotal: 400,
-    cgst: 0,
-    sgst: 0,
-    igst: 0,
+    taxes: [],
+    taxes_read: true,
     total: 400,
   });
 

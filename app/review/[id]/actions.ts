@@ -82,10 +82,10 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
     await client.query("BEGIN");
 
     // Claimed inside the transaction, not read before it. Two confirms of the
-    // same draft would otherwise both proceed, and for an invoice with no
-    // GSTIN each would create its own vendor, so the
-    // UNIQUE (vendor_id, invoice_number) constraint would not see a duplicate
-    // and the same invoice would be stored twice.
+    // same draft would otherwise both proceed, and for an invoice with no tax
+    // number each would create its own vendor, so the UNIQUE (vendor_id,
+    // invoice_number) constraint would not see a duplicate and the same invoice
+    // would be stored twice.
     const claimed = await client.query<{
       blob_url: string;
       extraction_meta: unknown;
@@ -102,15 +102,16 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
     const draft = claimed.rows[0];
     blobUrl = draft.blob_url;
 
-    // GSTIN is a real unique business identifier, so vendor identity is an
-    // exact key lookup rather than a guess.
-    const vendor = invoice.gstin
+    // The database still has the historical gstin column. The generic
+    // extraction value is stored there until the vendor tax number migration
+    // can replace that column without breaking the deployed build.
+    const vendor = invoice.tax_id
       ? await client.query<{ id: string }>(
           `INSERT INTO vendor (gstin, name, normalized_name)
            VALUES ($1, $2, $3)
            ON CONFLICT (gstin) DO UPDATE SET name = EXCLUDED.name
            RETURNING id`,
-          [invoice.gstin, invoice.vendor_name, normalize(invoice.vendor_name)],
+          [invoice.tax_id, invoice.vendor_name, normalize(invoice.vendor_name)],
         )
       : await client.query<{ id: string }>(
           // Reused by name, so the invoice constraint below can see the same
@@ -127,18 +128,16 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
 
     const saved = await client.query<{ id: string }>(
       `INSERT INTO invoice (vendor_id, invoice_number, invoice_date, currency,
-                            subtotal, cgst, sgst, igst, total, blob_url, status,
+                            subtotal, taxes, total, blob_url, status,
                             extraction_meta, content_type, first_page)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
       [
         vendorId,
         invoice.invoice_number,
         invoice.invoice_date,
         invoice.currency,
         invoice.subtotal,
-        invoice.cgst,
-        invoice.sgst,
-        invoice.igst,
+        JSON.stringify(invoice.taxes),
         invoice.total,
         draft.blob_url,
         checks.status,
@@ -170,7 +169,7 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
                     ELSE v.gstin IS NULL
                          AND (v.normalized_name = $3 OR v.normalized_name LIKE $3 || ' (separate %')
                     END`,
-        [invoice.gstin, invoice.invoice_number, normalize(invoice.vendor_name)],
+        [invoice.tax_id, invoice.invoice_number, normalize(invoice.vendor_name)],
       );
       return {
         ok: false,
@@ -191,7 +190,7 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
   await track("invoice_saved", {
     line_items: invoice.line_items.length,
     flagged: checks.status !== "confirmed",
-    had_gstin: invoice.gstin !== null,
+    had_tax_id: invoice.tax_id !== null,
   });
 
   revalidatePath("/");

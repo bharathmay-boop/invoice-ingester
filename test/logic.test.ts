@@ -3,7 +3,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { normalize } from "../lib/items/normalize.ts";
-import { parseExtraction, parseResponse, extractionJsonSchema } from "../lib/extract/schema.ts";
+import {
+  classifyTaxes,
+  extractionJsonSchema,
+  parseExtraction,
+  parseResponse,
+} from "../lib/extract/schema.ts";
 
 test("normalisation collapses the same product written two ways", () => {
   assert.equal(normalize("A4 Paper 500 Sheets"), normalize("Paper, A4, 1 ream"));
@@ -32,14 +37,14 @@ test("normalisation is stable and order independent", () => {
 
 const valid = {
   vendor_name: "Sharma Stationers",
-  gstin: "29ABCDE1234F1Z5",
+  tax_id: "29ABCDE1234F1Z5",
   invoice_number: "INV-2026-114",
   invoice_date: "2026-04-11",
   currency: "INR",
   line_items: [
     {
       description: "A4 Paper 500 Sheets",
-      hsn_code: "4802",
+      item_code: "4802",
       quantity: 10,
       unit: "ream",
       unit_price: 285.5,
@@ -47,9 +52,11 @@ const valid = {
     },
   ],
   subtotal: 2855,
-  cgst: 256.95,
-  sgst: 256.95,
-  igst: 0,
+  taxes: [
+    { label: "CGST", rate: 9, amount: 256.95, included: false },
+    { label: "SGST", rate: 9, amount: 256.95, included: false },
+  ],
+  taxes_read: true,
   total: 3368.9,
 };
 
@@ -60,15 +67,69 @@ test("a valid payload parses", () => {
 });
 
 test("nullable fields accept null but not absence", () => {
-  assert.equal(parseExtraction({ ...valid, gstin: null }).ok, true);
-  const withoutGstin: Record<string, unknown> = { ...valid };
-  delete withoutGstin.gstin;
-  assert.equal(parseExtraction(withoutGstin).ok, false);
+  assert.equal(parseExtraction({ ...valid, tax_id: null }).ok, true);
+  assert.equal(
+    parseExtraction({
+      ...valid,
+      line_items: [{ ...valid.line_items[0], item_code: null }],
+    }).ok,
+    true,
+  );
+
+  const withoutTaxId: Record<string, unknown> = { ...valid };
+  delete withoutTaxId.tax_id;
+  assert.equal(parseExtraction(withoutTaxId).ok, false);
+
+  const withoutItemCode: Record<string, unknown> = {
+    ...valid,
+    line_items: [{ ...valid.line_items[0] }],
+  };
+  delete (withoutItemCode.line_items as Array<Record<string, unknown>>)[0].item_code;
+  assert.equal(parseExtraction(withoutItemCode).ok, false);
+});
+
+test("an unreadable tax area is distinct from an invoice with no tax", () => {
+  assert.equal(parseExtraction({ ...valid, taxes: [], taxes_read: true }).ok, true);
+  assert.equal(parseExtraction({ ...valid, taxes: [], taxes_read: false }).ok, true);
+
+  const inventedTax = parseExtraction({
+    ...valid,
+    taxes: [{ label: "VAT", rate: 10, amount: 10, included: false }],
+    taxes_read: false,
+  });
+  assert.equal(inventedTax.ok, false);
+  if (!inventedTax.ok) assert.match(inventedTax.error, /taxes/);
+});
+
+test("tax models are classified from every label that was found", () => {
+  assert.equal(
+    classifyTaxes([
+      { label: "State Sales Tax", rate: 8.25, amount: 20, included: false },
+      { label: "City Sales Tax", rate: 2, amount: 5, included: false },
+    ]),
+    "us_sales_tax",
+  );
+  assert.equal(
+    classifyTaxes([
+      { label: "CGST", rate: 9, amount: 100, included: false },
+      { label: "SGST", rate: 9, amount: 100, included: false },
+    ]),
+    "gst",
+  );
+  assert.equal(
+    classifyTaxes([{ label: "IGST", rate: 18, amount: 200, included: false }]),
+    "gst",
+  );
+  assert.equal(
+    classifyTaxes([{ label: "VAT", rate: null, amount: 88.92, included: true }]),
+    "vat",
+  );
+  assert.equal(classifyTaxes([]), null);
 });
 
 test("each malformed variant fails with a readable error", () => {
   const cases: Array<[string, unknown, RegExp]> = [
-    ["bad gstin", { ...valid, gstin: "29ABCDE1234F1Z" }, /gstin/],
+    ["empty tax id", { ...valid, tax_id: "" }, /tax_id/],
     ["bad date format", { ...valid, invoice_date: "11/04/2026" }, /invoice_date/],
     ["impossible date", { ...valid, invoice_date: "2026-13-45" }, /invoice_date/],
     ["empty invoice number", { ...valid, invoice_number: "" }, /invoice_number/],
@@ -77,11 +138,31 @@ test("each malformed variant fails with a readable error", () => {
     ["no line items", { ...valid, line_items: [] }, /line_items/],
     ["negative total", { ...valid, total: -1 }, /total/],
     ["string amount", { ...valid, subtotal: "2855" }, /subtotal/],
-    ["zero quantity", { ...valid, line_items: [{ ...valid.line_items[0], quantity: 0 }] }, /quantity/],
-    ["non numeric hsn", { ...valid, line_items: [{ ...valid.line_items[0], hsn_code: "48O2" }] }, /hsn_code/],
+    [
+      "zero quantity",
+      { ...valid, line_items: [{ ...valid.line_items[0], quantity: 0 }] },
+      /quantity/,
+    ],
+    [
+      "non numeric item code",
+      { ...valid, line_items: [{ ...valid.line_items[0], item_code: "48O2" }] },
+      /item_code/,
+    ],
+    [
+      "negative tax rate",
+      {
+        ...valid,
+        taxes: [{ label: "VAT", rate: -10, amount: 10, included: false }],
+      },
+      /rate/,
+    ],
     ["not an object", "nope", /./],
     ["amount past the column width", { ...valid, total: 1e307 }, /total/],
-    ["quantity past the column width", { ...valid, line_items: [{ ...valid.line_items[0], quantity: 1e12 }] }, /quantity/],
+    [
+      "quantity past the column width",
+      { ...valid, line_items: [{ ...valid.line_items[0], quantity: 1e12 }] },
+      /quantity/,
+    ],
   ];
 
   for (const [name, payload, expected] of cases) {
@@ -104,8 +185,16 @@ test("the provider JSON schema covers every field", () => {
   const found = top.properties?.invoices.items?.properties ?? {};
   assert.deepEqual(Object.keys(found), ["first_page", "last_page", "invoice"]);
   assert.deepEqual(Object.keys(found.invoice.properties ?? {}).sort(), [
-    "cgst", "currency", "gstin", "igst", "invoice_date", "invoice_number",
-    "line_items", "sgst", "subtotal", "total", "vendor_name",
+    "currency",
+    "invoice_date",
+    "invoice_number",
+    "line_items",
+    "subtotal",
+    "tax_id",
+    "taxes",
+    "taxes_read",
+    "total",
+    "vendor_name",
   ]);
 });
 
@@ -133,48 +222,68 @@ test("the verdict wins over invoices listed beside it", () => {
 test("every invoice in the file comes through, with its pages, in order", () => {
   const second = { ...valid, invoice_number: "INV-2" };
   const result = parseResponse({
-    reason: "Two tax invoices.",
+    reason: "Two invoices.",
     is_invoice: true,
     invoices: [at(1, 2), at(3, 3, second)],
   }, 5);
   assert.equal(result.ok, true);
   if (!result.ok) return;
   assert.deepEqual(
-    result.invoices.map((found) => [found.invoice.invoice_number, found.first_page, found.last_page]),
+    result.invoices.map((entry) => [
+      entry.invoice.invoice_number,
+      entry.first_page,
+      entry.last_page,
+    ]),
     [[valid.invoice_number, 1, 2], ["INV-2", 3, 3]],
   );
 });
 
 test("a yes with no invoices, a bad field or impossible pages is a failure, not a decline", () => {
-  const empty = parseResponse({ reason: "A tax invoice.", is_invoice: true, invoices: [] }, 5);
+  const empty = parseResponse({ reason: "An invoice.", is_invoice: true, invoices: [] }, 5);
   assert.equal("error" in empty, true);
 
   const bad = parseResponse({
-    reason: "A tax invoice.",
+    reason: "An invoice.",
     is_invoice: true,
     invoices: [at(1, 1, { ...valid, total: -1 })],
   }, 5);
   assert.match("error" in bad ? bad.error : "", /total/);
 
-  const backwards = parseResponse({ reason: "A tax invoice.", is_invoice: true, invoices: [at(3, 2)] }, 5);
+  const backwards = parseResponse(
+    { reason: "An invoice.", is_invoice: true, invoices: [at(3, 2)] },
+    5,
+  );
   assert.match("error" in backwards ? backwards.error : "", /before it starts/);
 
-  const pageZero = parseResponse({ reason: "A tax invoice.", is_invoice: true, invoices: [at(0, 1)] }, 5);
+  const pageZero = parseResponse(
+    { reason: "An invoice.", is_invoice: true, invoices: [at(0, 1)] },
+    5,
+  );
   assert.equal("error" in pageZero, true);
 
   assert.equal(parseResponse({ is_invoice: false, invoices: [] }, 5).ok, false);
 });
 
 test("pages must fall inside the file that was read", () => {
-  const past = parseResponse({ reason: "A tax invoice.", is_invoice: true, invoices: [at(5, 12)] }, 5);
+  const past = parseResponse(
+    { reason: "An invoice.", is_invoice: true, invoices: [at(5, 12)] },
+    5,
+  );
   assert.match("error" in past ? past.error : "", /page 12, but the file has 5 pages/);
 
-  const image = parseResponse({ reason: "A photo of a bill.", is_invoice: true, invoices: [at(2, 2)] }, 1);
+  const image = parseResponse(
+    { reason: "A photo of a bill.", is_invoice: true, invoices: [at(2, 2)] },
+    1,
+  );
   assert.match("error" in image ? image.error : "", /one page/);
 
   // Two small receipts on one page share it.
   const shared = parseResponse(
-    { reason: "Two receipts.", is_invoice: true, invoices: [at(1, 1), at(1, 1, { ...valid, invoice_number: "R-2" })] },
+    {
+      reason: "Two receipts.",
+      is_invoice: true,
+      invoices: [at(1, 1), at(1, 1, { ...valid, invoice_number: "R-2" })],
+    },
     1,
   );
   assert.equal(shared.ok, true);

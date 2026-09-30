@@ -107,11 +107,13 @@ export function validateArithmetic(
   );
   check("line_items_sum", invoice.subtotal, lineTotal);
 
-  const withTaxes =
-    toPaise(invoice.subtotal) +
-    toPaise(invoice.cgst) +
-    toPaise(invoice.sgst) +
-    toPaise(invoice.igst);
+  // Included tax is already part of the printed subtotal. Adding it again would
+  // reject a valid tax-inclusive receipt, while excluded tax must still be
+  // added to the subtotal to reach the total.
+  const chargedTax = invoice.taxes
+    .filter((tax) => !tax.included)
+    .reduce((sum, tax) => sum + toPaise(tax.amount), 0);
+  const withTaxes = toPaise(invoice.subtotal) + chargedTax;
   check("tax_total", invoice.total, withTaxes);
 
   // Both of these add up perfectly and are still not a real invoice. They are
@@ -152,13 +154,14 @@ export const warning = (check: CheckName): Discrepancy => ({
  * Which invoices in one file repeat an earlier one: same supplier, same
  * number. The prompt asks for printed copies to be returned once, and this
  * catches the times they are not, so a triplicate does not become three spend
- * entries. The supplier is the GSTIN where there is one, the name otherwise.
+ * entries. The supplier is the vendor tax number where there is one, the name
+ * otherwise.
  */
 export function findRepeats(invoices: ExtractedInvoice[]): Set<number> {
   const seen = new Set<string>();
   const repeats = new Set<number>();
   invoices.forEach((invoice, i) => {
-    const supplier = invoice.gstin ?? invoice.vendor_name.trim().toLowerCase();
+    const supplier = invoice.tax_id ?? invoice.vendor_name.trim().toLowerCase();
     const key = JSON.stringify([supplier, invoice.invoice_number.trim().toUpperCase()]);
     if (seen.has(key)) repeats.add(i);
     seen.add(key);

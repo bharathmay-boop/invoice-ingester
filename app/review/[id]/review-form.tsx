@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { money } from "@/lib/format.ts";
-import type { ExtractedInvoice } from "@/lib/extract/schema.ts";
+import type { ExtractedInvoice, ExtractedTax } from "@/lib/extract/schema.ts";
 import { confirmDraft, discardDraft, type SaveResult } from "./actions.ts";
 import { intentOf } from "@/lib/review-keys.ts";
 
@@ -47,10 +47,22 @@ export function ReviewForm({ draftId, initial, problems, warnings, nextHref }: P
     }));
   }
 
+  function tax(index: number, patch: Partial<ExtractedTax>) {
+    setInvoice((current) => ({
+      ...current,
+      taxes: current.taxes.map((entry, taxIndex) =>
+        taxIndex === index ? { ...entry, ...patch } : entry,
+      ),
+    }));
+  }
+
   // Recomputed as you type, so a correction shows its effect immediately
   // instead of only when you try to save.
   const lineTotal = round2(invoice.line_items.reduce((sum, line) => sum + (line.amount || 0), 0));
-  const withTaxes = round2(invoice.subtotal + invoice.cgst + invoice.sgst + invoice.igst);
+  const chargedTax = invoice.taxes
+    .filter((entry) => !entry.included)
+    .reduce((sum, entry) => sum + entry.amount, 0);
+  const withTaxes = round2(invoice.subtotal + chargedTax);
   const subtotalOff = round2(Math.abs(lineTotal - invoice.subtotal)) > 1;
   const totalOff = round2(Math.abs(withTaxes - invoice.total)) > 1;
   const addsUp = !subtotalOff && !totalOff;
@@ -134,10 +146,10 @@ export function ReviewForm({ draftId, initial, problems, warnings, nextHref }: P
           autoFocus
         />
         <Text
-          label="GSTIN"
-          value={invoice.gstin ?? ""}
+          label="Vendor tax number"
+          value={invoice.tax_id ?? ""}
           mono
-          onChange={(value) => field("gstin", value ? value.toUpperCase() : null)}
+          onChange={(value) => field("tax_id", value ? value.toUpperCase() : null)}
         />
         <Text
           label="Invoice number"
@@ -183,17 +195,25 @@ export function ReviewForm({ draftId, initial, problems, warnings, nextHref }: P
                 />
               </div>
               <div className="sm:col-span-2">
-                <NumberField label="Qty" value={item.quantity} onChange={(value) => line(index, { quantity: value })} />
+                <NumberField
+                  label="Qty"
+                  value={item.quantity}
+                  onChange={(value) => line(index, { quantity: value ?? 0 })}
+                />
               </div>
               <div className="sm:col-span-2">
                 <NumberField
                   label="Unit price"
                   value={item.unit_price}
-                  onChange={(value) => line(index, { unit_price: value })}
+                  onChange={(value) => line(index, { unit_price: value ?? 0 })}
                 />
               </div>
               <div className="sm:col-span-3">
-                <NumberField label="Amount" value={item.amount} onChange={(value) => line(index, { amount: value })} />
+                <NumberField
+                  label="Amount"
+                  value={item.amount}
+                  onChange={(value) => line(index, { amount: value ?? 0 })}
+                />
               </div>
             </div>
           ))}
@@ -205,12 +225,91 @@ export function ReviewForm({ draftId, initial, problems, warnings, nextHref }: P
 
       <Separator />
 
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-sm font-medium">Taxes</h2>
+          <label className="text-muted-foreground flex items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={invoice.taxes_read}
+              onChange={(event) => {
+                field("taxes_read", event.target.checked);
+                if (!event.target.checked) field("taxes", []);
+              }}
+            />
+            Tax area was readable
+          </label>
+        </div>
+        {!invoice.taxes_read && (
+          <p className="text-muted-foreground text-xs">
+            The tax area could not be read. No tax line has been inferred.
+          </p>
+        )}
+        {invoice.taxes_read && (
+          <>
+            {invoice.taxes.map((entry, index) => (
+              <div key={index} className="border-border grid gap-2 rounded-lg border p-3 sm:grid-cols-12">
+                <div className="sm:col-span-4">
+                  <Text
+                    label="Tax label"
+                    value={entry.label}
+                    onChange={(value) => tax(index, { label: value })}
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <NumberField
+                    label="Rate"
+                    value={entry.rate ?? undefined}
+                    onChange={(value) => tax(index, { rate: value ?? null })}
+                  />
+                </div>
+                <div className="sm:col-span-3">
+                  <NumberField
+                    label="Tax amount"
+                    value={entry.amount}
+                    onChange={(value) => tax(index, { amount: value ?? 0 })}
+                  />
+                </div>
+                <label className="text-muted-foreground flex items-center gap-2 self-center text-xs sm:col-span-3">
+                  <input
+                    type="checkbox"
+                    checked={entry.included}
+                    onChange={(event) => tax(index, { included: event.target.checked })}
+                  />
+                  Included in prices
+                </label>
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                field("taxes", [
+                  ...invoice.taxes,
+                  { label: "Tax", rate: null, amount: 0, included: false },
+                ])
+              }
+            >
+              Add tax line
+            </Button>
+          </>
+        )}
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-3">
-        <NumberField label="Subtotal" value={invoice.subtotal} onChange={(value) => field("subtotal", value)} invalid={subtotalOff} />
-        <NumberField label="CGST" value={invoice.cgst} onChange={(value) => field("cgst", value)} />
-        <NumberField label="SGST" value={invoice.sgst} onChange={(value) => field("sgst", value)} />
-        <NumberField label="IGST" value={invoice.igst} onChange={(value) => field("igst", value)} />
-        <NumberField label="Total" value={invoice.total} onChange={(value) => field("total", value)} invalid={totalOff} />
+        <NumberField
+          label="Subtotal"
+          value={invoice.subtotal}
+          onChange={(value) => field("subtotal", value ?? 0)}
+          invalid={subtotalOff}
+        />
+        <NumberField
+          label="Total"
+          value={invoice.total}
+          onChange={(value) => field("total", value ?? 0)}
+          invalid={totalOff}
+        />
         <div className="self-end">
           <p className={`text-xs ${totalOff ? "text-destructive" : "text-muted-foreground"}`}>
             Subtotal plus taxes is {money(withTaxes, invoice.currency)}.
@@ -291,8 +390,8 @@ function NumberField({
   invalid = false,
 }: {
   label: string;
-  value: number;
-  onChange: (value: number) => void;
+  value: number | undefined;
+  onChange: (value: number | undefined) => void;
   invalid?: boolean;
 }) {
   const id = `n-${label.replace(/\s+/g, "-").toLowerCase()}`;
@@ -304,10 +403,12 @@ function NumberField({
         type="number"
         step="0.01"
         inputMode="decimal"
-        value={value}
+        value={value ?? ""}
         aria-invalid={invalid || undefined}
         className="tabular-nums"
-        onChange={(event) => onChange(event.target.value === "" ? 0 : Number(event.target.value))}
+        onChange={(event) =>
+          onChange(event.target.value === "" ? undefined : Number(event.target.value))
+        }
       />
     </div>
   );

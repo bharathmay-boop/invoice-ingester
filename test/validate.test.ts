@@ -16,14 +16,14 @@ import type { ExtractedInvoice } from "../lib/extract/schema.ts";
 function invoice(over: Partial<ExtractedInvoice> = {}): ExtractedInvoice {
   return {
     vendor_name: "Sharma Stationers",
-    gstin: "29ABCDE1234F1Z5",
+    tax_id: "29ABCDE1234F1Z5",
     invoice_number: "INV-1",
     invoice_date: "2026-04-11",
     currency: "INR",
     line_items: [
       {
         description: "A4 Paper",
-        hsn_code: "4802",
+        item_code: "4802",
         quantity: 10,
         unit: "ream",
         unit_price: 285,
@@ -31,7 +31,7 @@ function invoice(over: Partial<ExtractedInvoice> = {}): ExtractedInvoice {
       },
       {
         description: "Stapler",
-        hsn_code: "8305",
+        item_code: "8305",
         quantity: 2,
         unit: "pc",
         amount: 640,
@@ -39,9 +39,8 @@ function invoice(over: Partial<ExtractedInvoice> = {}): ExtractedInvoice {
       },
     ],
     subtotal: 3490,
-    cgst: 0,
-    sgst: 0,
-    igst: 0,
+    taxes: [],
+    taxes_read: true,
     total: 3490,
     ...over,
   };
@@ -53,17 +52,30 @@ const checks = (result: ReturnType<typeof validateArithmetic>) =>
 test("every tax combination adds up", () => {
   assert.equal(validateArithmetic(invoice()).status, "confirmed");
   assert.equal(
-    validateArithmetic(invoice({ cgst: 314.1, sgst: 314.1, total: 4118.2 })).status,
+    validateArithmetic(invoice({
+      taxes: [
+        { label: "CGST", rate: 9, amount: 314.1, included: false },
+        { label: "SGST", rate: 9, amount: 314.1, included: false },
+      ],
+      total: 4118.2,
+    })).status,
     "confirmed",
   );
   assert.equal(
-    validateArithmetic(invoice({ igst: 628.2, total: 4118.2 })).status,
+    validateArithmetic(invoice({
+      taxes: [{ label: "IGST", rate: 18, amount: 628.2, included: false }],
+      total: 4118.2,
+    })).status,
     "confirmed",
   );
-  assert.equal(
-    validateArithmetic(invoice({ cgst: 100, sgst: 100, igst: 50, total: 3740 })).status,
-    "confirmed",
-  );
+});
+
+test("an included VAT line is already inside the subtotal", () => {
+  const result = validateArithmetic(invoice({
+    taxes: [{ label: "VAT 10%", rate: 10, amount: 88.92, included: true }],
+    total: 3490,
+  }));
+  assert.equal(result.status, "confirmed");
 });
 
 test("a subtotal that disagrees with the line items is caught", () => {
@@ -78,11 +90,14 @@ test("a subtotal that disagrees with the line items is caught", () => {
 });
 
 test("a total that disagrees with subtotal plus taxes is caught", () => {
-  const result = validateArithmetic(invoice({ cgst: 100, sgst: 100, total: 3000 }));
+  const result = validateArithmetic(invoice({
+    taxes: [{ label: "VAT", rate: 10, amount: 100, included: false }],
+    total: 3000,
+  }));
   assert.equal(result.status, "needs_review");
   assert.deepEqual(checks(result), ["tax_total"]);
-  assert.equal(result.discrepancies[0].computed, 3690);
-  assert.equal(result.discrepancies[0].difference, -690);
+  assert.equal(result.discrepancies[0].computed, 3590);
+  assert.equal(result.discrepancies[0].difference, -590);
 });
 
 test("both failures are reported together, not just the first", () => {
@@ -116,7 +131,7 @@ test("a nonsense tolerance is refused rather than guessed at", () => {
 test("paise do not drift when many lines are added", () => {
   const lines = Array.from({ length: 10 }, () => ({
     description: "Rounding bait",
-    hsn_code: null,
+    item_code: null,
     quantity: 1,
     unit: null,
     unit_price: 0.1,
@@ -144,10 +159,13 @@ test("the description says which figure is wrong and by how much", () => {
     "The subtotal is Rs90.00 less than the line items add up to.",
   );
 
-  const high = validateArithmetic(invoice({ cgst: 100, sgst: 100, total: 4000 }));
+  const high = validateArithmetic(invoice({
+    taxes: [{ label: "VAT", rate: 10, amount: 100, included: false }],
+    total: 4000,
+  }));
   assert.equal(
     describeDiscrepancy(high.discrepancies[0]),
-    "The total is Rs310.00 more than the subtotal plus taxes.",
+    "The total is Rs410.00 more than the subtotal plus taxes.",
   );
 });
 
@@ -178,14 +196,14 @@ test("a printed copy of an invoice in the same file is a repeat", () => {
   const first = invoice();
   const copy = invoice({ invoice_number: " inv-1 " });
   const other = invoice({ invoice_number: "INV-2" });
-  const sameNumberOtherSupplier = invoice({ gstin: "27ABCDE1234F1Z5" });
+  const sameNumberOtherSupplier = invoice({ tax_id: "27ABCDE1234F1Z5" });
   assert.deepEqual([...findRepeats([first, other, copy, sameNumberOtherSupplier])], [2]);
 });
 
-test("without a GSTIN the supplier name decides what counts as a repeat", () => {
-  const first = invoice({ gstin: null, vendor_name: "Sharma Stationers" });
-  const copy = invoice({ gstin: null, vendor_name: " sharma stationers" });
-  const other = invoice({ gstin: null, vendor_name: "Gupta Traders" });
+test("without a vendor tax number the supplier name decides what counts as a repeat", () => {
+  const first = invoice({ tax_id: null, vendor_name: "Sharma Stationers" });
+  const copy = invoice({ tax_id: null, vendor_name: " sharma stationers" });
+  const other = invoice({ tax_id: null, vendor_name: "Gupta Traders" });
   assert.deepEqual([...findRepeats([first, copy, other])], [1]);
 });
 

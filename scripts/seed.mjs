@@ -19,21 +19,21 @@ if (!url) {
 for (const invoice of invoices) {
   const result = validateArithmetic({
     vendor_name: "",
-    gstin: invoice.gstin,
+    tax_id: invoice.gstin,
     invoice_number: invoice.number,
     invoice_date: invoice.date,
+    currency: "INR",
     line_items: invoice.lines.map((l) => ({
       description: l.description,
-      hsn_code: l.hsn,
+      item_code: l.itemCode,
       quantity: l.quantity,
       unit: l.unit,
       unit_price: l.unitPrice,
       amount: l.amount,
     })),
     subtotal: invoice.subtotal,
-    cgst: invoice.cgst,
-    sgst: invoice.sgst,
-    igst: invoice.igst,
+    taxes: invoice.taxes,
+    taxes_read: true,
     total: invoice.total,
   });
 
@@ -132,17 +132,15 @@ try {
   for (const invoice of invoices) {
     const { rows } = await client.query(
       `INSERT INTO invoice
-         (vendor_id, invoice_number, invoice_date, subtotal, cgst, sgst, igst,
-          total, status, extraction_meta, is_demo)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true) RETURNING id`,
+         (vendor_id, invoice_number, invoice_date, subtotal, taxes, total, status,
+          extraction_meta, is_demo)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true) RETURNING id`,
       [
         vendorIds.get(invoice.gstin),
         invoice.number,
         invoice.date,
         invoice.subtotal,
-        invoice.cgst,
-        invoice.sgst,
-        invoice.igst,
+        JSON.stringify(invoice.taxes),
         invoice.total,
         invoice.status,
         // Demo rows are labelled as demo rows. Nothing here came from a model,
@@ -160,7 +158,7 @@ try {
         [
           rows[0].id,
           line.description,
-          line.hsn,
+          line.itemCode,
           line.quantity,
           line.unit,
           line.unitPrice,
