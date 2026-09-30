@@ -41,16 +41,16 @@ export function ReviewForm({ draftId, initial, problems, warnings, nextHref }: P
   function line(index: number, patch: Partial<ExtractedInvoice["line_items"][number]>) {
     setInvoice((current) => ({
       ...current,
-      line_items: current.line_items.map((l, i) => (i === index ? { ...l, ...patch } : l)),
+      line_items: current.line_items.map((line, lineIndex) =>
+        lineIndex === index ? { ...line, ...patch } : line,
+      ),
     }));
   }
 
   // Recomputed as you type, so a correction shows its effect immediately
   // instead of only when you try to save.
-  const lineTotal = round2(invoice.line_items.reduce((sum, l) => sum + (l.amount || 0), 0));
-  const withTaxes = round2(
-    invoice.subtotal + invoice.cgst + invoice.sgst + invoice.igst,
-  );
+  const lineTotal = round2(invoice.line_items.reduce((sum, line) => sum + (line.amount || 0), 0));
+  const withTaxes = round2(invoice.subtotal + invoice.cgst + invoice.sgst + invoice.igst);
   const subtotalOff = round2(Math.abs(lineTotal - invoice.subtotal)) > 1;
   const totalOff = round2(Math.abs(withTaxes - invoice.total)) > 1;
   const addsUp = !subtotalOff && !totalOff;
@@ -94,8 +94,8 @@ export function ReviewForm({ draftId, initial, problems, warnings, nextHref }: P
           <AlertTitle>Check this before saving</AlertTitle>
           <AlertDescription>
             <ul className="list-disc space-y-0.5 pl-5">
-              {warnings.map((w) => (
-                <li key={w}>{w}</li>
+              {warnings.map((warning) => (
+                <li key={warning}>{warning}</li>
               ))}
             </ul>
             <p>
@@ -112,8 +112,8 @@ export function ReviewForm({ draftId, initial, problems, warnings, nextHref }: P
           <AlertTitle>These figures do not add up</AlertTitle>
           <AlertDescription>
             <ul className="list-disc space-y-0.5 pl-5">
-              {problems.map((p) => (
-                <li key={p}>{p}</li>
+              {problems.map((problem) => (
+                <li key={problem}>{problem}</li>
               ))}
             </ul>
             <p>
@@ -130,27 +130,42 @@ export function ReviewForm({ draftId, initial, problems, warnings, nextHref }: P
         <Text
           label="Vendor"
           value={invoice.vendor_name}
-          onChange={(v) => field("vendor_name", v)}
+          onChange={(value) => field("vendor_name", value)}
           autoFocus
         />
         <Text
           label="GSTIN"
           value={invoice.gstin ?? ""}
           mono
-          onChange={(v) => field("gstin", v ? v.toUpperCase() : null)}
+          onChange={(value) => field("gstin", value ? value.toUpperCase() : null)}
         />
         <Text
           label="Invoice number"
           value={invoice.invoice_number}
           mono
-          onChange={(v) => field("invoice_number", v)}
+          onChange={(value) => field("invoice_number", value)}
         />
         <Text
           label="Date"
           type="date"
           value={invoice.invoice_date}
-          onChange={(v) => field("invoice_date", v)}
+          onChange={(value) => field("invoice_date", value)}
         />
+        <div className="space-y-1.5">
+          <Label htmlFor="currency" className="text-xs">Currency</Label>
+          <select
+            id="currency"
+            className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+            value={invoice.currency}
+            onChange={(event) =>
+              field("currency", event.target.value as ExtractedInvoice["currency"])
+            }
+          >
+            <option value="INR">INR, Indian rupees</option>
+            <option value="USD">USD, US dollars</option>
+            <option value="EUR">EUR, euros</option>
+          </select>
+        </div>
       </div>
 
       <Separator />
@@ -164,41 +179,41 @@ export function ReviewForm({ draftId, initial, problems, warnings, nextHref }: P
                 <Text
                   label="Description"
                   value={item.description}
-                  onChange={(v) => line(index, { description: v })}
+                  onChange={(value) => line(index, { description: value })}
                 />
               </div>
               <div className="sm:col-span-2">
-                <NumberField label="Qty" value={item.quantity} onChange={(v) => line(index, { quantity: v })} />
+                <NumberField label="Qty" value={item.quantity} onChange={(value) => line(index, { quantity: value })} />
               </div>
               <div className="sm:col-span-2">
                 <NumberField
                   label="Unit price"
                   value={item.unit_price}
-                  onChange={(v) => line(index, { unit_price: v })}
+                  onChange={(value) => line(index, { unit_price: value })}
                 />
               </div>
               <div className="sm:col-span-3">
-                <NumberField label="Amount" value={item.amount} onChange={(v) => line(index, { amount: v })} />
+                <NumberField label="Amount" value={item.amount} onChange={(value) => line(index, { amount: value })} />
               </div>
             </div>
           ))}
         </div>
         <p className={`mt-2 text-xs ${subtotalOff ? "text-destructive" : "text-muted-foreground"}`}>
-          Line items add up to {money(lineTotal)}.
+          Line items add up to {money(lineTotal, invoice.currency)}.
         </p>
       </div>
 
       <Separator />
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <NumberField label="Subtotal" value={invoice.subtotal} onChange={(v) => field("subtotal", v)} invalid={subtotalOff} />
-        <NumberField label="CGST" value={invoice.cgst} onChange={(v) => field("cgst", v)} />
-        <NumberField label="SGST" value={invoice.sgst} onChange={(v) => field("sgst", v)} />
-        <NumberField label="IGST" value={invoice.igst} onChange={(v) => field("igst", v)} />
-        <NumberField label="Total" value={invoice.total} onChange={(v) => field("total", v)} invalid={totalOff} />
+        <NumberField label="Subtotal" value={invoice.subtotal} onChange={(value) => field("subtotal", value)} invalid={subtotalOff} />
+        <NumberField label="CGST" value={invoice.cgst} onChange={(value) => field("cgst", value)} />
+        <NumberField label="SGST" value={invoice.sgst} onChange={(value) => field("sgst", value)} />
+        <NumberField label="IGST" value={invoice.igst} onChange={(value) => field("igst", value)} />
+        <NumberField label="Total" value={invoice.total} onChange={(value) => field("total", value)} invalid={totalOff} />
         <div className="self-end">
           <p className={`text-xs ${totalOff ? "text-destructive" : "text-muted-foreground"}`}>
-            Subtotal plus taxes is {money(withTaxes)}.
+            Subtotal plus taxes is {money(withTaxes, invoice.currency)}.
           </p>
         </div>
       </div>
@@ -256,16 +271,14 @@ function Text({
   const id = `f-${label.replace(/\s+/g, "-").toLowerCase()}`;
   return (
     <div className="space-y-1.5">
-      <Label htmlFor={id} className="text-xs">
-        {label}
-      </Label>
+      <Label htmlFor={id} className="text-xs">{label}</Label>
       <Input
         id={id}
         type={type}
         value={value}
         autoFocus={autoFocus}
         className={mono ? "font-mono" : undefined}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(event) => onChange(event.target.value)}
       />
     </div>
   );
@@ -285,9 +298,7 @@ function NumberField({
   const id = `n-${label.replace(/\s+/g, "-").toLowerCase()}`;
   return (
     <div className="space-y-1.5">
-      <Label htmlFor={id} className="text-xs">
-        {label}
-      </Label>
+      <Label htmlFor={id} className="text-xs">{label}</Label>
       <Input
         id={id}
         type="number"
@@ -296,7 +307,7 @@ function NumberField({
         value={value}
         aria-invalid={invalid || undefined}
         className="tabular-nums"
-        onChange={(e) => onChange(e.target.value === "" ? 0 : Number(e.target.value))}
+        onChange={(event) => onChange(event.target.value === "" ? 0 : Number(event.target.value))}
       />
     </div>
   );

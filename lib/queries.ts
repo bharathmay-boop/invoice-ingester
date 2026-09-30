@@ -3,6 +3,7 @@
 import "server-only";
 import { query } from "./db.ts";
 import { normalize } from "./items/normalize.ts";
+import type { Currency } from "./format.ts";
 
 // Only confirmed invoices count towards spend. An invoice whose figures
 // disagree with themselves has no business in a total.
@@ -12,6 +13,7 @@ export type VendorRow = {
   id: string;
   name: string;
   gstin: string | null;
+  currency: Currency;
   /** Every invoice, whatever its status, so it matches the list on the page. */
   invoice_count: number;
   needs_review: number;
@@ -21,18 +23,26 @@ export type VendorRow = {
 
 export function listVendors(): Promise<VendorRow[]> {
   return query<VendorRow>(`
-    SELECT v.id, v.name, v.gstin,
+    SELECT v.id, v.name, v.gstin, coalesce(i.currency, 'INR') AS currency,
            count(i.id)::int                                       AS invoice_count,
            count(i.id) FILTER (WHERE i.status = 'needs_review')::int AS needs_review,
            coalesce(sum(i.total) FILTER (WHERE ${CONFIRMED}), 0)::float AS spend
     FROM vendor v
     LEFT JOIN invoice i ON i.vendor_id = v.id
-    GROUP BY v.id, v.name, v.gstin
-    ORDER BY spend DESC, v.name
+    GROUP BY v.id, v.name, v.gstin, coalesce(i.currency, 'INR')
+    ORDER BY spend DESC, v.name, currency
   `);
 }
 
-export type VendorDetail = VendorRow & { address: string | null };
+export type CurrencySpend = {
+  currency: Currency;
+  spend: number;
+};
+
+export type VendorDetail = Omit<VendorRow, "currency" | "spend"> & {
+  spends: CurrencySpend[];
+  address: string | null;
+};
 
 export async function getVendor(id: string): Promise<VendorDetail | null> {
   const rows = await query<VendorDetail>(
@@ -40,7 +50,18 @@ export async function getVendor(id: string): Promise<VendorDetail | null> {
     SELECT v.id, v.name, v.gstin, v.address,
            count(i.id)::int                                       AS invoice_count,
            count(i.id) FILTER (WHERE i.status = 'needs_review')::int AS needs_review,
-           coalesce(sum(i.total) FILTER (WHERE ${CONFIRMED}), 0)::float AS spend
+           (
+             SELECT coalesce(
+               jsonb_agg(jsonb_build_object('currency', grouped.currency, 'spend', grouped.spend) ORDER BY grouped.currency),
+               '[]'::jsonb
+             )
+             FROM (
+               SELECT inner.currency, sum(inner.total)::float AS spend
+               FROM invoice inner
+               WHERE inner.vendor_id = v.id AND inner.status = 'confirmed'
+               GROUP BY inner.currency
+             ) grouped
+           ) AS spends
     FROM vendor v
     LEFT JOIN invoice i ON i.vendor_id = v.id
     WHERE v.id = $1
@@ -63,13 +84,14 @@ export type InvoiceRow = Original & {
   id: string;
   invoice_number: string;
   invoice_date: string;
+  currency: Currency;
   total: number;
   status: string;
 };
 
 export function listVendorInvoices(vendorId: string): Promise<InvoiceRow[]> {
   return query<InvoiceRow>(
-    `SELECT id, invoice_number, invoice_date, total::float, status,
+    `SELECT id, invoice_number, invoice_date, currency, total::float, status,
             blob_url, content_type, first_page
      FROM invoice WHERE vendor_id = $1
      ORDER BY invoice_date DESC`,
@@ -80,6 +102,7 @@ export function listVendorInvoices(vendorId: string): Promise<InvoiceRow[]> {
 export type ItemRow = {
   id: string;
   canonical_name: string;
+  currency: Currency;
   purchases: number;
   spend: number;
   latest_price: number | null;
@@ -103,7 +126,7 @@ export function listItems(search?: string): Promise<ItemRow[]> {
 
   return query<ItemRow>(
     `
-    SELECT it.id, it.canonical_name,
+    SELECT it.id, it.canonical_name, coalesce(i.currency, 'INR') AS currency,
            count(li.id) FILTER (WHERE ${CONFIRMED})::int AS purchases,
            coalesce(sum(li.amount) FILTER (WHERE ${CONFIRMED}), 0)::float AS spend,
            (
@@ -116,8 +139,8 @@ export function listItems(search?: string): Promise<ItemRow[]> {
     LEFT JOIN line_item li ON li.item_id = it.id
     LEFT JOIN invoice i ON i.id = li.invoice_id
     ${filter}
-    GROUP BY it.id, it.canonical_name
-    ORDER BY spend DESC, it.canonical_name
+    GROUP BY it.id, it.canonical_name, coalesce(i.currency, 'INR')
+    ORDER BY spend DESC, it.canonical_name, currency
   `,
     terms.length ? [terms, search!.trim()] : [],
   );
@@ -127,6 +150,7 @@ export type PurchaseRow = Original & {
   invoice_id: string;
   invoice_number: string;
   invoice_date: string;
+  currency: Currency;
   vendor_id: string;
   vendor_name: string;
   raw_description: string;
@@ -145,7 +169,7 @@ export async function getItem(id: string) {
   if (!rows[0]) return null;
 
   const purchases = await query<PurchaseRow>(
-    `SELECT i.id AS invoice_id, i.invoice_number, i.invoice_date,
+    `SELECT i.id AS invoice_id, i.invoice_number, i.invoice_date, i.currency,
             v.id AS vendor_id, v.name AS vendor_name,
             li.raw_description, li.quantity::float, li.unit,
             li.unit_price::float, li.amount::float, i.status,
@@ -194,6 +218,7 @@ export type SuggestionRow = {
   invoice_id: string;
   invoice_number: string;
   invoice_date: string;
+  currency: Currency;
   vendor_name: string;
   quantity: number;
   unit: string | null;
@@ -212,7 +237,7 @@ export function listSuggestions(): Promise<SuggestionRow[]> {
     `SELECT s.line_item_id, s.item_id, s.score::float,
             li.raw_description, li.quantity::float, li.unit, li.unit_price::float,
             it.canonical_name,
-            i.id AS invoice_id, i.invoice_number, i.invoice_date,
+            i.id AS invoice_id, i.invoice_number, i.invoice_date, i.currency,
             v.name AS vendor_name,
             (SELECT count(*)::int FROM line_item l2 WHERE l2.item_id = it.id) AS item_purchases
      FROM match_suggestion s

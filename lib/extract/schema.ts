@@ -2,6 +2,8 @@
 // are built against this rather than the other way round.
 import { z } from "zod";
 
+import type { Currency } from "@/lib/format.ts";
+
 // 15 characters: state code, PAN, entity number, 'Z', checksum character.
 const GSTIN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 
@@ -14,6 +16,12 @@ const MAX_UNIT_PRICE = 9_999_999_999.9999; // numeric(14,4)
 const MAX_QUANTITY = 999_999_999.999; // numeric(12,3)
 
 const amount = z.number().finite().nonnegative().max(MAX_AMOUNT);
+
+const currency = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .pipe(z.enum(["INR", "USD", "EUR"] satisfies [Currency, ...Currency[]]));
 
 export const lineItemSchema = z.object({
   description: z.string().min(1),
@@ -32,6 +40,7 @@ export const extractedInvoiceSchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD")
     .refine((d) => !Number.isNaN(Date.parse(d)), "not a real date"),
+  currency,
   line_items: z.array(lineItemSchema).min(1),
   subtotal: amount,
   cgst: amount,

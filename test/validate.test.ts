@@ -19,6 +19,7 @@ function invoice(over: Partial<ExtractedInvoice> = {}): ExtractedInvoice {
     gstin: "29ABCDE1234F1Z5",
     invoice_number: "INV-1",
     invoice_date: "2026-04-11",
+    currency: "INR",
     line_items: [
       {
         description: "A4 Paper",
@@ -46,32 +47,21 @@ function invoice(over: Partial<ExtractedInvoice> = {}): ExtractedInvoice {
   };
 }
 
-const checks = (r: ReturnType<typeof validateArithmetic>) =>
-  r.discrepancies.map((d) => d.check).sort();
+const checks = (result: ReturnType<typeof validateArithmetic>) =>
+  result.discrepancies.map((discrepancy) => discrepancy.check).sort();
 
 test("every tax combination adds up", () => {
-  // No tax.
   assert.equal(validateArithmetic(invoice()).status, "confirmed");
-
-  // Intra state: CGST and SGST at 9% each.
   assert.equal(
-    validateArithmetic(
-      invoice({ cgst: 314.1, sgst: 314.1, total: 4118.2 }),
-    ).status,
+    validateArithmetic(invoice({ cgst: 314.1, sgst: 314.1, total: 4118.2 })).status,
     "confirmed",
   );
-
-  // Inter state: IGST at 18%.
   assert.equal(
     validateArithmetic(invoice({ igst: 628.2, total: 4118.2 })).status,
     "confirmed",
   );
-
-  // All three, which is unusual but arithmetically legitimate.
   assert.equal(
-    validateArithmetic(
-      invoice({ cgst: 100, sgst: 100, igst: 50, total: 3740 }),
-    ).status,
+    validateArithmetic(invoice({ cgst: 100, sgst: 100, igst: 50, total: 3740 })).status,
     "confirmed",
   );
 });
@@ -81,10 +71,10 @@ test("a subtotal that disagrees with the line items is caught", () => {
   assert.equal(result.status, "needs_review");
   assert.deepEqual(checks(result), ["line_items_sum"]);
 
-  const [d] = result.discrepancies;
-  assert.equal(d.stated, 3400);
-  assert.equal(d.computed, 3490);
-  assert.equal(d.difference, -90);
+  const [discrepancy] = result.discrepancies;
+  assert.equal(discrepancy.stated, 3400);
+  assert.equal(discrepancy.computed, 3490);
+  assert.equal(discrepancy.difference, -90);
 });
 
 test("a total that disagrees with subtotal plus taxes is caught", () => {
@@ -102,12 +92,8 @@ test("both failures are reported together, not just the first", () => {
 });
 
 test("the tolerance boundary forgives rounding and nothing more", () => {
-  // Exactly at the tolerance passes: it is the slack you allow, not the first
-  // amount you refuse.
   assert.equal(validateArithmetic(invoice({ subtotal: 3491, total: 3491 })).status, "confirmed");
   assert.equal(validateArithmetic(invoice({ subtotal: 3489, total: 3489 })).status, "confirmed");
-
-  // A paise past it does not.
   assert.equal(validateArithmetic(invoice({ subtotal: 3491.01, total: 3491.01 })).status, "needs_review");
   assert.equal(validateArithmetic(invoice({ subtotal: 3488.99, total: 3488.99 })).status, "needs_review");
 });
@@ -116,11 +102,8 @@ test("the tolerance is configurable", () => {
   const out = invoice({ subtotal: 3495, total: 3495 });
   assert.equal(validateArithmetic(out, 5).status, "confirmed");
   assert.equal(validateArithmetic(out, 4.99).status, "needs_review");
-
-  // Zero tolerance means exact.
   assert.equal(validateArithmetic(invoice(), 0).status, "confirmed");
   assert.equal(validateArithmetic(invoice({ subtotal: 3490.01, total: 3490.01 }), 0).status, "needs_review");
-
   assert.equal(DEFAULT_TOLERANCE_RUPEES, 1);
 });
 
@@ -131,7 +114,6 @@ test("a nonsense tolerance is refused rather than guessed at", () => {
 });
 
 test("paise do not drift when many lines are added", () => {
-  // 0.1 + 0.2 territory. Ten lines of 0.1 must come to exactly 1.00.
   const lines = Array.from({ length: 10 }, () => ({
     description: "Rounding bait",
     hsn_code: null,
@@ -140,16 +122,11 @@ test("paise do not drift when many lines are added", () => {
     unit_price: 0.1,
     amount: 0.1,
   }));
-  const result = validateArithmetic(
-    invoice({ line_items: lines, subtotal: 1, total: 1 }),
-    0,
-  );
+  const result = validateArithmetic(invoice({ line_items: lines, subtotal: 1, total: 1 }), 0);
   assert.equal(result.status, "confirmed");
 });
 
 test("an unrepresentable figure throws rather than passing as confirmed", () => {
-  // Without the guard: 1e307 * 100 is Infinity, Infinity minus Infinity is NaN,
-  // and NaN > tolerance is false, so this would come back confirmed.
   assert.throws(
     () => validateArithmetic(invoice({ subtotal: 1e307, total: 1e307 })),
     /too large/,
@@ -192,34 +169,30 @@ test("a placeholder invoice number is flagged", () => {
     const result = validateArithmetic(invoice({ invoice_number: number }));
     assert.deepEqual(checks(result), ["placeholder_number"], number);
   }
-  // Real numbers that merely contain those letters pass.
   for (const number of ["INV/26-27/003", "NA-1042", "0012"]) {
     assert.equal(validateArithmetic(invoice({ invoice_number: number })).status, "confirmed", number);
   }
 });
 
 test("a printed copy of an invoice in the same file is a repeat", () => {
-  const a = invoice();
+  const first = invoice();
   const copy = invoice({ invoice_number: " inv-1 " });
   const other = invoice({ invoice_number: "INV-2" });
   const sameNumberOtherSupplier = invoice({ gstin: "27ABCDE1234F1Z5" });
-  assert.deepEqual([...findRepeats([a, other, copy, sameNumberOtherSupplier])], [2]);
+  assert.deepEqual([...findRepeats([first, other, copy, sameNumberOtherSupplier])], [2]);
 });
 
 test("without a GSTIN the supplier name decides what counts as a repeat", () => {
-  const a = invoice({ gstin: null, vendor_name: "Sharma Stationers" });
+  const first = invoice({ gstin: null, vendor_name: "Sharma Stationers" });
   const copy = invoice({ gstin: null, vendor_name: " sharma stationers" });
   const other = invoice({ gstin: null, vendor_name: "Gupta Traders" });
-  assert.deepEqual([...findRepeats([a, copy, other])], [1]);
+  assert.deepEqual([...findRepeats([first, copy, other])], [1]);
 });
 
 test("a tolerance has to stay a tolerance", () => {
   for (const good of [0, 0.5, 1, 100]) {
     assert.equal(checkTolerance(good), good);
   }
-  // Negative would forgive nothing and pass everything; past the cap the check
-  // stops catching anything worth catching; NaN would make every comparison
-  // false, which reads as "everything adds up".
   for (const bad of [-1, 100.01, Number.NaN, Number.POSITIVE_INFINITY]) {
     assert.throws(() => checkTolerance(bad), /tolerance|catching/, String(bad));
   }

@@ -33,8 +33,10 @@ export default async function VendorDetail({
       <div className="grid gap-3 sm:grid-cols-3">
         <Stat
           label="Total spend"
-          value={moneyRounded(vendor.spend)}
-          note="Confirmed invoices only"
+          value={vendor.spends.map((entry) =>
+            `${moneyRounded(entry.spend, entry.currency)} ${entry.currency}`,
+          ).join(" / ") || "Nothing confirmed"}
+          note="Grouped by currency"
         />
         <Stat
           label="Invoices"
@@ -56,13 +58,13 @@ export default async function VendorDetail({
             >
               <span className="flex flex-col">
                 <span className="font-medium">{invoice.invoice_number}</span>
-                <span className="text-xs opacity-60">
-                  {formatDate(invoice.invoice_date)}
-                </span>
+                <span className="text-xs opacity-60">{formatDate(invoice.invoice_date)}</span>
               </span>
               <span className="flex items-center gap-3">
                 <StatusBadge status={invoice.status} />
-                <span className="font-semibold tabular-nums">{money(invoice.total)}</span>
+                <span className="font-semibold tabular-nums">
+                  {money(invoice.total, invoice.currency)}
+                </span>
                 {signedIn && (
                   <InvoiceOriginal
                     invoiceNumber={invoice.invoice_number}
@@ -79,9 +81,7 @@ export default async function VendorDetail({
       )}
 
       <p className="mt-8 text-sm">
-        <Link href="/vendors" className="underline">
-          All vendors
-        </Link>
+        <Link href="/vendors" className="underline">All vendors</Link>
       </p>
       <DemoNotice />
     </Page>

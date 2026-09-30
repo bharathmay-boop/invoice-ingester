@@ -126,14 +126,15 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
     const vendorId = vendor.rows[0].id;
 
     const saved = await client.query<{ id: string }>(
-      `INSERT INTO invoice (vendor_id, invoice_number, invoice_date, subtotal, cgst,
-                            sgst, igst, total, blob_url, status, extraction_meta,
-                            content_type, first_page)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+      `INSERT INTO invoice (vendor_id, invoice_number, invoice_date, currency,
+                            subtotal, cgst, sgst, igst, total, blob_url, status,
+                            extraction_meta, content_type, first_page)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
       [
         vendorId,
         invoice.invoice_number,
         invoice.invoice_date,
+        invoice.currency,
         invoice.subtotal,
         invoice.cgst,
         invoice.sgst,

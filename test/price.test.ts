@@ -18,8 +18,6 @@ const p = (
 });
 
 test("cheapest is the lowest current price, not the lowest ever charged", () => {
-  // The exact shape of the demo paper data, which is where this was wrong:
-  // Sharma once charged 254 but now charges 268, and Nandi is now cheapest.
   const purchases = [
     p("sharma", "2026-04-02", 254),
     p("sharma", "2026-07-19", 268),
@@ -84,10 +82,8 @@ test("units decide whether a comparison is allowed at all", () => {
 });
 
 test("a price too small for paise still shows a number", () => {
-  // Rs4 a kilogram is Rs0.004 a gram. The ordinary formatter shows Rs0.00,
-  // which reads as free and makes the movement figure beside it look invented.
-  assert.equal(unitMoney(0.004), "₹0.0040");
-  assert.equal(unitMoney(0.285), "₹0.29");
-  assert.equal(unitMoney(0), "₹0.00");
-  assert.match(unitMoney(0.00001), /under/);
+  assert.equal(unitMoney(0.004, "INR"), "₹0.0040");
+  assert.equal(unitMoney(0.285, "INR"), "₹0.29");
+  assert.equal(unitMoney(0, "INR"), "₹0.00");
+  assert.match(unitMoney(0.00001, "INR"), /under/);
 });

@@ -47,7 +47,7 @@ export default async function Suggestions() {
                 itemHref={`/items/${suggestion.item_id}`}
                 purchases={suggestion.item_purchases}
                 context={`${suggestion.vendor_name}, invoice ${suggestion.invoice_number}, ${formatDate(suggestion.invoice_date)}`}
-                line={`${suggestion.quantity}${suggestion.unit ? ` ${suggestion.unit}` : ""} at ${money(suggestion.unit_price)}`}
+                line={`${suggestion.quantity}${suggestion.unit ? ` ${suggestion.unit}` : ""} at ${money(suggestion.unit_price, suggestion.currency)}`}
               />
             </li>
           ))}
@@ -55,9 +55,7 @@ export default async function Suggestions() {
       )}
 
       <p className="mt-8 text-sm">
-        <Link href="/items" className="underline">
-          All items
-        </Link>
+        <Link href="/items" className="underline">All items</Link>
       </p>
     </Page>
   );

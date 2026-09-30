@@ -1,17 +1,42 @@
 // One place for money, dates and status wording. Getting Indian digit grouping
 // right in four screens by hand means getting it wrong in a fifth.
 
-const rupees = new Intl.NumberFormat("en-IN", {
-  style: "currency",
-  currency: "INR",
-  maximumFractionDigits: 2,
-});
+export type Currency = "INR" | "USD" | "EUR";
 
-const rupeesWhole = new Intl.NumberFormat("en-IN", {
-  style: "currency",
-  currency: "INR",
-  maximumFractionDigits: 0,
-});
+const moneyFormatters = new Map<Currency, Intl.NumberFormat>();
+const wholeFormatters = new Map<Currency, Intl.NumberFormat>();
+
+function moneyFormatter(currency: Currency): Intl.NumberFormat {
+  const existing = moneyFormatters.get(currency);
+  if (existing) return existing;
+
+  const formatter = new Intl.NumberFormat(currency === "INR" ? "en-IN" : "en-US", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 2,
+  });
+  moneyFormatters.set(currency, formatter);
+  return formatter;
+}
+
+function wholeFormatter(currency: Currency): Intl.NumberFormat {
+  const existing = wholeFormatters.get(currency);
+  if (existing) return existing;
+
+  const formatter = new Intl.NumberFormat(currency === "INR" ? "en-IN" : "en-US", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 0,
+  });
+  wholeFormatters.set(currency, formatter);
+  return formatter;
+}
+
+function symbolFor(currency: Currency): string {
+  return moneyFormatter(currency)
+    .formatToParts(0)
+    .find((part) => part.type === "currency")?.value ?? currency;
+}
 
 const date = new Intl.DateTimeFormat("en-IN", {
   day: "2-digit",
@@ -24,9 +49,9 @@ const shortDate = new Intl.DateTimeFormat("en-IN", {
   month: "short",
 });
 
-/** ₹2,84,600.00 — lakh grouping, not thousands. */
-export function money(value: number | string): string {
-  return rupees.format(Number(value));
+/** ₹2,84,600.00: lakh grouping, not thousands. */
+export function money(value: number | string, currency: Currency): string {
+  return moneyFormatter(currency).format(Number(value));
 }
 
 /**
@@ -36,17 +61,19 @@ export function money(value: number | string): string {
  * beside it look invented. Small numbers get the digits they need, up to a
  * point, and then a number that small is reported as such.
  */
-export function unitMoney(value: number | string): string {
+export function unitMoney(value: number | string, currency: Currency): string {
   const amount = Number(value);
-  if (!Number.isFinite(amount)) return money(0);
-  if (amount === 0 || Math.abs(amount) >= 0.01) return money(amount);
-  if (Math.abs(amount) < 0.00005) return "under ₹0.0001";
-  return `₹${amount.toFixed(4)}`;
+  if (!Number.isFinite(amount)) return money(0, currency);
+  if (amount === 0 || Math.abs(amount) >= 0.01) return money(amount, currency);
+  if (Math.abs(amount) < 0.00005) return `under ${symbolFor(currency)}0.0001`;
+  return moneyFormatter(currency).format(amount) === "-₹0.0000"
+    ? `-${symbolFor(currency)}${Math.abs(amount).toFixed(4)}`
+    : `${symbolFor(currency)}${amount.toFixed(4)}`;
 }
 
 /** ₹2,84,600 for headline figures, where the paise are noise. */
-export function moneyRounded(value: number | string): string {
-  return rupeesWhole.format(Number(value));
+export function moneyRounded(value: number | string, currency: Currency): string {
+  return wholeFormatter(currency).format(Number(value));
 }
 
 /** 04 Sep 2026 */

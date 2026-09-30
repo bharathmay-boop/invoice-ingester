@@ -35,6 +35,7 @@ const valid = {
   gstin: "29ABCDE1234F1Z5",
   invoice_number: "INV-2026-114",
   invoice_date: "2026-04-11",
+  currency: "INR",
   line_items: [
     {
       description: "A4 Paper 500 Sheets",
@@ -71,6 +72,8 @@ test("each malformed variant fails with a readable error", () => {
     ["bad date format", { ...valid, invoice_date: "11/04/2026" }, /invoice_date/],
     ["impossible date", { ...valid, invoice_date: "2026-13-45" }, /invoice_date/],
     ["empty invoice number", { ...valid, invoice_number: "" }, /invoice_number/],
+    ["no currency", { ...valid, currency: undefined }, /currency/],
+    ["unsupported currency", { ...valid, currency: "GBP" }, /currency/],
     ["no line items", { ...valid, line_items: [] }, /line_items/],
     ["negative total", { ...valid, total: -1 }, /total/],
     ["string amount", { ...valid, subtotal: "2855" }, /subtotal/],
@@ -88,6 +91,12 @@ test("each malformed variant fails with a readable error", () => {
   }
 });
 
+test("currency is stored as an uppercase canonical code", () => {
+  const result = parseExtraction({ ...valid, currency: "eur" });
+  assert.equal(result.ok, true);
+  assert.equal(result.ok && result.data.currency, "EUR");
+});
+
 test("the provider JSON schema covers every field", () => {
   type Node = { properties?: Record<string, Node>; items?: Node };
   const top = extractionJsonSchema as Node;
@@ -95,12 +104,16 @@ test("the provider JSON schema covers every field", () => {
   const found = top.properties?.invoices.items?.properties ?? {};
   assert.deepEqual(Object.keys(found), ["first_page", "last_page", "invoice"]);
   assert.deepEqual(Object.keys(found.invoice.properties ?? {}).sort(), [
-    "cgst", "gstin", "igst", "invoice_date", "invoice_number",
+    "cgst", "currency", "gstin", "igst", "invoice_date", "invoice_number",
     "line_items", "sgst", "subtotal", "total", "vendor_name",
   ]);
 });
 
-const at = (first_page: number, last_page: number, invoice = valid) => ({ first_page, last_page, invoice });
+const at = (first_page: number, last_page: number, invoice = valid) => ({
+  first_page,
+  last_page,
+  invoice,
+});
 
 test("a file the model declines is not an invoice, not a failure", () => {
   const photo = { reason: "A product photo of a chocolate box.", is_invoice: false, invoices: [] };
@@ -127,7 +140,7 @@ test("every invoice in the file comes through, with its pages, in order", () => 
   assert.equal(result.ok, true);
   if (!result.ok) return;
   assert.deepEqual(
-    result.invoices.map((f) => [f.invoice.invoice_number, f.first_page, f.last_page]),
+    result.invoices.map((found) => [found.invoice.invoice_number, found.first_page, found.last_page]),
     [[valid.invoice_number, 1, 2], ["INV-2", 3, 3]],
   );
 });
@@ -188,7 +201,7 @@ test("the stored form gives nothing away", () => {
 
 test("unsealing fails rather than returning something wrong", () => {
   const sealed = seal("anthropic_api_key", KEY);
-  const [v, iv, tag, body] = sealed.split(".");
+  const [version, iv, tag, body] = sealed.split(".");
 
   // Ciphertext moved to a different setting.
   assert.throws(() => unseal("openrouter_api_key", sealed));
@@ -197,14 +210,14 @@ test("unsealing fails rather than returning something wrong", () => {
   const flipped = Buffer.from(body, "base64url");
   flipped[0] ^= 0xff;
   assert.throws(() =>
-    unseal("anthropic_api_key", [v, iv, tag, flipped.toString("base64url")].join(".")),
+    unseal("anthropic_api_key", [version, iv, tag, flipped.toString("base64url")].join(".")),
   );
 
   // Tag edited.
   const badTag = Buffer.from(tag, "base64url");
   badTag[0] ^= 0xff;
   assert.throws(() =>
-    unseal("anthropic_api_key", [v, iv, badTag.toString("base64url"), body].join(".")),
+    unseal("anthropic_api_key", [version, iv, badTag.toString("base64url"), body].join(".")),
   );
 
   // Not a sealed value at all.
@@ -212,7 +225,7 @@ test("unsealing fails rather than returning something wrong", () => {
 });
 
 test("a truncated authentication tag is refused, not accepted weakly", () => {
-  const [v, iv, tag, body] = seal("anthropic_api_key", KEY).split(".");
+  const [version, iv, tag, body] = seal("anthropic_api_key", KEY).split(".");
 
   // GCM will accept 4, 8, 12, 13, 14 and 15 byte tags. Every one of them is
   // weaker than the 16 byte tag seal produces, so all of them must be refused
@@ -220,7 +233,7 @@ test("a truncated authentication tag is refused, not accepted weakly", () => {
   for (const size of [4, 8, 12, 13, 14, 15]) {
     const short = Buffer.from(tag, "base64url").subarray(0, size);
     assert.throws(
-      () => unseal("anthropic_api_key", [v, iv, short.toString("base64url"), body].join(".")),
+      () => unseal("anthropic_api_key", [version, iv, short.toString("base64url"), body].join(".")),
       /authentication tag size/,
       `a ${size} byte tag should have been refused`,
     );
@@ -229,7 +242,7 @@ test("a truncated authentication tag is refused, not accepted weakly", () => {
   // A resized IV is the same class of problem.
   const shortIv = Buffer.from(iv, "base64url").subarray(0, 8);
   assert.throws(
-    () => unseal("anthropic_api_key", [v, shortIv.toString("base64url"), tag, body].join(".")),
+    () => unseal("anthropic_api_key", [version, shortIv.toString("base64url"), tag, body].join(".")),
     /iv or authentication tag size/,
   );
 });

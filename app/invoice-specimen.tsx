@@ -69,7 +69,7 @@ export function InvoiceSpecimen() {
           </span>
         </div>
         <p className="mt-2 px-3 text-xs text-amber-800 dark:text-amber-300">
-          The line items come to {money(lineTotal)}. This invoice is held, not counted.
+          The line items come to {money(lineTotal, "INR")}. This invoice is held, not counted.
         </p>
 
         <dl className="mt-3 space-y-1 px-3 text-sm">

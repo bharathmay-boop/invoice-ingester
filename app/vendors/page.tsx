@@ -21,7 +21,7 @@ export default async function Vendors() {
       ) : (
         <ul className="divide-y divide-black/10 dark:divide-white/15">
           {vendors.map((vendor) => (
-            <li key={vendor.id}>
+            <li key={`${vendor.id}-${vendor.currency}`}>
               <Link
                 href={`/vendors/${vendor.id}`}
                 className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-4 hover:opacity-80"
@@ -33,10 +33,11 @@ export default async function Vendors() {
                   </span>
                 </span>
                 <span className="flex flex-col items-end">
-                  <span className="font-semibold tabular-nums">{money(vendor.spend)}</span>
+                  <span className="font-semibold tabular-nums">
+                    {money(vendor.spend, vendor.currency)} {vendor.currency}
+                  </span>
                   <span className="text-xs opacity-60">
-                    {vendor.invoice_count}{" "}
-                    {vendor.invoice_count === 1 ? "invoice" : "invoices"}
+                    {vendor.invoice_count} {vendor.invoice_count === 1 ? "invoice" : "invoices"}
                     {vendor.needs_review > 0 && `, ${vendor.needs_review} to check`}
                   </span>
                 </span>
