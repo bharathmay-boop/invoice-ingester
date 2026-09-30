@@ -68,7 +68,6 @@ export default async function Items({
                   <span className="font-medium">{item.canonical_name}</span>
                   <span className="text-xs opacity-60">
                     {item.purchases} {item.purchases === 1 ? "purchase" : "purchases"}
-                    {item.currency}
                     {item.latest_price !== null &&
                       `, last at ${money(item.latest_price, item.currency)}`}
                   </span>

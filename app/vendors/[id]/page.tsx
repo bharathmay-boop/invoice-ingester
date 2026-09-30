@@ -34,7 +34,7 @@ export default async function VendorDetail({
         <Stat
           label="Total spend"
           value={vendor.spends.map((entry) =>
-            `${moneyRounded(entry.spend, entry.currency)} ${entry.currency}`,
+            moneyRounded(entry.spend, entry.currency),
           ).join(" / ") || "Nothing confirmed"}
           note="Grouped by currency"
         />

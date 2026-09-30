@@ -34,7 +34,7 @@ export default async function Vendors() {
                 </span>
                 <span className="flex flex-col items-end">
                   <span className="font-semibold tabular-nums">
-                    {money(vendor.spend, vendor.currency)} {vendor.currency}
+                    {money(vendor.spend, vendor.currency)}
                   </span>
                   <span className="text-xs opacity-60">
                     {vendor.invoice_count} {vendor.invoice_count === 1 ? "invoice" : "invoices"}
