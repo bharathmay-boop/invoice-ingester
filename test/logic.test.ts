@@ -38,6 +38,8 @@ test("normalisation is stable and order independent", () => {
 const valid = {
   vendor_name: "Sharma Stationers",
   tax_id: "29ABCDE1234F1Z5",
+  tax_id_kind: "gstin" as const,
+  vendor_address: "2nd Floor, C Wing, Worli, Mumbai 400030",
   invoice_number: "INV-2026-114",
   invoice_date: "2026-04-11",
   currency: "INR",
@@ -67,7 +69,10 @@ test("a valid payload parses", () => {
 });
 
 test("nullable fields accept null but not absence", () => {
-  assert.equal(parseExtraction({ ...valid, tax_id: null }).ok, true);
+  // Nulled as a pair. A tax number with no kind, or a kind with no number, is
+  // refused by its own rule, which has a case of its own below.
+  assert.equal(parseExtraction({ ...valid, tax_id: null, tax_id_kind: null }).ok, true);
+  assert.equal(parseExtraction({ ...valid, vendor_address: null }).ok, true);
   assert.equal(
     parseExtraction({
       ...valid,
@@ -204,9 +209,11 @@ test("the provider JSON schema covers every field", () => {
     "line_items",
     "subtotal",
     "tax_id",
+    "tax_id_kind",
     "taxes",
     "taxes_read",
     "total",
+    "vendor_address",
     "vendor_name",
   ]);
 });

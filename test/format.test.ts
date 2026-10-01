@@ -36,6 +36,8 @@ test("an invoice without a readable currency is refused", () => {
   const result = parseExtraction({
     vendor_name: "Example Traders",
     tax_id: null,
+    tax_id_kind: null,
+    vendor_address: null,
     invoice_number: "INV-1",
     invoice_date: "2026-09-04",
     line_items: [
@@ -62,6 +64,8 @@ test("currency is canonicalized to uppercase before it is accepted", () => {
   const result = parseExtraction({
     vendor_name: "Example Traders",
     tax_id: null,
+    tax_id_kind: null,
+    vendor_address: null,
     invoice_number: "INV-2",
     invoice_date: "2026-09-04",
     currency: "eur",
@@ -91,6 +95,8 @@ test("a rate printed as text is taken rather than throwing the invoice away", ()
   const base = {
     vendor_name: "Bradley-Andrade",
     tax_id: "985-73-8194",
+    tax_id_kind: "ein",
+    vendor_address: "9879 Elizabeth Common, Lake Jonathan, RI 12335",
     invoice_number: "97159829",
     invoice_date: "2015-09-18",
     currency: "USD",
@@ -119,6 +125,8 @@ test("a tax row charging nothing is not carried through", () => {
   const result = parseExtraction({
     vendor_name: "Krish Cars",
     tax_id: "27AADCK4616L1ZC",
+    tax_id_kind: "gstin",
+    vendor_address: "Andheri East, Mumbai 400059",
     invoice_number: "HOA/SAVS/21/145",
     invoice_date: "2021-10-16",
     currency: "INR",
@@ -145,6 +153,8 @@ test("a product code does not have to look like an HSN", () => {
   const result = parseExtraction({
     vendor_name: "Bradley-Andrade",
     tax_id: null,
+    tax_id_kind: null,
+    vendor_address: null,
     invoice_number: "97159829",
     invoice_date: "2015-09-18",
     currency: "EUR",

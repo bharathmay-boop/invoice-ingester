@@ -16,7 +16,9 @@ import type { ExtractedInvoice } from "../lib/extract/schema.ts";
 function invoice(over: Partial<ExtractedInvoice> = {}): ExtractedInvoice {
   return {
     vendor_name: "Sharma Stationers",
+    vendor_address: "12 Station Road, Bengaluru 560001",
     tax_id: "29ABCDE1234F1Z5",
+    tax_id_kind: "gstin",
     invoice_number: "INV-1",
     invoice_date: "2026-04-11",
     currency: "INR",
@@ -201,9 +203,9 @@ test("a printed copy of an invoice in the same file is a repeat", () => {
 });
 
 test("without a vendor tax number the supplier name decides what counts as a repeat", () => {
-  const first = invoice({ tax_id: null, vendor_name: "Sharma Stationers" });
-  const copy = invoice({ tax_id: null, vendor_name: " sharma stationers" });
-  const other = invoice({ tax_id: null, vendor_name: "Gupta Traders" });
+  const first = invoice({ tax_id: null, tax_id_kind: null, vendor_name: "Sharma Stationers" });
+  const copy = invoice({ tax_id: null, tax_id_kind: null, vendor_name: " sharma stationers" });
+  const other = invoice({ tax_id: null, tax_id_kind: null, vendor_name: "Gupta Traders" });
   assert.deepEqual([...findRepeats([first, copy, other])], [1]);
 });
 

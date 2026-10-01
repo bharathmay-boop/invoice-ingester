@@ -20,7 +20,9 @@ test("every invoice agrees with the status it claims", () => {
   for (const invoice of invoices) {
     const result = validateArithmetic({
       vendor_name: "",
+      vendor_address: null,
       tax_id: invoice.gstin,
+      tax_id_kind: "gstin",
       invoice_number: invoice.number,
       invoice_date: invoice.date,
       currency: "INR",

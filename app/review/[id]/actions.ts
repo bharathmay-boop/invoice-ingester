@@ -9,6 +9,7 @@ import { parseExtraction } from "@/lib/extract/schema.ts";
 import { validateArithmetic, DEFAULT_TOLERANCE_RUPEES } from "@/lib/extract/validate.ts";
 import { getSetting } from "@/lib/settings/store.ts";
 import { normalize } from "@/lib/items/normalize.ts";
+import { normalizeAddress, normalizeTaxId } from "@/lib/vendors/normalize.ts";
 import { getThresholds } from "@/lib/items/match.ts";
 import { saveLine } from "@/lib/items/save-line.ts";
 import { releaseDraft } from "@/lib/blob.ts";
@@ -50,6 +51,9 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
     return { ok: false, message: parsed.error };
   }
   const invoice = parsed.data;
+  const normalizedName = normalize(invoice.vendor_name);
+  const normalizedAddress = normalizeAddress(invoice.vendor_address ?? "");
+  const normalizedTaxId = invoice.tax_id ? normalizeTaxId(invoice.tax_id) : null;
 
   const tolerance = (await getSetting<number>("rounding_tolerance")) ?? DEFAULT_TOLERANCE_RUPEES;
   // Re-checked on the edited figures, not the extracted ones: correcting one
@@ -102,26 +106,33 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
     const draft = claimed.rows[0];
     blobUrl = draft.blob_url;
 
-    // The database still has the historical gstin column. The generic
-    // extraction value is stored there until the vendor tax number migration
-    // can replace that column without breaking the deployed build.
     const vendor = invoice.tax_id
       ? await client.query<{ id: string }>(
-          `INSERT INTO vendor (gstin, name, normalized_name)
-           VALUES ($1, $2, $3)
-           ON CONFLICT (gstin) DO UPDATE SET name = EXCLUDED.name
+          `INSERT INTO vendor
+             (tax_id, tax_id_kind, normalized_tax_id, name, normalized_name,
+              address, normalized_address)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (tax_id_kind, normalized_tax_id) WHERE tax_id IS NOT NULL
+           DO UPDATE SET name = EXCLUDED.name
            RETURNING id`,
-          [invoice.tax_id, invoice.vendor_name, normalize(invoice.vendor_name)],
+          [
+            invoice.tax_id,
+            invoice.tax_id_kind,
+            normalizedTaxId,
+            invoice.vendor_name,
+            normalizedName,
+            invoice.vendor_address,
+            normalizedAddress,
+          ],
         )
       : await client.query<{ id: string }>(
-          // Reused by name, so the invoice constraint below can see the same
-          // supplier twice. The no-op update is there so RETURNING hands back
-          // the existing row's id.
-          `INSERT INTO vendor (name, normalized_name) VALUES ($1, $2)
-           ON CONFLICT (normalized_name) WHERE gstin IS NULL
+          `INSERT INTO vendor
+             (name, normalized_name, address, normalized_address)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (normalized_name, normalized_address) WHERE tax_id IS NULL
            DO UPDATE SET name = vendor.name
            RETURNING id`,
-          [invoice.vendor_name, normalize(invoice.vendor_name)],
+          [invoice.vendor_name, normalizedName, invoice.vendor_address, normalizedAddress],
         );
 
     const vendorId = vendor.rows[0].id;
@@ -164,12 +175,21 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
     if (typeof error === "object" && error && "code" in error && error.code === "23505") {
       const [existing] = await query<{ id: string }>(
         `SELECT i.id FROM invoice i JOIN vendor v ON v.id = i.vendor_id
-         WHERE i.invoice_number = $2
-           AND CASE WHEN $1::text IS NOT NULL THEN v.gstin = $1
-                    ELSE v.gstin IS NULL
-                         AND (v.normalized_name = $3 OR v.normalized_name LIKE $3 || ' (separate %')
-                    END`,
-        [invoice.tax_id, invoice.invoice_number, normalize(invoice.vendor_name)],
+         WHERE i.invoice_number = $5
+           AND CASE WHEN $1::text IS NOT NULL
+                    THEN v.tax_id_kind = $2 AND v.normalized_tax_id = $3
+                    ELSE v.tax_id IS NULL
+                         AND v.normalized_name = $4
+                         AND v.normalized_address = $6
+                   END`,
+        [
+          invoice.tax_id,
+          invoice.tax_id_kind,
+          normalizedTaxId,
+          normalizedName,
+          invoice.invoice_number,
+          normalizedAddress,
+        ],
       );
       return {
         ok: false,

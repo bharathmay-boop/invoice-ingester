@@ -4,15 +4,17 @@ import "server-only";
 import { query } from "./db.ts";
 import { normalize } from "./items/normalize.ts";
 import type { Currency } from "./format.ts";
+import type { TaxIdKind } from "./extract/schema.ts";
 
 // Only confirmed invoices count towards spend. An invoice whose figures
-// disagree with themselves has no business in a total.
+// disagree with itself has no business in a total.
 const CONFIRMED = "i.status = 'confirmed'";
 
 export type VendorRow = {
   id: string;
   name: string;
-  gstin: string | null;
+  tax_id: string | null;
+  tax_id_kind: TaxIdKind | null;
   currency: Currency;
   /** Every invoice, whatever its status, so it matches the list on the page. */
   invoice_count: number;
@@ -23,13 +25,14 @@ export type VendorRow = {
 
 export function listVendors(): Promise<VendorRow[]> {
   return query<VendorRow>(`
-    SELECT v.id, v.name, v.gstin, coalesce(i.currency, 'INR') AS currency,
+    SELECT v.id, v.name, v.tax_id, v.tax_id_kind,
+           coalesce(i.currency, 'INR') AS currency,
            count(i.id)::int                                       AS invoice_count,
            count(i.id) FILTER (WHERE i.status = 'needs_review')::int AS needs_review,
            coalesce(sum(i.total) FILTER (WHERE ${CONFIRMED}), 0)::float AS spend
     FROM vendor v
     LEFT JOIN invoice i ON i.vendor_id = v.id
-    GROUP BY v.id, v.name, v.gstin, coalesce(i.currency, 'INR')
+    GROUP BY v.id, v.name, v.tax_id, v.tax_id_kind, coalesce(i.currency, 'INR')
     ORDER BY spend DESC, v.name, currency
   `);
 }
@@ -47,7 +50,7 @@ export type VendorDetail = Omit<VendorRow, "currency" | "spend"> & {
 export async function getVendor(id: string): Promise<VendorDetail | null> {
   const rows = await query<VendorDetail>(
     `
-    SELECT v.id, v.name, v.gstin, v.address,
+    SELECT v.id, v.name, v.tax_id, v.tax_id_kind, v.address,
            count(i.id)::int                                       AS invoice_count,
            count(i.id) FILTER (WHERE i.status = 'needs_review')::int AS needs_review,
            (
@@ -65,7 +68,7 @@ export async function getVendor(id: string): Promise<VendorDetail | null> {
     FROM vendor v
     LEFT JOIN invoice i ON i.vendor_id = v.id
     WHERE v.id = $1
-    GROUP BY v.id, v.name, v.gstin, v.address
+    GROUP BY v.id, v.name, v.tax_id, v.tax_id_kind, v.address
   `,
     [id],
   );

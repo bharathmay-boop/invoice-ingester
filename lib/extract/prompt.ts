@@ -33,6 +33,16 @@ items, return what is printed and let the checks downstream catch it. Inventing
 a plausible number is the worst thing you can do here.
 
 - invoice_date must be YYYY-MM-DD.
+- vendor_address is the seller's printed business or billing address, or null
+  when no seller address can be read. Do not return the buyer's address here.
+- tax_id is the seller's printed tax registration number, such as a GSTIN,
+  VAT number, EIN, or sales tax registration. A tax number printed only for
+  the buyer must not be returned. If the seller has no readable tax number,
+  set both tax_id and tax_id_kind to null.
+- tax_id_kind says what registration the model actually read and must be
+  exactly one of "gstin", "vat", or "ein". It must be set when tax_id is set
+  and null when tax_id is null. Do not infer it from the country, currency, or
+  tax labels when the document does not identify the registration.
 - currency is INR, USD or EUR, read from the invoice itself: the symbol on the
   amounts, a currency code beside them, or the country the vendor bills from.
   Do not assume rupees because other invoices were Indian. If the document is
@@ -40,9 +50,6 @@ a plausible number is the worst thing you can do here.
   reason and set is_invoice to false rather than choosing one, because a figure
   filed under the wrong currency is compared against prices it has nothing to
   do with.
-- tax_id is the vendor's printed tax number, such as a GSTIN, VAT number, or
-  sales tax number, or null if none is printed. Do not look for a GSTIN on a
-  document from another country.
 - item_code is the printed generic item or product code, or null if none is
   printed. Do not call it HSN unless the document prints HSN.
 - taxes is one entry for every tax line printed on the invoice. Use its

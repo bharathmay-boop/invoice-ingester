@@ -68,10 +68,14 @@ export const taxSchema = z.object({
   included: z.boolean(),
 });
 
+export const taxIdKindSchema = z.enum(["gstin", "vat", "ein"]);
+
 export const extractedInvoiceSchema = z
   .object({
     vendor_name: z.string().min(1),
+    vendor_address: z.string().min(1).nullable(),
     tax_id: z.string().min(1).nullable(),
+    tax_id_kind: taxIdKindSchema.nullable(),
     invoice_number: z.string().min(1),
     invoice_date: z
       .string()
@@ -84,12 +88,20 @@ export const extractedInvoiceSchema = z
     taxes_read: z.boolean(),
     total: amount,
   })
+  .refine(
+    (invoice) => (invoice.tax_id === null) === (invoice.tax_id_kind === null),
+    {
+      message: "tax_id and tax_id_kind must either both be present or both be null",
+      path: ["tax_id"],
+    },
+  )
   .refine((invoice) => invoice.taxes_read || invoice.taxes.length === 0, {
     message: "taxes must be empty when the tax area could not be read",
     path: ["taxes"],
   });
 
 export type ExtractedLineItem = z.infer<typeof lineItemSchema>;
+export type TaxIdKind = z.infer<typeof taxIdKindSchema>;
 
 /**
  * What the wire allows, and then what the rest of the app gets.

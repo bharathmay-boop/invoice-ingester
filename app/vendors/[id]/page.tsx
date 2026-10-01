@@ -9,6 +9,9 @@ import { DemoNotice, Empty, Page, Stat, StatusBadge } from "../../ui.tsx";
 
 export const dynamic = "force-dynamic";
 
+const taxLabel = (kind: "gstin" | "vat" | "ein" | null) =>
+  kind === "gstin" ? "GSTIN" : kind === "vat" ? "VAT number" : kind === "ein" ? "EIN" : "Tax number";
+
 export default async function VendorDetail({
   params,
 }: {
@@ -43,7 +46,10 @@ export default async function VendorDetail({
           value={String(vendor.invoice_count)}
           note={vendor.needs_review > 0 ? `${vendor.needs_review} need checking` : "All checked"}
         />
-        <Stat label="GSTIN" value={vendor.gstin ?? "Not on file"} />
+        <Stat
+          label={taxLabel(vendor.tax_id_kind)}
+          value={vendor.tax_id ?? "Not on file"}
+        />
       </div>
 
       <h2 className="mt-10 text-lg font-semibold">Invoices</h2>
