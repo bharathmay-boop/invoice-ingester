@@ -33,6 +33,13 @@ items, return what is printed and let the checks downstream catch it. Inventing
 a plausible number is the worst thing you can do here.
 
 - invoice_date must be YYYY-MM-DD.
+- currency is INR, USD or EUR, read from the invoice itself: the symbol on the
+  amounts, a currency code beside them, or the country the vendor bills from.
+  Do not assume rupees because other invoices were Indian. If the document is
+  in a currency this does not list, or you cannot tell which it is, say so in
+  reason and set is_invoice to false rather than choosing one, because a figure
+  filed under the wrong currency is compared against prices it has nothing to
+  do with.
 - tax_id is the vendor's printed tax number, such as a GSTIN, VAT number, or
   sales tax number, or null if none is printed. Do not look for a GSTIN on a
   document from another country.
