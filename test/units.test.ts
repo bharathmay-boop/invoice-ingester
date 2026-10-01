@@ -46,12 +46,16 @@ test("an unconvertible unit gives no answer rather than a wrong one", () => {
   assert.equal(toBaseUnit("kg", -1), null);
 });
 
+// Every case here is about units, so they all share one currency. Mixing them
+// would short circuit `comparePrices` on the currency check before it ever
+// looked at a unit, and these tests would pass for the wrong reason.
 const buy = (vendor: string, unit: string | null, price: number, date = "2026-04-01") => ({
   vendor_id: vendor,
   vendor_name: vendor,
   unit,
   unit_price: price,
   invoice_date: date,
+  currency: "INR" as const,
 });
 
 test("the same product bought by the kilo and by the gram is one comparison", () => {

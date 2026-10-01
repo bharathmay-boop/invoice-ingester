@@ -2,24 +2,25 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { unitMoney } from "../lib/format.ts";
 
-import { cheapestVendorNow, unitsAreComparable } from "../lib/price.ts";
+import { cheapestVendorNow, comparePrices, unitsAreComparable } from "../lib/price.ts";
+import type { Currency } from "../lib/format.ts";
 
 const p = (
   vendor: string,
   date: string,
   unit_price: number,
   unit: string | null = "ream",
+  currency: Currency = "INR",
 ) => ({
   vendor_id: vendor,
   vendor_name: vendor,
   invoice_date: date,
   unit_price,
   unit,
+  currency,
 });
 
 test("cheapest is the lowest current price, not the lowest ever charged", () => {
-  // The exact shape of the demo paper data, which is where this was wrong:
-  // Sharma once charged 254 but now charges 268, and Nandi is now cheapest.
   const purchases = [
     p("sharma", "2026-04-02", 254),
     p("sharma", "2026-07-19", 268),
@@ -84,10 +85,39 @@ test("units decide whether a comparison is allowed at all", () => {
 });
 
 test("a price too small for paise still shows a number", () => {
-  // Rs4 a kilogram is Rs0.004 a gram. The ordinary formatter shows Rs0.00,
-  // which reads as free and makes the movement figure beside it look invented.
-  assert.equal(unitMoney(0.004), "₹0.0040");
-  assert.equal(unitMoney(0.285), "₹0.29");
-  assert.equal(unitMoney(0), "₹0.00");
-  assert.match(unitMoney(0.00001), /under/);
+  assert.equal(unitMoney(0.004, "INR"), "₹0.0040");
+  assert.equal(unitMoney(0.285, "INR"), "₹0.29");
+  assert.equal(unitMoney(0, "INR"), "₹0.00");
+  assert.match(unitMoney(0.00001, "INR"), /under/);
+});
+
+// The screens group by currency before they ask, so this is unreachable from
+// the app today. It exists because the alternative to checking here is every
+// caller remembering to, and the failure is silent: a cheapest vendor picked
+// by comparing a rupee figure with a euro one looks exactly like a right one.
+test("prices in two currencies are not compared, and no vendor is named", () => {
+  const purchases = [
+    p("sharma", "2026-04-02", 254, "kg", "INR"),
+    p("brussels", "2026-05-11", 12, "kg", "EUR"),
+  ];
+
+  const comparison = comparePrices(purchases);
+  assert.equal(comparison.comparable, false);
+  if (!comparison.comparable) {
+    assert.match(comparison.reason, /EUR and INR/);
+    assert.match(comparison.reason, /not compared/i);
+  }
+
+  assert.equal(cheapestVendorNow(purchases), null);
+  assert.equal(unitsAreComparable(purchases), false);
+});
+
+test("one currency in convertible units still compares", () => {
+  const purchases = [
+    p("sharma", "2026-04-02", 254, "kg", "INR"),
+    p("nandi", "2026-05-11", 0.2, "g", "INR"),
+  ];
+
+  assert.equal(comparePrices(purchases).comparable, true);
+  assert.equal(cheapestVendorNow(purchases)?.vendor_id, "nandi");
 });

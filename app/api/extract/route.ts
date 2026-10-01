@@ -18,6 +18,7 @@ import {
 import type { ExtractedInvoice } from "@/lib/extract/schema.ts";
 import { MAX_INVOICES_PER_FILE } from "@/lib/upload.ts";
 import { normalize } from "@/lib/items/normalize.ts";
+import { normalizeAddress, normalizeTaxId } from "@/lib/vendors/normalize.ts";
 import { countPages } from "@/lib/pdf.ts";
 import { recordExtraction } from "@/lib/usage.ts";
 import { trackError } from "@/lib/analytics/server.ts";
@@ -27,23 +28,32 @@ export const runtime = "nodejs";
 export const maxDuration = 120;
 
 /**
- * Whether this supplier's invoice number is already stored. Matched on GSTIN
- * where there is one, and on the normalised name otherwise, the same way the
- * save path finds the vendor. The name match includes the rows migration 010
- * renamed apart, whose invoices are this supplier's too and would otherwise be
- * invisible here and savable a second time. Saving it again would fail on the unique
- * constraint anyway; this says so before anyone spends time reviewing it.
+ * Whether this supplier's invoice number is already stored. Matched on the
+ * normalized vendor identity used by the save path, so formatting differences
+ * do not turn the same registration or address into a second supplier.
  */
 async function alreadySaved(invoice: ExtractedInvoice): Promise<boolean> {
+  const normalizedName = normalize(invoice.vendor_name);
+  const normalizedAddress = normalizeAddress(invoice.vendor_address ?? "");
+  const normalizedTaxId = invoice.tax_id ? normalizeTaxId(invoice.tax_id) : null;
   const rows = await query(
     `SELECT 1 FROM invoice i JOIN vendor v ON v.id = i.vendor_id
      WHERE i.invoice_number = $1
-       AND CASE WHEN $2::text IS NOT NULL THEN v.gstin = $2
-                ELSE v.gstin IS NULL
-                     AND (v.normalized_name = $3 OR v.normalized_name LIKE $3 || ' (separate %')
-                END
+       AND CASE WHEN $2::text IS NOT NULL
+                THEN v.tax_id_kind = $3 AND v.normalized_tax_id = $4
+                ELSE v.tax_id IS NULL
+                     AND v.normalized_name = $5
+                     AND v.normalized_address = $6
+           END
      LIMIT 1`,
-    [invoice.invoice_number, invoice.gstin, normalize(invoice.vendor_name)],
+    [
+      invoice.invoice_number,
+      invoice.tax_id,
+      invoice.tax_id_kind,
+      normalizedTaxId,
+      normalizedName,
+      normalizedAddress,
+    ],
   );
   return rows.length > 0;
 }
@@ -191,7 +201,6 @@ export async function POST(request: NextRequest) {
       drafts: drafts.map(({ found, discrepancies }, i) => ({
         id: ids[i],
         firstPage: found.first_page,
-        lastPage: found.last_page,
         summary: discrepancies.length
           ? `${found.invoice.invoice_number}: ${discrepancies.map(describeDiscrepancy).join(" ")}`
           : `${found.invoice.vendor_name}, ${found.invoice.invoice_number}, ${found.invoice.line_items.length} line items. The figures add up.`,

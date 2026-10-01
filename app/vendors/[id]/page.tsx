@@ -9,6 +9,9 @@ import { DemoNotice, Empty, Page, Stat, StatusBadge } from "../../ui.tsx";
 
 export const dynamic = "force-dynamic";
 
+const taxLabel = (kind: "gstin" | "vat" | "ein" | null) =>
+  kind === "gstin" ? "GSTIN" : kind === "vat" ? "VAT number" : kind === "ein" ? "EIN" : "Tax number";
+
 export default async function VendorDetail({
   params,
 }: {
@@ -33,15 +36,20 @@ export default async function VendorDetail({
       <div className="grid gap-3 sm:grid-cols-3">
         <Stat
           label="Total spend"
-          value={moneyRounded(vendor.spend)}
-          note="Confirmed invoices only"
+          value={vendor.spends.map((entry) =>
+            moneyRounded(entry.spend, entry.currency),
+          ).join(" / ") || "Nothing confirmed"}
+          note="Grouped by currency"
         />
         <Stat
           label="Invoices"
           value={String(vendor.invoice_count)}
           note={vendor.needs_review > 0 ? `${vendor.needs_review} need checking` : "All checked"}
         />
-        <Stat label="GSTIN" value={vendor.gstin ?? "Not on file"} />
+        <Stat
+          label={taxLabel(vendor.tax_id_kind)}
+          value={vendor.tax_id ?? "Not on file"}
+        />
       </div>
 
       <h2 className="mt-10 text-lg font-semibold">Invoices</h2>
@@ -56,13 +64,13 @@ export default async function VendorDetail({
             >
               <span className="flex flex-col">
                 <span className="font-medium">{invoice.invoice_number}</span>
-                <span className="text-xs opacity-60">
-                  {formatDate(invoice.invoice_date)}
-                </span>
+                <span className="text-xs opacity-60">{formatDate(invoice.invoice_date)}</span>
               </span>
               <span className="flex items-center gap-3">
                 <StatusBadge status={invoice.status} />
-                <span className="font-semibold tabular-nums">{money(invoice.total)}</span>
+                <span className="font-semibold tabular-nums">
+                  {money(invoice.total, invoice.currency)}
+                </span>
                 {signedIn && (
                   <InvoiceOriginal
                     invoiceNumber={invoice.invoice_number}
@@ -79,9 +87,7 @@ export default async function VendorDetail({
       )}
 
       <p className="mt-8 text-sm">
-        <Link href="/vendors" className="underline">
-          All vendors
-        </Link>
+        <Link href="/vendors" className="underline">All vendors</Link>
       </p>
       <DemoNotice />
     </Page>

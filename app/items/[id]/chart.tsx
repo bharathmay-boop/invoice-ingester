@@ -1,6 +1,6 @@
-import { formatDateShort, unitMoney } from "@/lib/format.ts";
+import { formatDateShort, unitMoney, type Currency } from "@/lib/format.ts";
 
-export type Point = { date: string; price: number; vendor: string };
+export type Point = { date: string; price: number; vendor: string; currency: Currency };
 
 // Narrow-ish and capped below, because an SVG scales its text with its box:
 // too wide a viewBox and the axis labels shrink to nothing on a phone.
@@ -49,7 +49,7 @@ export function PriceChart({ points }: { points: Point[] }) {
         viewBox={`0 0 ${W} ${H}`}
         className="h-auto w-full max-w-[520px] text-[#0B6BCB] dark:text-[#4A93E8]"
         role="img"
-        aria-label={`Unit price from ${unitMoney(first.price)} on ${formatDateShort(first.date)} to ${unitMoney(last.price)} on ${formatDateShort(last.date)}. Every value is listed in the table below.`}
+        aria-label={`Unit price from ${unitMoney(first.price, first.currency)} on ${formatDateShort(first.date)} to ${unitMoney(last.price, last.currency)} on ${formatDateShort(last.date)}. Every value is listed in the table below.`}
       >
         {/* Recessive gridlines: three ticks, ink tokens at low opacity. */}
         {[rawMin, (rawMin + rawMax) / 2, rawMax].map((value) => (
@@ -87,7 +87,7 @@ export function PriceChart({ points }: { points: Point[] }) {
             stroke="var(--background)"
             strokeWidth="2"
           >
-            <title>{`${formatDateShort(c.date)} · ${c.vendor} · ${unitMoney(c.price)}`}</title>
+            <title>{`${formatDateShort(c.date)} · ${c.vendor} · ${unitMoney(c.price, c.currency)}`}</title>
           </circle>
         ))}
 

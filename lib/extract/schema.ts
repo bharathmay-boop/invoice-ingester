@@ -2,8 +2,7 @@
 // are built against this rather than the other way round.
 import { z } from "zod";
 
-// 15 characters: state code, PAN, entity number, 'Z', checksum character.
-const GSTIN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+import type { Currency } from "@/lib/format.ts";
 
 // Bounds match the database columns, so an absurd figure fails here with a
 // readable error instead of at save time, or worse, sailing through the
@@ -15,33 +14,116 @@ const MAX_QUANTITY = 999_999_999.999; // numeric(12,3)
 
 const amount = z.number().finite().nonnegative().max(MAX_AMOUNT);
 
+const currency = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .pipe(z.enum(["INR", "USD", "EUR"] satisfies [Currency, ...Currency[]]));
+
+/**
+ * A rate as printed, which is not always a number. An invoice that writes
+ * "10%" in the rate column cost a whole extraction when this was `z.number()`,
+ * and the rate is the one field in a tax line that nothing downstream reads:
+ * every check in `validateArithmetic` works on amounts. Losing an invoice over
+ * decoration is the wrong trade.
+ *
+ * A string that is plainly a percentage is taken; anything else becomes null
+ * rather than a guess, because a rate that had to be interpreted is worth less
+ * than knowing there wasn't one.
+ */
+const rate = z.union([z.number(), z.string()]).nullable();
+
+/**
+ * The printed rate reduced to a number, or null when it cannot be read as one.
+ *
+ * Kept out of the schema as a plain function because the same schema is turned
+ * into the JSON Schema the provider is given, and a transform cannot be
+ * expressed there. So the schema says what is accepted on the wire and this
+ * says what it means.
+ */
+function readRate(value: number | string | null): number | null {
+  if (value === null) return null;
+  if (typeof value === "number") return Number.isFinite(value) && value >= 0 ? value : null;
+  const cleaned = value.trim().replace(/%$/, "").trim();
+  const parsed = Number(cleaned);
+  return cleaned !== "" && Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
 export const lineItemSchema = z.object({
   description: z.string().min(1),
-  hsn_code: z.string().regex(/^\d{4,8}$/).nullable(),
+  // Not the HSN pattern this replaced. An HSN code is 4 to 8 digits; a product
+  // code on a European invoice is whatever the seller's catalogue uses, and
+  // "W537" is a perfectly ordinary one.
+  item_code: z.string().min(1).max(40).nullable(),
   quantity: z.number().finite().positive().max(MAX_QUANTITY),
   unit: z.string().min(1).nullable(),
   unit_price: z.number().finite().nonnegative().max(MAX_UNIT_PRICE),
-  amount: amount,
+  amount,
 });
 
-export const extractedInvoiceSchema = z.object({
-  vendor_name: z.string().min(1),
-  gstin: z.string().regex(GSTIN, "not a valid 15 character GSTIN").nullable(),
-  invoice_number: z.string().min(1),
-  invoice_date: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD")
-    .refine((d) => !Number.isNaN(Date.parse(d)), "not a real date"),
-  line_items: z.array(lineItemSchema).min(1),
-  subtotal: amount,
-  cgst: amount,
-  sgst: amount,
-  igst: amount,
-  total: amount,
+export const taxSchema = z.object({
+  label: z.string().min(1),
+  rate,
+  amount,
+  included: z.boolean(),
 });
 
-export type ExtractedInvoice = z.infer<typeof extractedInvoiceSchema>;
+export const taxIdKindSchema = z.enum(["gstin", "vat", "ein"]);
+
+export const extractedInvoiceSchema = z
+  .object({
+    vendor_name: z.string().min(1),
+    vendor_address: z.string().min(1).nullable(),
+    // Non empty is not enough. Identity is compared on the normalised form,
+    // which strips everything that is not a letter or a digit, so "---" is a
+    // tax number that normalises to "" and every vendor whose number does that
+    // collapses into one. A number with nothing in it is no number.
+    tax_id: z
+      .string()
+      .min(1)
+      .refine((value) => /[A-Za-z0-9]/.test(value), "a tax number needs a letter or a digit")
+      .nullable(),
+    tax_id_kind: taxIdKindSchema.nullable(),
+    invoice_number: z.string().min(1),
+    invoice_date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD")
+      .refine((d) => !Number.isNaN(Date.parse(d)), "not a real date"),
+    currency,
+    line_items: z.array(lineItemSchema).min(1),
+    subtotal: amount,
+    taxes: z.array(taxSchema),
+    taxes_read: z.boolean(),
+    total: amount,
+  })
+  .refine(
+    (invoice) => (invoice.tax_id === null) === (invoice.tax_id_kind === null),
+    {
+      message: "tax_id and tax_id_kind must either both be present or both be null",
+      path: ["tax_id"],
+    },
+  )
+  .refine((invoice) => invoice.taxes_read || invoice.taxes.length === 0, {
+    message: "taxes must be empty when the tax area could not be read",
+    path: ["taxes"],
+  });
+
 export type ExtractedLineItem = z.infer<typeof lineItemSchema>;
+export type TaxIdKind = z.infer<typeof taxIdKindSchema>;
+
+/**
+ * What the wire allows, and then what the rest of the app gets.
+ *
+ * They differ in one field. A rate arrives as whatever was printed, including
+ * text, because refusing it loses a whole invoice over decoration. Everything
+ * past `settleTaxes` sees a number or nothing, so no screen has to wonder
+ * whether a rate is "10%" or 10.
+ */
+type WireTax = z.infer<typeof taxSchema>;
+type WireInvoice = z.infer<typeof extractedInvoiceSchema>;
+
+export type ExtractedTax = Omit<WireTax, "rate"> & { rate: number | null };
+export type ExtractedInvoice = Omit<WireInvoice, "taxes"> & { taxes: ExtractedTax[] };
 
 export type ParseResult =
   | { ok: true; data: ExtractedInvoice }
@@ -50,9 +132,26 @@ export type ParseResult =
 /** The single gate every provider response passes through. */
 export function parseExtraction(raw: unknown): ParseResult {
   const result = extractedInvoiceSchema.safeParse(raw);
-  return result.success
-    ? { ok: true, data: result.data }
-    : { ok: false, error: z.prettifyError(result.error) };
+  if (!result.success) return { ok: false, error: z.prettifyError(result.error) };
+  return { ok: true, data: settleTaxes(result.data) };
+}
+
+/**
+ * What the taxes mean, once the schema has said they are the right shape.
+ *
+ * A zero amount row is a printing convention rather than a tax that was
+ * charged: Indian invoices routinely show "IGST 0.00" beside a filled in CGST
+ * and SGST, and carrying it through puts a tax nobody paid on a review screen.
+ * Migration 015 made the same call about the old columns, so dropping it here
+ * keeps new rows looking like the backfilled ones.
+ */
+function settleTaxes(invoice: WireInvoice): ExtractedInvoice {
+  return {
+    ...invoice,
+    taxes: invoice.taxes
+      .filter((tax) => tax.amount !== 0)
+      .map((tax) => ({ ...tax, rate: readRate(tax.rate) })),
+  };
 }
 
 /**
@@ -66,7 +165,9 @@ export const foundInvoiceSchema = z.object({
   invoice: extractedInvoiceSchema,
 });
 
-export type FoundInvoice = z.infer<typeof foundInvoiceSchema>;
+export type FoundInvoice = Omit<z.infer<typeof foundInvoiceSchema>, "invoice"> & {
+  invoice: ExtractedInvoice;
+};
 
 /**
  * What a provider actually returns: a verdict on whether the file holds any
@@ -100,7 +201,14 @@ export function parseResponse(raw: unknown, pages: number): ResponseResult {
       error: `The extracted fields did not validate.\n${z.prettifyError(result.error)}`,
     };
   }
-  const { is_invoice, reason, invoices } = result.data;
+  const { is_invoice, reason } = result.data;
+  // Settled here rather than only in `parseExtraction`, because this is the
+  // function both providers call. Normalising in the one the tests use and not
+  // the one production uses is how a fix ships without shipping.
+  const invoices: FoundInvoice[] = result.data.invoices.map((found) => ({
+    ...found,
+    invoice: settleTaxes(found.invoice),
+  }));
   // The verdict wins over whatever was filled in beside it: a "no" with an
   // invoice attached is still a no.
   if (!is_invoice) return { ok: false, notInvoice: true, reason };

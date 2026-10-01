@@ -7,6 +7,7 @@ import pg from "pg";
 
 const { invoices, items, vendors } = await import("../lib/demo/dataset.ts");
 const { validateArithmetic } = await import("../lib/extract/validate.ts");
+const { normalizeAddress, normalizeTaxId } = await import("../lib/vendors/normalize.ts");
 
 const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
 if (!url) {
@@ -19,21 +20,23 @@ if (!url) {
 for (const invoice of invoices) {
   const result = validateArithmetic({
     vendor_name: "",
-    gstin: invoice.gstin,
+    vendor_address: null,
+    tax_id: invoice.gstin,
+    tax_id_kind: "gstin",
     invoice_number: invoice.number,
     invoice_date: invoice.date,
+    currency: "INR",
     line_items: invoice.lines.map((l) => ({
       description: l.description,
-      hsn_code: l.hsn,
+      item_code: l.itemCode,
       quantity: l.quantity,
       unit: l.unit,
       unit_price: l.unitPrice,
       amount: l.amount,
     })),
     subtotal: invoice.subtotal,
-    cgst: invoice.cgst,
-    sgst: invoice.sgst,
-    igst: invoice.igst,
+    taxes: invoice.taxes,
+    taxes_read: true,
     total: invoice.total,
   });
 
@@ -69,14 +72,14 @@ try {
       AND NOT EXISTS (SELECT 1 FROM invoice i WHERE i.vendor_id = vendor.id)
   `);
 
-  // gstin is unique across the whole table, so a real vendor holding one of the
-  // demo GSTINs would be caught by the upsert below and quietly renamed to the
-  // demo name. Refuse instead: these are invented GSTINs, so a collision means
-  // something needs a human, not a silent overwrite.
+  // The generic tax identity is unique across the table, so a real vendor
+  // holding one of the demo GSTINs would be caught by the upsert below and
+  // quietly renamed to the demo name. Refuse instead: these are invented GSTINs,
+  // so a collision means something needs a human, not a silent overwrite.
   const clashes = await client.query(
-    `SELECT gstin, name FROM vendor
-     WHERE NOT is_demo AND gstin = ANY($1::text[])`,
-    [vendors.map((v) => v.gstin)],
+    `SELECT tax_id, name FROM vendor
+     WHERE NOT is_demo AND tax_id_kind = 'gstin' AND normalized_tax_id = ANY($1::text[])`,
+    [vendors.map((v) => normalizeTaxId(v.gstin))],
   );
   if (clashes.rows.length) {
     await client.query("ROLLBACK");
@@ -84,7 +87,7 @@ try {
       [
         "these vendors are not demo rows but hold a demo GSTIN, so seeding",
         "would overwrite them:",
-        ...clashes.rows.map((r) => `  ${r.gstin}  ${r.name}`),
+        ...clashes.rows.map((r) => `  ${r.tax_id}  ${r.name}`),
       ].join("\n"),
     );
     await client.end();
@@ -94,15 +97,26 @@ try {
   const vendorIds = new Map();
   for (const vendor of vendors) {
     const { rows } = await client.query(
-      `INSERT INTO vendor (gstin, name, normalized_name, address, is_demo)
-       VALUES ($1, $2, $3, $4, true)
-       ON CONFLICT (gstin) DO UPDATE
+      `INSERT INTO vendor
+         (tax_id, tax_id_kind, normalized_tax_id, name, normalized_name,
+          address, normalized_address, is_demo)
+       VALUES ($1, 'gstin', $2, $3, $4, $5, $6, true)
+       ON CONFLICT (tax_id_kind, normalized_tax_id) WHERE tax_id IS NOT NULL
+       DO UPDATE
          SET name = EXCLUDED.name,
              normalized_name = EXCLUDED.normalized_name,
-             address = EXCLUDED.address
-         WHERE vendor.is_demo
+             address = EXCLUDED.address,
+             normalized_address = EXCLUDED.normalized_address
+       WHERE vendor.is_demo
        RETURNING id`,
-      [vendor.gstin, vendor.name, vendor.name.toLowerCase(), vendor.address],
+      [
+        vendor.gstin,
+        normalizeTaxId(vendor.gstin),
+        vendor.name,
+        vendor.name.toLowerCase(),
+        vendor.address,
+        normalizeAddress(vendor.address),
+      ],
     );
     if (!rows.length) {
       throw new Error(`refused to overwrite a non demo vendor on ${vendor.gstin}`);
@@ -132,17 +146,15 @@ try {
   for (const invoice of invoices) {
     const { rows } = await client.query(
       `INSERT INTO invoice
-         (vendor_id, invoice_number, invoice_date, subtotal, cgst, sgst, igst,
-          total, status, extraction_meta, is_demo)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true) RETURNING id`,
+         (vendor_id, invoice_number, invoice_date, subtotal, taxes, total, status,
+          extraction_meta, is_demo)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true) RETURNING id`,
       [
         vendorIds.get(invoice.gstin),
         invoice.number,
         invoice.date,
         invoice.subtotal,
-        invoice.cgst,
-        invoice.sgst,
-        invoice.igst,
+        JSON.stringify(invoice.taxes),
         invoice.total,
         invoice.status,
         // Demo rows are labelled as demo rows. Nothing here came from a model,
@@ -160,7 +172,7 @@ try {
         [
           rows[0].id,
           line.description,
-          line.hsn,
+          line.itemCode,
           line.quantity,
           line.unit,
           line.unitPrice,

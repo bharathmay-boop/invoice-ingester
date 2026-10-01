@@ -6,7 +6,7 @@ import { findMatch, type Thresholds } from "./match.ts";
 /** The parts of a line the catalogue cares about. */
 export type SavableLine = {
   description: string;
-  hsn_code: string | null;
+  item_code: string | null;
   quantity: number;
   unit: string | null;
   unit_price: number;
@@ -64,7 +64,11 @@ export async function saveLine(
       [
         invoiceId,
         line.description,
-        line.hsn_code,
+        // The extraction contract calls this a generic item code because the
+        // line may not be Indian. The existing database column keeps its old
+        // name until a later migration can replace it without breaking the
+        // deployed build.
+        line.item_code,
         line.quantity,
         line.unit,
         line.unit_price,

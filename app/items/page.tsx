@@ -44,9 +44,9 @@ export default async function Items({
 
       {items.length === 0 ? (
         searching ? (
-          <Empty title={`Nothing matches “${q}”`} action={{ href: "/items", label: "Clear the search" }}>
+          <Empty title="Nothing matches “{q}”" action={{ href: "/items", label: "Clear the search" }}>
             Try fewer words. Descriptions are matched loosely, so “a4 paper”
-            finds “A4 Paper 500 Sheets”. There are items here, just none like
+            finds “A4 Paper 500 Sheets”. You have items here, just none like
             that.
           </Empty>
         ) : (
@@ -59,7 +59,7 @@ export default async function Items({
       ) : (
         <ul className="divide-y divide-black/10 dark:divide-white/15">
           {items.map((item) => (
-            <li key={item.id}>
+            <li key={`${item.id}-${item.currency}`}>
               <Link
                 href={`/items/${item.id}`}
                 className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-4 hover:opacity-80"
@@ -67,13 +67,14 @@ export default async function Items({
                 <span className="flex flex-col">
                   <span className="font-medium">{item.canonical_name}</span>
                   <span className="text-xs opacity-60">
-                    {item.purchases}{" "}
-                    {item.purchases === 1 ? "purchase" : "purchases"}
+                    {item.purchases} {item.purchases === 1 ? "purchase" : "purchases"}
                     {item.latest_price !== null &&
-                      `, last at ${money(item.latest_price)}`}
+                      `, last at ${money(item.latest_price, item.currency)}`}
                   </span>
                 </span>
-                <span className="font-semibold tabular-nums">{money(item.spend)}</span>
+                <span className="font-semibold tabular-nums">
+                  {money(item.spend, item.currency)}
+                </span>
               </Link>
             </li>
           ))}

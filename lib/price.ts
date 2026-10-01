@@ -1,6 +1,7 @@
 // Which vendor is cheapest is a sourcing recommendation, so it gets its own
 // function and its own tests rather than living inline in a page.
 import { perUnitLabel, printedUnit, toBaseUnit, type Family } from "./units.ts";
+import type { Currency } from "./format.ts";
 
 export type Priced = {
   vendor_id: string;
@@ -8,6 +9,7 @@ export type Priced = {
   unit_price: number;
   invoice_date: string;
   unit?: string | null;
+  currency: Currency;
 };
 
 /**
@@ -73,6 +75,24 @@ export type Comparison =
  */
 export function comparePrices(purchases: Priced[]): Comparison {
   if (!purchases.length) return { comparable: false, reason: "Nothing bought yet." };
+
+  // Currency is checked before units, because it is the one difference that
+  // cannot be reconciled at all. Grams and kilograms are the same measurement
+  // written two ways; rupees and euros are not, and the rate between them was
+  // different on every invoice date. Converting would mean a price history
+  // that changes shape when the euro moves, so this says no instead.
+  //
+  // The screens already group by currency before calling, which makes this
+  // unreachable today. It is here anyway, for the same reason the unit check
+  // is: a caller who forgets would get a cheapest vendor chosen by arithmetic
+  // on numbers that do not answer each other, and nothing would look wrong.
+  const currencies = new Set(purchases.map((purchase) => purchase.currency));
+  if (currencies.size > 1) {
+    return {
+      comparable: false,
+      reason: `Bought in ${[...currencies].sort().join(" and ")}. Prices in different currencies are not compared here, because the rate between them was different on every one of these invoice dates and a converted history would change shape every time the exchange rate moved. The prices below are each in the currency they were billed in.`,
+    };
+  }
 
   const converted = purchases.map((p) => ({
     purchase: p,

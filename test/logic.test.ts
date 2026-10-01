@@ -3,7 +3,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { normalize } from "../lib/items/normalize.ts";
-import { parseExtraction, parseResponse, extractionJsonSchema } from "../lib/extract/schema.ts";
+import {
+  extractionJsonSchema,
+  parseExtraction,
+  parseResponse,
+} from "../lib/extract/schema.ts";
 
 test("normalisation collapses the same product written two ways", () => {
   assert.equal(normalize("A4 Paper 500 Sheets"), normalize("Paper, A4, 1 ream"));
@@ -32,13 +36,16 @@ test("normalisation is stable and order independent", () => {
 
 const valid = {
   vendor_name: "Sharma Stationers",
-  gstin: "29ABCDE1234F1Z5",
+  tax_id: "29ABCDE1234F1Z5",
+  tax_id_kind: "gstin" as const,
+  vendor_address: "2nd Floor, C Wing, Worli, Mumbai 400030",
   invoice_number: "INV-2026-114",
   invoice_date: "2026-04-11",
+  currency: "INR",
   line_items: [
     {
       description: "A4 Paper 500 Sheets",
-      hsn_code: "4802",
+      item_code: "4802",
       quantity: 10,
       unit: "ream",
       unit_price: 285.5,
@@ -46,9 +53,11 @@ const valid = {
     },
   ],
   subtotal: 2855,
-  cgst: 256.95,
-  sgst: 256.95,
-  igst: 0,
+  taxes: [
+    { label: "CGST", rate: 9, amount: 256.95, included: false },
+    { label: "SGST", rate: 9, amount: 256.95, included: false },
+  ],
+  taxes_read: true,
   total: 3368.9,
 };
 
@@ -59,26 +68,75 @@ test("a valid payload parses", () => {
 });
 
 test("nullable fields accept null but not absence", () => {
-  assert.equal(parseExtraction({ ...valid, gstin: null }).ok, true);
-  const withoutGstin: Record<string, unknown> = { ...valid };
-  delete withoutGstin.gstin;
-  assert.equal(parseExtraction(withoutGstin).ok, false);
+  // Nulled as a pair. A tax number with no kind, or a kind with no number, is
+  // refused by its own rule, which has a case of its own below.
+  assert.equal(parseExtraction({ ...valid, tax_id: null, tax_id_kind: null }).ok, true);
+  assert.equal(parseExtraction({ ...valid, vendor_address: null }).ok, true);
+  assert.equal(
+    parseExtraction({
+      ...valid,
+      line_items: [{ ...valid.line_items[0], item_code: null }],
+    }).ok,
+    true,
+  );
+
+  const withoutTaxId: Record<string, unknown> = { ...valid };
+  delete withoutTaxId.tax_id;
+  assert.equal(parseExtraction(withoutTaxId).ok, false);
+
+  const withoutItemCode: Record<string, unknown> = {
+    ...valid,
+    line_items: [{ ...valid.line_items[0] }],
+  };
+  delete (withoutItemCode.line_items as Array<Record<string, unknown>>)[0].item_code;
+  assert.equal(parseExtraction(withoutItemCode).ok, false);
+});
+
+test("an unreadable tax area is distinct from an invoice with no tax", () => {
+  assert.equal(parseExtraction({ ...valid, taxes: [], taxes_read: true }).ok, true);
+  assert.equal(parseExtraction({ ...valid, taxes: [], taxes_read: false }).ok, true);
+
+  const inventedTax = parseExtraction({
+    ...valid,
+    taxes: [{ label: "VAT", rate: 10, amount: 10, included: false }],
+    taxes_read: false,
+  });
+  assert.equal(inventedTax.ok, false);
+  if (!inventedTax.ok) assert.match(inventedTax.error, /taxes/);
 });
 
 test("each malformed variant fails with a readable error", () => {
   const cases: Array<[string, unknown, RegExp]> = [
-    ["bad gstin", { ...valid, gstin: "29ABCDE1234F1Z" }, /gstin/],
+    ["empty tax id", { ...valid, tax_id: "" }, /tax_id/],
     ["bad date format", { ...valid, invoice_date: "11/04/2026" }, /invoice_date/],
     ["impossible date", { ...valid, invoice_date: "2026-13-45" }, /invoice_date/],
     ["empty invoice number", { ...valid, invoice_number: "" }, /invoice_number/],
+    ["no currency", { ...valid, currency: undefined }, /currency/],
+    ["unsupported currency", { ...valid, currency: "GBP" }, /currency/],
     ["no line items", { ...valid, line_items: [] }, /line_items/],
     ["negative total", { ...valid, total: -1 }, /total/],
     ["string amount", { ...valid, subtotal: "2855" }, /subtotal/],
-    ["zero quantity", { ...valid, line_items: [{ ...valid.line_items[0], quantity: 0 }] }, /quantity/],
-    ["non numeric hsn", { ...valid, line_items: [{ ...valid.line_items[0], hsn_code: "48O2" }] }, /hsn_code/],
+    [
+      "zero quantity",
+      { ...valid, line_items: [{ ...valid.line_items[0], quantity: 0 }] },
+      /quantity/,
+    ],
+    [
+      // "48O2" used to fail here, when this field was an HSN code and had to be
+      // digits. It is a generic product code now, so a letter in it is
+      // ordinary. An empty one is still wrong: a code nobody printed is null,
+      // not "".
+      "an empty item code",
+      { ...valid, line_items: [{ ...valid.line_items[0], item_code: "" }] },
+      /item_code/,
+    ],
     ["not an object", "nope", /./],
     ["amount past the column width", { ...valid, total: 1e307 }, /total/],
-    ["quantity past the column width", { ...valid, line_items: [{ ...valid.line_items[0], quantity: 1e12 }] }, /quantity/],
+    [
+      "quantity past the column width",
+      { ...valid, line_items: [{ ...valid.line_items[0], quantity: 1e12 }] },
+      /quantity/,
+    ],
   ];
 
   for (const [name, payload, expected] of cases) {
@@ -88,6 +146,29 @@ test("each malformed variant fails with a readable error", () => {
   }
 });
 
+// A rate used to be `z.number().nonnegative()`, so a nonsense one threw the
+// whole invoice away. Nothing downstream reads a rate, so it is now dropped
+// rather than fatal, and the amount beside it survives. The invoice is still
+// refused for anything the checks actually depend on.
+test("a nonsense tax rate is dropped rather than losing the invoice", () => {
+  const result = parseExtraction({
+    ...valid,
+    taxes: [{ label: "VAT", rate: -10, amount: 10, included: false }],
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.data.taxes[0].rate, null);
+    assert.equal(result.data.taxes[0].amount, 10);
+  }
+});
+
+test("currency is stored as an uppercase canonical code", () => {
+  const result = parseExtraction({ ...valid, currency: "eur" });
+  assert.equal(result.ok, true);
+  assert.equal(result.ok && result.data.currency, "EUR");
+});
+
 test("the provider JSON schema covers every field", () => {
   type Node = { properties?: Record<string, Node>; items?: Node };
   const top = extractionJsonSchema as Node;
@@ -95,12 +176,26 @@ test("the provider JSON schema covers every field", () => {
   const found = top.properties?.invoices.items?.properties ?? {};
   assert.deepEqual(Object.keys(found), ["first_page", "last_page", "invoice"]);
   assert.deepEqual(Object.keys(found.invoice.properties ?? {}).sort(), [
-    "cgst", "gstin", "igst", "invoice_date", "invoice_number",
-    "line_items", "sgst", "subtotal", "total", "vendor_name",
+    "currency",
+    "invoice_date",
+    "invoice_number",
+    "line_items",
+    "subtotal",
+    "tax_id",
+    "tax_id_kind",
+    "taxes",
+    "taxes_read",
+    "total",
+    "vendor_address",
+    "vendor_name",
   ]);
 });
 
-const at = (first_page: number, last_page: number, invoice = valid) => ({ first_page, last_page, invoice });
+const at = (first_page: number, last_page: number, invoice = valid) => ({
+  first_page,
+  last_page,
+  invoice,
+});
 
 test("a file the model declines is not an invoice, not a failure", () => {
   const photo = { reason: "A product photo of a chocolate box.", is_invoice: false, invoices: [] };
@@ -120,48 +215,68 @@ test("the verdict wins over invoices listed beside it", () => {
 test("every invoice in the file comes through, with its pages, in order", () => {
   const second = { ...valid, invoice_number: "INV-2" };
   const result = parseResponse({
-    reason: "Two tax invoices.",
+    reason: "Two invoices.",
     is_invoice: true,
     invoices: [at(1, 2), at(3, 3, second)],
   }, 5);
   assert.equal(result.ok, true);
   if (!result.ok) return;
   assert.deepEqual(
-    result.invoices.map((f) => [f.invoice.invoice_number, f.first_page, f.last_page]),
+    result.invoices.map((entry) => [
+      entry.invoice.invoice_number,
+      entry.first_page,
+      entry.last_page,
+    ]),
     [[valid.invoice_number, 1, 2], ["INV-2", 3, 3]],
   );
 });
 
 test("a yes with no invoices, a bad field or impossible pages is a failure, not a decline", () => {
-  const empty = parseResponse({ reason: "A tax invoice.", is_invoice: true, invoices: [] }, 5);
+  const empty = parseResponse({ reason: "An invoice.", is_invoice: true, invoices: [] }, 5);
   assert.equal("error" in empty, true);
 
   const bad = parseResponse({
-    reason: "A tax invoice.",
+    reason: "An invoice.",
     is_invoice: true,
     invoices: [at(1, 1, { ...valid, total: -1 })],
   }, 5);
   assert.match("error" in bad ? bad.error : "", /total/);
 
-  const backwards = parseResponse({ reason: "A tax invoice.", is_invoice: true, invoices: [at(3, 2)] }, 5);
+  const backwards = parseResponse(
+    { reason: "An invoice.", is_invoice: true, invoices: [at(3, 2)] },
+    5,
+  );
   assert.match("error" in backwards ? backwards.error : "", /before it starts/);
 
-  const pageZero = parseResponse({ reason: "A tax invoice.", is_invoice: true, invoices: [at(0, 1)] }, 5);
+  const pageZero = parseResponse(
+    { reason: "An invoice.", is_invoice: true, invoices: [at(0, 1)] },
+    5,
+  );
   assert.equal("error" in pageZero, true);
 
   assert.equal(parseResponse({ is_invoice: false, invoices: [] }, 5).ok, false);
 });
 
 test("pages must fall inside the file that was read", () => {
-  const past = parseResponse({ reason: "A tax invoice.", is_invoice: true, invoices: [at(5, 12)] }, 5);
+  const past = parseResponse(
+    { reason: "An invoice.", is_invoice: true, invoices: [at(5, 12)] },
+    5,
+  );
   assert.match("error" in past ? past.error : "", /page 12, but the file has 5 pages/);
 
-  const image = parseResponse({ reason: "A photo of a bill.", is_invoice: true, invoices: [at(2, 2)] }, 1);
+  const image = parseResponse(
+    { reason: "A photo of a bill.", is_invoice: true, invoices: [at(2, 2)] },
+    1,
+  );
   assert.match("error" in image ? image.error : "", /one page/);
 
   // Two small receipts on one page share it.
   const shared = parseResponse(
-    { reason: "Two receipts.", is_invoice: true, invoices: [at(1, 1), at(1, 1, { ...valid, invoice_number: "R-2" })] },
+    {
+      reason: "Two receipts.",
+      is_invoice: true,
+      invoices: [at(1, 1), at(1, 1, { ...valid, invoice_number: "R-2" })],
+    },
     1,
   );
   assert.equal(shared.ok, true);
@@ -188,7 +303,7 @@ test("the stored form gives nothing away", () => {
 
 test("unsealing fails rather than returning something wrong", () => {
   const sealed = seal("anthropic_api_key", KEY);
-  const [v, iv, tag, body] = sealed.split(".");
+  const [version, iv, tag, body] = sealed.split(".");
 
   // Ciphertext moved to a different setting.
   assert.throws(() => unseal("openrouter_api_key", sealed));
@@ -197,14 +312,14 @@ test("unsealing fails rather than returning something wrong", () => {
   const flipped = Buffer.from(body, "base64url");
   flipped[0] ^= 0xff;
   assert.throws(() =>
-    unseal("anthropic_api_key", [v, iv, tag, flipped.toString("base64url")].join(".")),
+    unseal("anthropic_api_key", [version, iv, tag, flipped.toString("base64url")].join(".")),
   );
 
   // Tag edited.
   const badTag = Buffer.from(tag, "base64url");
   badTag[0] ^= 0xff;
   assert.throws(() =>
-    unseal("anthropic_api_key", [v, iv, badTag.toString("base64url"), body].join(".")),
+    unseal("anthropic_api_key", [version, iv, badTag.toString("base64url"), body].join(".")),
   );
 
   // Not a sealed value at all.
@@ -212,7 +327,7 @@ test("unsealing fails rather than returning something wrong", () => {
 });
 
 test("a truncated authentication tag is refused, not accepted weakly", () => {
-  const [v, iv, tag, body] = seal("anthropic_api_key", KEY).split(".");
+  const [version, iv, tag, body] = seal("anthropic_api_key", KEY).split(".");
 
   // GCM will accept 4, 8, 12, 13, 14 and 15 byte tags. Every one of them is
   // weaker than the 16 byte tag seal produces, so all of them must be refused
@@ -220,7 +335,7 @@ test("a truncated authentication tag is refused, not accepted weakly", () => {
   for (const size of [4, 8, 12, 13, 14, 15]) {
     const short = Buffer.from(tag, "base64url").subarray(0, size);
     assert.throws(
-      () => unseal("anthropic_api_key", [v, iv, short.toString("base64url"), body].join(".")),
+      () => unseal("anthropic_api_key", [version, iv, short.toString("base64url"), body].join(".")),
       /authentication tag size/,
       `a ${size} byte tag should have been refused`,
     );
@@ -229,7 +344,7 @@ test("a truncated authentication tag is refused, not accepted weakly", () => {
   // A resized IV is the same class of problem.
   const shortIv = Buffer.from(iv, "base64url").subarray(0, 8);
   assert.throws(
-    () => unseal("anthropic_api_key", [v, shortIv.toString("base64url"), tag, body].join(".")),
+    () => unseal("anthropic_api_key", [version, shortIv.toString("base64url"), tag, body].join(".")),
     /iv or authentication tag size/,
   );
 });
