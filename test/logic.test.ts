@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { normalize } from "../lib/items/normalize.ts";
 import {
-  classifyTaxes,
   extractionJsonSchema,
   parseExtraction,
   parseResponse,
@@ -104,32 +103,6 @@ test("an unreadable tax area is distinct from an invoice with no tax", () => {
   });
   assert.equal(inventedTax.ok, false);
   if (!inventedTax.ok) assert.match(inventedTax.error, /taxes/);
-});
-
-test("tax models are classified from every label that was found", () => {
-  assert.equal(
-    classifyTaxes([
-      { label: "State Sales Tax", rate: 8.25, amount: 20, included: false },
-      { label: "City Sales Tax", rate: 2, amount: 5, included: false },
-    ]),
-    "us_sales_tax",
-  );
-  assert.equal(
-    classifyTaxes([
-      { label: "CGST", rate: 9, amount: 100, included: false },
-      { label: "SGST", rate: 9, amount: 100, included: false },
-    ]),
-    "gst",
-  );
-  assert.equal(
-    classifyTaxes([{ label: "IGST", rate: 18, amount: 200, included: false }]),
-    "gst",
-  );
-  assert.equal(
-    classifyTaxes([{ label: "VAT", rate: null, amount: 88.92, included: true }]),
-    "vat",
-  );
-  assert.equal(classifyTaxes([]), null);
 });
 
 test("each malformed variant fails with a readable error", () => {

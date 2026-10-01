@@ -16,7 +16,17 @@ UPDATE vendor
 SET normalized_tax_id = upper(regexp_replace(gstin, '[^[:alnum:]]', '', 'g')),
     tax_id = gstin,
     tax_id_kind = CASE WHEN gstin IS NULL THEN NULL ELSE 'gstin' END,
-    normalized_address = lower(regexp_replace(trim(address), '[^[:alnum:]]+', ' ', 'g'));
+    -- Coalesced, not trimmed directly. `address` is nullable and three of the
+    -- seven vendors in the live database have none, and `trim(NULL)` is NULL,
+    -- which this NOT NULL column would refuse. The migration would abort.
+    --
+    -- Empty is the right value for a missing address rather than NULL: the
+    -- identity index below treats two vendors with the same name and no
+    -- address as one supplier, which is the honest answer when there is
+    -- nothing to tell them apart. A NULL would make every addressless vendor
+    -- unique instead, since NULLs do not compare equal, and the same supplier
+    -- would multiply on every invoice.
+    normalized_address = lower(regexp_replace(trim(coalesce(address, '')), '[^[:alnum:]]+', ' ', 'g'));
 
 ALTER TABLE vendor
   ADD CONSTRAINT vendor_tax_id_kind_is_closed

@@ -4,6 +4,8 @@
 //
 // See docs/spec.md section 5.
 import type { ExtractedInvoice } from "./schema.ts";
+import { normalize } from "../items/normalize.ts";
+import { normalizeAddress, normalizeTaxId } from "../vendors/normalize.ts";
 
 export type CheckName =
   | "line_items_sum"
@@ -11,7 +13,8 @@ export type CheckName =
   | "zero_total"
   | "placeholder_number"
   | "repeated_in_file"
-  | "already_saved";
+  | "already_saved"
+  | "tax_area_unreadable";
 
 // What a model writes when it has no invoice number but was made to give one.
 const PLACEHOLDER_NUMBER = /^(unknown|n\/?a|none|null|nil|not available|-+|0+|x+)$/i;
@@ -127,6 +130,16 @@ export function validateArithmetic(
     discrepancies.push(warning("placeholder_number"));
   }
 
+  // `taxes_read: false` exists to separate an invoice with no tax from one
+  // whose tax area could not be read, and until now the distinction changed
+  // nothing. An unreadable tax area forces the tax list empty, so the expected
+  // total becomes the subtotal alone, and any invoice whose printed total
+  // happens to equal its subtotal was confirmed while the system knew it had
+  // not been able to look. That is the field existing without doing its job.
+  if (!invoice.taxes_read) {
+    discrepancies.push(warning("tax_area_unreadable"));
+  }
+
   return {
     status: discrepancies.length === 0 ? "confirmed" : "needs_review",
     discrepancies,
@@ -154,14 +167,24 @@ export const warning = (check: CheckName): Discrepancy => ({
  * Which invoices in one file repeat an earlier one: same supplier, same
  * number. The prompt asks for printed copies to be returned once, and this
  * catches the times they are not, so a triplicate does not become three spend
- * entries. The supplier is the vendor tax number where there is one, the name
- * otherwise.
+ * entries.
+ *
+ * The supplier is worked out exactly the way the save path works it out, which
+ * it was not before: a raw tax number and a loosely lowercased name. That
+ * disagreed with the database in both directions. The same registration
+ * written "DE123456789" on one copy and "DE 123 456 789" on the other was two
+ * suppliers here and one in the vendor table, so a duplicate slipped through;
+ * and two different businesses sharing a name at different addresses were one
+ * supplier here and two in the table, so a legitimate invoice was thrown away
+ * as a repeat. Two definitions of the same thing is one too many.
  */
 export function findRepeats(invoices: ExtractedInvoice[]): Set<number> {
   const seen = new Set<string>();
   const repeats = new Set<number>();
   invoices.forEach((invoice, i) => {
-    const supplier = invoice.tax_id ?? invoice.vendor_name.trim().toLowerCase();
+    const supplier = invoice.tax_id
+      ? `${invoice.tax_id_kind}:${normalizeTaxId(invoice.tax_id)}`
+      : `name:${normalize(invoice.vendor_name)}|${normalizeAddress(invoice.vendor_address ?? "")}`;
     const key = JSON.stringify([supplier, invoice.invoice_number.trim().toUpperCase()]);
     if (seen.has(key)) repeats.add(i);
     seen.add(key);
@@ -179,6 +202,9 @@ export function describeDiscrepancy(d: Discrepancy): string {
   }
   if (d.check === "repeated_in_file") {
     return "The same invoice appears earlier in this file, so this may be a printed copy.";
+  }
+  if (d.check === "tax_area_unreadable") {
+    return "The tax on this invoice could not be read, so the total has only been checked against the subtotal.";
   }
   if (d.check === "already_saved") {
     return "An invoice with this number from this supplier is already saved.";

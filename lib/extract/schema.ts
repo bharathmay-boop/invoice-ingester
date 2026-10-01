@@ -74,7 +74,15 @@ export const extractedInvoiceSchema = z
   .object({
     vendor_name: z.string().min(1),
     vendor_address: z.string().min(1).nullable(),
-    tax_id: z.string().min(1).nullable(),
+    // Non empty is not enough. Identity is compared on the normalised form,
+    // which strips everything that is not a letter or a digit, so "---" is a
+    // tax number that normalises to "" and every vendor whose number does that
+    // collapses into one. A number with nothing in it is no number.
+    tax_id: z
+      .string()
+      .min(1)
+      .refine((value) => /[A-Za-z0-9]/.test(value), "a tax number needs a letter or a digit")
+      .nullable(),
     tax_id_kind: taxIdKindSchema.nullable(),
     invoice_number: z.string().min(1),
     invoice_date: z
@@ -116,18 +124,6 @@ type WireInvoice = z.infer<typeof extractedInvoiceSchema>;
 
 export type ExtractedTax = Omit<WireTax, "rate"> & { rate: number | null };
 export type ExtractedInvoice = Omit<WireInvoice, "taxes"> & { taxes: ExtractedTax[] };
-
-export type TaxModel = "gst" | "vat" | "us_sales_tax";
-
-/** The tax model is a read of the labels the model actually found. */
-export function classifyTaxes(taxes: ExtractedTax[]): TaxModel | null {
-  const labels = taxes.map((tax) => tax.label.toUpperCase());
-  if (labels.some((label) => label.includes("IGST"))) return "gst";
-  if (labels.some((label) => label.includes("CGST") || label.includes("SGST"))) return "gst";
-  if (labels.some((label) => label.includes("VAT"))) return "vat";
-  if (labels.some((label) => label.includes("SALES TAX"))) return "us_sales_tax";
-  return null;
-}
 
 export type ParseResult =
   | { ok: true; data: ExtractedInvoice }

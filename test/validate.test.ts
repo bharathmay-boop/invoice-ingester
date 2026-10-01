@@ -217,3 +217,59 @@ test("a tolerance has to stay a tolerance", () => {
     assert.throws(() => checkTolerance(bad), /tolerance|catching/, String(bad));
   }
 });
+
+// Three things an audit of the currency branch found missing. Each one is a
+// check that exists in the code and had nothing holding it in place.
+test("several tax lines at once still add up", () => {
+  const result = validateArithmetic(
+    invoice({
+      line_items: [
+        { description: "Paper", item_code: null, quantity: 1, unit: null, unit_price: 10000, amount: 10000 },
+      ],
+      subtotal: 10000,
+      taxes: [
+        { label: "CGST", rate: 9, amount: 900, included: false },
+        { label: "SGST", rate: 9, amount: 900, included: false },
+        { label: "Cess", rate: 1, amount: 100, included: false },
+      ],
+      total: 11900,
+    }),
+  );
+
+  assert.equal(result.status, "confirmed");
+  assert.equal(result.discrepancies.length, 0);
+});
+
+test("an unreadable tax area is held even when the figures happen to agree", () => {
+  // The trap this closes: with no tax read, the expected total is the subtotal
+  // alone, so an invoice whose printed total equals its subtotal sailed through
+  // while the system knew it had not been able to look at the tax.
+  const result = validateArithmetic(
+    invoice({
+      line_items: [
+        { description: "Paper", item_code: null, quantity: 1, unit: null, unit_price: 10000, amount: 10000 },
+      ],
+      subtotal: 10000,
+      taxes: [],
+      taxes_read: false,
+      total: 10000,
+    }),
+  );
+
+  assert.equal(result.status, "needs_review");
+  assert.ok(result.discrepancies.some((d) => d.check === "tax_area_unreadable"));
+});
+
+test("repeats in a file are found by the identity the save path uses", () => {
+  // The same registration printed two ways is one supplier, so the second copy
+  // is a repeat. This used to compare the raw strings and let it through.
+  const spaced = invoice({ tax_id: "DE 123 456 789", tax_id_kind: "vat" as const });
+  const tight = invoice({ tax_id: "DE123456789", tax_id_kind: "vat" as const });
+  assert.deepEqual([...findRepeats([spaced, tight])], [1]);
+
+  // Two businesses sharing a name at different addresses are not one supplier,
+  // so neither invoice is a repeat of the other. This used to discard one.
+  const here = invoice({ tax_id: null, tax_id_kind: null, vendor_name: "Hopkins and Sons", vendor_address: "12 Mill Road, Leeds" });
+  const there = invoice({ tax_id: null, tax_id_kind: null, vendor_name: "Hopkins and Sons", vendor_address: "4 Quay Street, Bristol" });
+  assert.deepEqual([...findRepeats([here, there])], []);
+});
