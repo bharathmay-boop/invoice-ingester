@@ -49,6 +49,10 @@ a plausible number is the worst thing you can do here.
   printed label, amount, rate, and whether the tax is included in the line
   prices. The rate must be null when no rate is printed. Do not replace taxes
   with CGST, SGST, IGST, VAT, or sales tax fields.
+- A tax entry is an amount of tax charged. The taxable value the tax was
+  calculated on is not a tax, however close to the tax lines it is printed, and
+  a row charging nothing ("IGST 0.00" beside a filled in CGST and SGST) is a
+  printing convention rather than a tax. Leave both out.
 - taxes_read is false only when the tax area cannot be read. In that case taxes
   must be an empty list. An empty taxes list with taxes_read true means the
   document showed no tax.

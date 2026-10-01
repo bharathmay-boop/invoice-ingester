@@ -144,17 +144,13 @@ test("each malformed variant fails with a readable error", () => {
       /quantity/,
     ],
     [
-      "non numeric item code",
-      { ...valid, line_items: [{ ...valid.line_items[0], item_code: "48O2" }] },
+      // "48O2" used to fail here, when this field was an HSN code and had to be
+      // digits. It is a generic product code now, so a letter in it is
+      // ordinary. An empty one is still wrong: a code nobody printed is null,
+      // not "".
+      "an empty item code",
+      { ...valid, line_items: [{ ...valid.line_items[0], item_code: "" }] },
       /item_code/,
-    ],
-    [
-      "negative tax rate",
-      {
-        ...valid,
-        taxes: [{ label: "VAT", rate: -10, amount: 10, included: false }],
-      },
-      /rate/,
     ],
     ["not an object", "nope", /./],
     ["amount past the column width", { ...valid, total: 1e307 }, /total/],
@@ -169,6 +165,23 @@ test("each malformed variant fails with a readable error", () => {
     const result = parseExtraction(payload);
     assert.equal(result.ok, false, `${name} should have failed`);
     assert.match(result.ok ? "" : result.error, expected, `${name} error text`);
+  }
+});
+
+// A rate used to be `z.number().nonnegative()`, so a nonsense one threw the
+// whole invoice away. Nothing downstream reads a rate, so it is now dropped
+// rather than fatal, and the amount beside it survives. The invoice is still
+// refused for anything the checks actually depend on.
+test("a nonsense tax rate is dropped rather than losing the invoice", () => {
+  const result = parseExtraction({
+    ...valid,
+    taxes: [{ label: "VAT", rate: -10, amount: 10, included: false }],
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.data.taxes[0].rate, null);
+    assert.equal(result.data.taxes[0].amount, 10);
   }
 });
 
