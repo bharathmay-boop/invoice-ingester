@@ -18,6 +18,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { DemoNotice, Empty, Page, Stat, StatusBadge } from "../../ui.tsx";
 import { PriceChart } from "./chart.tsx";
 import { MergeItem } from "./merge-item.tsx";
+import { ItemAliases } from "./item-aliases.tsx";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +56,14 @@ export default async function ItemDetail({
           .map((purchases) => (
             <CurrencySummary key={purchases[0].currency} purchases={purchases} />
           ))
+      )}
+
+      {signedIn && (
+        <ItemAliases
+          itemId={item.id}
+          canonicalName={item.canonical_name}
+          aliases={item.aliases}
+        />
       )}
 
       {signedIn && (

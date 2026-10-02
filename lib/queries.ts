@@ -185,7 +185,14 @@ export async function getItem(id: string) {
     [id],
   );
 
-  return { ...rows[0], purchases };
+  // The names a person has taught the matcher for this item. Fetched here
+  // rather than on the client so the screen renders them with everything else.
+  const aliases = await query<{ id: string; alias: string }>(
+    "SELECT id, alias FROM item_alias WHERE item_id = $1 ORDER BY alias",
+    [id],
+  );
+
+  return { ...rows[0], purchases, aliases };
 }
 
 export function countNeedsReview(): Promise<{ n: number }[]> {
