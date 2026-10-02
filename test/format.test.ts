@@ -53,6 +53,7 @@ test("an invoice without a readable currency is refused", () => {
     subtotal: 400,
     taxes: [],
     taxes_read: true,
+    adjustments: [],
     total: 400,
   });
 
@@ -82,6 +83,7 @@ test("currency is canonicalized to uppercase before it is accepted", () => {
     subtotal: 400,
     taxes: [],
     taxes_read: true,
+    adjustments: [],
     total: 400,
   });
 
@@ -105,6 +107,7 @@ test("a rate printed as text is taken rather than throwing the invoice away", ()
     ],
     subtotal: 889.2,
     taxes_read: true,
+    adjustments: [],
     total: 978.12,
   };
 
@@ -139,6 +142,7 @@ test("a tax row charging nothing is not carried through", () => {
       { label: "IGST", rate: 0, amount: 0, included: false },
     ],
     taxes_read: true,
+    adjustments: [],
     total: 1101466.14,
   });
 
@@ -164,6 +168,7 @@ test("a product code does not have to look like an HSN", () => {
     subtotal: 444.6,
     taxes: [],
     taxes_read: true,
+    adjustments: [],
     total: 444.6,
   });
 
@@ -188,6 +193,7 @@ test("a tax number with no kind is recovered when it is unmistakably a GSTIN", (
     subtotal: 252495,
     taxes: [{ label: "CGST", rate: 6, amount: 14961, included: false }],
     taxes_read: true,
+    adjustments: [],
     total: 267456,
   };
 

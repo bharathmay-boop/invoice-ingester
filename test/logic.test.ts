@@ -58,6 +58,7 @@ const valid = {
     { label: "SGST", rate: 9, amount: 256.95, included: false },
   ],
   taxes_read: true,
+  adjustments: [],
   total: 3368.9,
 };
 
@@ -95,7 +96,6 @@ test("nullable fields accept null but not absence", () => {
 test("an unreadable tax area is distinct from an invoice with no tax", () => {
   assert.equal(parseExtraction({ ...valid, taxes: [], taxes_read: true }).ok, true);
   assert.equal(parseExtraction({ ...valid, taxes: [], taxes_read: false }).ok, true);
-
   const inventedTax = parseExtraction({
     ...valid,
     taxes: [{ label: "VAT", rate: 10, amount: 10, included: false }],
@@ -176,6 +176,7 @@ test("the provider JSON schema covers every field", () => {
   const found = top.properties?.invoices.items?.properties ?? {};
   assert.deepEqual(Object.keys(found), ["first_page", "last_page", "invoice"]);
   assert.deepEqual(Object.keys(found.invoice.properties ?? {}).sort(), [
+    "adjustments",
     "currency",
     "invoice_date",
     "invoice_number",

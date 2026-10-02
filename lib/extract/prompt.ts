@@ -76,4 +76,9 @@ a plausible number is the worst thing you can do here.
   2,52,495 under a margin scheme shows a taxable value of 2,49,352, and the
   subtotal is still 2,52,495. Taking the wrong one makes an invoice that adds
   up perfectly look broken.
+- adjustments is every charge printed between the subtotal and the total that
+  is not a tax: a discount, delivery, freight, packing, handling, insurance, a
+  rounding line. Use the printed label and a signed amount, negative for
+  anything subtracted. A discount is not a tax and must not go in taxes. Leave
+  the list empty when there are none.
 - If a value genuinely is not on the invoice and the field allows null, use null.`;

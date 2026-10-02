@@ -61,6 +61,18 @@ export const lineItemSchema = z.object({
   amount,
 });
 
+/**
+ * A charge that is neither a line nor a tax: a discount, delivery, handling, a
+ * rounding line. Signed, so a discount is negative, and kept apart from the
+ * taxes because a discount is not a negative tax and letting one into that
+ * list would make the tax model depend on what a seller called their delivery
+ * charge.
+ */
+export const adjustmentSchema = z.object({
+  label: z.string().min(1),
+  amount: z.number().finite().min(-MAX_AMOUNT).max(MAX_AMOUNT),
+});
+
 export const taxSchema = z.object({
   label: z.string().min(1),
   rate,
@@ -94,6 +106,7 @@ export const extractedInvoiceSchema = z
     subtotal: amount,
     taxes: z.array(taxSchema),
     taxes_read: z.boolean(),
+    adjustments: z.array(adjustmentSchema),
     total: amount,
   })
   .refine(
@@ -112,6 +125,7 @@ export const extractedInvoiceSchema = z
   });
 
 export type ExtractedLineItem = z.infer<typeof lineItemSchema>;
+export type ExtractedAdjustment = z.infer<typeof adjustmentSchema>;
 export type TaxIdKind = z.infer<typeof taxIdKindSchema>;
 
 /**
