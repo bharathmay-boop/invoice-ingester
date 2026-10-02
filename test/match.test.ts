@@ -59,6 +59,16 @@ before(async () => {
       created_at timestamptz NOT NULL DEFAULT now(),
       decided_at timestamptz
     )`);
+  await db.query(`
+    CREATE TABLE item_alias (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      item_id uuid NOT NULL REFERENCES item (id) ON DELETE CASCADE,
+      alias text NOT NULL,
+      normalized_name text NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (normalized_name)
+    )`);
+  await db.query("CREATE INDEX ON item_alias USING gin (normalized_name gin_trgm_ops)");
 });
 
 after(async () => {
@@ -288,4 +298,82 @@ test("thresholds are stored as one value, so a pair is never half saved", { skip
     link: match!.DEFAULT_LINK,
     suggest: match!.DEFAULT_SUGGEST,
   });
+});
+
+// Trigram scoring compares letters, so no threshold ever joins "Xerox" to
+// "photocopy": they share almost nothing to compare. An alias is the one part
+// of matching a person can teach rather than tune, and these are against real
+// Postgres scores because the scores are the behaviour.
+test("a taught name matches, and so do the spellings around it", { skip }, async () => {
+  const alias = await import("../lib/items/alias.ts");
+  const xerox = await catalogue("Xerox A4 80gsm colour");
+
+  // Nothing joins these two before anybody says so.
+  assert.equal((await matchFor("Colour photocopy A4")).kind, "new");
+
+  assert.deepEqual(await alias.addAlias(xerox, "colour photocopy"), { ok: true });
+
+  // The taught name itself.
+  const taught = await matchFor("Colour photocopy");
+  assert.equal(taught.kind, "linked");
+  assert.equal(taught.kind === "linked" && taught.itemId, xerox);
+
+  // And a longer line built around it, which is the point of putting an alias
+  // through the same trigram search rather than treating it as an exact match.
+  const around = await matchFor("Colour photocopy A4");
+  assert.equal(around.kind, "linked");
+  assert.equal(around.kind === "linked" && around.itemId, xerox);
+});
+
+test("an item with several names is still one candidate", { skip }, async () => {
+  const alias = await import("../lib/items/alias.ts");
+  const toner = await catalogue("Toner cartridge 12A");
+  await alias.addAlias(toner, "black toner twelve a");
+  await alias.addAlias(toner, "cartridge twelve a black");
+
+  const found = await matchFor("Toner cartridge 12A");
+  assert.equal(found.kind, "linked");
+  assert.equal(found.kind === "linked" && found.itemId, toner);
+});
+
+test("one name cannot mean two products", { skip }, async () => {
+  const alias = await import("../lib/items/alias.ts");
+  const first = await catalogue("Bond paper 90gsm");
+  const second = await catalogue("Tracing paper 90gsm");
+
+  assert.deepEqual(await alias.addAlias(first, "thick paper"), { ok: true });
+
+  const refused = await alias.addAlias(second, "Thick Paper");
+  assert.equal(refused.ok, false);
+  // The message has to name the other product. "That is taken" leaves nothing
+  // to do about it.
+  assert.match(refused.ok === false ? refused.message : "", /Bond paper 90gsm/);
+});
+
+test("an alias that is already an item's own name is refused", { skip }, async () => {
+  const alias = await import("../lib/items/alias.ts");
+  const envelopes = await catalogue("Envelopes DL white");
+  const labels = await catalogue("Labels 24 up");
+
+  const clash = await alias.addAlias(labels, "Envelopes DL white");
+  assert.equal(clash.ok, false);
+  assert.match(clash.ok === false ? clash.message : "", /Merge/i);
+
+  const itself = await alias.addAlias(envelopes, "envelopes dl white");
+  assert.equal(itself.ok, false);
+  assert.match(itself.ok === false ? itself.message : "", /already called/i);
+});
+
+test("a removed name stops matching", { skip }, async () => {
+  const alias = await import("../lib/items/alias.ts");
+  const item = await catalogue("Packing tape 48mm clear");
+  await alias.addAlias(item, "sellotape wide");
+  assert.equal((await matchFor("Sellotape wide")).kind, "linked");
+
+  const [row] = await db!.query<{ id: string }>(
+    "SELECT id FROM item_alias WHERE item_id = $1",
+    [item],
+  );
+  await alias.removeAlias(item, row.id);
+  assert.equal((await matchFor("Sellotape wide")).kind, "new");
 });

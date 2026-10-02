@@ -92,11 +92,29 @@ export async function findMatch(
     String(thresholds.suggest),
   ]);
 
+  // An item's own name and every alias somebody has taught it are searched
+  // together, as names the item answers to. An alias is not a separate exact
+  // match step: teaching the matcher "photocopy" should also catch "photocopy
+  // a4 80gsm", which it only does if the alias goes through the same trigram
+  // comparison as everything else.
+  //
+  // Best score per item, then the best item. An item with three aliases is not
+  // three candidates.
   const { rows } = await client.query<{ id: string; score: number }>(
-    `SELECT id, similarity(normalized_name, $1)::float AS score
-     FROM item
+    `WITH names AS (
+       SELECT id, normalized_name, created_at FROM item
+       UNION ALL
+       SELECT a.item_id, a.normalized_name, i.created_at
+       FROM item_alias a JOIN item i ON i.id = a.item_id
+     )
+     SELECT id,
+            max(similarity(normalized_name, $1))::float AS score,
+            bool_or(normalized_name = $1) AS exact,
+            min(created_at) AS created_at
+     FROM names
      WHERE normalized_name % $1 OR normalized_name = $1
-     ORDER BY normalized_name = $1 DESC, score DESC, created_at
+     GROUP BY id
+     ORDER BY exact DESC, score DESC, created_at
      LIMIT 1`,
     [normalizedName],
   );
