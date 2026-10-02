@@ -12,6 +12,8 @@ import {
 
 type Progress = { name: string; state: "hashing" | "uploading" | "done" | "failed"; detail?: string };
 
+type Stalled = { reason: string } | null;
+
 /**
  * Drop contracts in and leave.
  *
@@ -27,6 +29,7 @@ export function ContractDropzone() {
   const [progress, setProgress] = useState<Progress[]>([]);
   const [busy, setBusy] = useState(false);
   const [over, setOver] = useState(false);
+  const [stalled, setStalled] = useState<Stalled>(null);
 
   async function send(files: File[]) {
     if (!files.length || busy) return;
@@ -65,7 +68,22 @@ export function ContractDropzone() {
     // One nudge once everything is stored, rather than one per file. The
     // worker chains to the next contract itself, so the queue only needs
     // starting once.
-    await fetch("/api/contracts/start", { method: "POST" }).catch(() => {});
+    //
+    // The answer matters. If the queue cannot be started the files sit there
+    // looking uploaded and nothing ever reads them, which is the worst of both:
+    // it appears to have worked and did not. So the reason is shown.
+    setStalled(null);
+    try {
+      const started = await fetch("/api/contracts/start", { method: "POST" });
+      if (!started.ok) {
+        const body = (await started.json().catch(() => ({}))) as { error?: string };
+        setStalled({
+          reason: body.error ?? "The reader could not be started, so these are waiting.",
+        });
+      }
+    } catch {
+      setStalled({ reason: "The reader could not be reached, so these are waiting." });
+    }
     setBusy(false);
     router.refresh();
   }
@@ -106,6 +124,13 @@ export function ContractDropzone() {
           onChange={(event) => void send([...(event.target.files ?? [])])}
         />
       </div>
+
+      {stalled && (
+        <p role="alert" className="text-destructive mt-4 text-sm">
+          {stalled.reason} They stay in the queue, so nothing is lost: once the
+          reader can start, it picks them up from where it left off.
+        </p>
+      )}
 
       {progress.length > 0 && (
         <ul className="mt-4 divide-y divide-black/10 text-sm dark:divide-white/15">
