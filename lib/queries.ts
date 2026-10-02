@@ -265,3 +265,80 @@ export function countWaitingSuggestions(): Promise<{ n: number }[]> {
     "SELECT count(*)::int AS n FROM match_suggestion WHERE decision IS NULL",
   );
 }
+
+export type ContractRow = {
+  id: string;
+  title: string;
+  status: string;
+  failure: string | null;
+  vendor_name: string | null;
+  rate_count: number;
+  created_at: string;
+};
+
+/**
+ * Every contract, newest first, with the one number worth seeing from a list:
+ * how many rates came out of it. A contract with no rates is a real document,
+ * a services agreement with a revenue share and no rate card, so zero is an
+ * answer rather than a failure.
+ */
+export function listContracts(): Promise<ContractRow[]> {
+  return query<ContractRow>(
+    `SELECT c.id, c.title, c.status, c.failure, v.name AS vendor_name,
+            count(r.id)::int AS rate_count, c.created_at
+     FROM contract c
+     LEFT JOIN vendor v ON v.id = c.vendor_id
+     LEFT JOIN contract_rate r ON r.contract_id = c.id
+     GROUP BY c.id, v.name
+     ORDER BY c.created_at DESC`,
+  );
+}
+
+export type ContractDetail = {
+  id: string;
+  title: string;
+  status: string;
+  failure: string | null;
+  vendor_name: string | null;
+  blob_url: string;
+  content_type: string;
+  extraction: unknown;
+  other_terms: { kind: string; label: string; summary: string; page: number | null; quote: string | null }[];
+  created_at: string;
+};
+
+export async function getContract(id: string) {
+  const rows = await query<ContractDetail>(
+    `SELECT c.id, c.title, c.status, c.failure, v.name AS vendor_name,
+            c.blob_url, c.content_type, c.extraction, c.other_terms, c.created_at
+     FROM contract c LEFT JOIN vendor v ON v.id = c.vendor_id
+     WHERE c.id = $1`,
+    [id],
+  );
+  if (!rows[0]) return null;
+
+  const rates = await query<{
+    id: string;
+    printed_name: string;
+    unit: string | null;
+    rate: number;
+    currency: Currency;
+    effective_from: string;
+    effective_to: string | null;
+    source_page: number | null;
+    source_quote: string | null;
+    item_id: string | null;
+    item_name: string | null;
+    reviewed: boolean;
+  }>(
+    `SELECT r.id, r.printed_name, r.unit, r.rate::float, r.currency,
+            r.effective_from, r.effective_to, r.source_page, r.source_quote,
+            r.item_id, i.canonical_name AS item_name, r.reviewed
+     FROM contract_rate r LEFT JOIN item i ON i.id = r.item_id
+     WHERE r.contract_id = $1
+     ORDER BY r.printed_name, r.effective_from`,
+    [id],
+  );
+
+  return { ...rows[0], rates };
+}
