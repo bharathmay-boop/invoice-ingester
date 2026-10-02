@@ -43,6 +43,7 @@ function invoice(over: Partial<ExtractedInvoice> = {}): ExtractedInvoice {
     subtotal: 3490,
     taxes: [],
     taxes_read: true,
+    adjustments: [],
     total: 3490,
     ...over,
   };
@@ -272,4 +273,52 @@ test("repeats in a file are found by the identity the save path uses", () => {
   const here = invoice({ tax_id: null, tax_id_kind: null, vendor_name: "Hopkins and Sons", vendor_address: "12 Mill Road, Leeds" });
   const there = invoice({ tax_id: null, tax_id_kind: null, vendor_name: "Hopkins and Sons", vendor_address: "4 Quay Street, Bristol" });
   assert.deepEqual([...findRepeats([here, there])], []);
+});
+
+// A discount, delivery or rounding line moves the total without being tax.
+// Before `adjustments` existed there was nowhere to put one, so every invoice
+// carrying one was held for a discrepancy nobody could clear, and a check that
+// always fires on a legitimate document is one people learn to dismiss.
+test("a discount between the subtotal and the total is not a discrepancy", () => {
+  const discounted = validateArithmetic(
+    invoice({
+      line_items: [
+        { description: "Paper", item_code: null, quantity: 1, unit: null, unit_price: 438.7, amount: 438.7 },
+      ],
+      subtotal: 438.7,
+      taxes: [],
+      adjustments: [{ label: "Discount 2.14%", amount: -9.39 }],
+      total: 429.31,
+    }),
+  );
+  assert.equal(discounted.status, "confirmed");
+
+  // Positive too, since delivery is the same shape pointing the other way.
+  const delivered = validateArithmetic(
+    invoice({
+      line_items: [
+        { description: "Paper", item_code: null, quantity: 1, unit: null, unit_price: 438.7, amount: 438.7 },
+      ],
+      subtotal: 438.7,
+      taxes: [{ label: "VAT", rate: 10, amount: 43.87, included: false }],
+      adjustments: [{ label: "Delivery", amount: 60 }],
+      total: 542.57,
+    }),
+  );
+  assert.equal(delivered.status, "confirmed");
+
+  // And an adjustment that does not reconcile is still caught.
+  const wrong = validateArithmetic(
+    invoice({
+      line_items: [
+        { description: "Paper", item_code: null, quantity: 1, unit: null, unit_price: 438.7, amount: 438.7 },
+      ],
+      subtotal: 438.7,
+      taxes: [],
+      adjustments: [{ label: "Discount", amount: -9.39 }],
+      total: 441.14,
+    }),
+  );
+  assert.equal(wrong.status, "needs_review");
+  assert.ok(wrong.discrepancies.some((d) => d.check === "tax_total"));
 });

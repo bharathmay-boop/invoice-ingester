@@ -53,6 +53,7 @@ test("an invoice without a readable currency is refused", () => {
     subtotal: 400,
     taxes: [],
     taxes_read: true,
+    adjustments: [],
     total: 400,
   });
 
@@ -82,6 +83,7 @@ test("currency is canonicalized to uppercase before it is accepted", () => {
     subtotal: 400,
     taxes: [],
     taxes_read: true,
+    adjustments: [],
     total: 400,
   });
 
@@ -105,6 +107,7 @@ test("a rate printed as text is taken rather than throwing the invoice away", ()
     ],
     subtotal: 889.2,
     taxes_read: true,
+    adjustments: [],
     total: 978.12,
   };
 
@@ -139,6 +142,7 @@ test("a tax row charging nothing is not carried through", () => {
       { label: "IGST", rate: 0, amount: 0, included: false },
     ],
     taxes_read: true,
+    adjustments: [],
     total: 1101466.14,
   });
 
@@ -164,9 +168,51 @@ test("a product code does not have to look like an HSN", () => {
     subtotal: 444.6,
     taxes: [],
     taxes_read: true,
+    adjustments: [],
     total: 444.6,
   });
 
   assert.equal(result.ok, true);
   if (result.ok) assert.equal(result.data.line_items[0].item_code, "W537");
+});
+
+// A tax number the model returned without saying what kind it is. Refusing the
+// pair threw away an otherwise perfect invoice, so a GSTIN, which announces
+// itself by shape, is recognised, and anything else loses the number rather
+// than being filed under a registration nobody identified.
+test("a tax number with no kind is recovered when it is unmistakably a GSTIN", () => {
+  const base = {
+    vendor_name: "Aditya Birla Sun Life AMC Ltd",
+    vendor_address: "One World Center, Mumbai 400013",
+    invoice_number: "AMC/2122/FA/0019",
+    invoice_date: "2021-09-28",
+    currency: "INR",
+    line_items: [
+      { description: "Sale of old car", item_code: "87032291", quantity: 1, unit: null, unit_price: 252495, amount: 252495 },
+    ],
+    subtotal: 252495,
+    taxes: [{ label: "CGST", rate: 6, amount: 14961, included: false }],
+    taxes_read: true,
+    adjustments: [],
+    total: 267456,
+  };
+
+  const gstin = parseExtraction({ ...base, tax_id: "27AAACB6134D1Z4", tax_id_kind: null });
+  assert.equal(gstin.ok, true);
+  if (gstin.ok) {
+    assert.equal(gstin.data.tax_id_kind, "gstin");
+    assert.equal(gstin.data.tax_id, "27AAACB6134D1Z4");
+  }
+
+  // Not a shape anything can be sure of, so the invoice survives and the vendor
+  // falls back to name and address.
+  const vague = parseExtraction({ ...base, tax_id: "985-73-8194", tax_id_kind: null });
+  assert.equal(vague.ok, true);
+  if (vague.ok) {
+    assert.equal(vague.data.tax_id, null);
+    assert.equal(vague.data.tax_id_kind, null);
+  }
+
+  // A kind with no number is still nonsense and still refused.
+  assert.equal(parseExtraction({ ...base, tax_id: null, tax_id_kind: "vat" }).ok, false);
 });

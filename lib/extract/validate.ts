@@ -116,7 +116,11 @@ export function validateArithmetic(
   const chargedTax = invoice.taxes
     .filter((tax) => !tax.included)
     .reduce((sum, tax) => sum + toPaise(tax.amount), 0);
-  const withTaxes = toPaise(invoice.subtotal) + chargedTax;
+  // A discount, delivery or rounding line belongs here rather than in the
+  // taxes: it moves the total without being tax, and before this existed every
+  // invoice carrying one was held for a discrepancy nobody could clear.
+  const adjusted = invoice.adjustments.reduce((sum, item) => sum + toPaise(item.amount), 0);
+  const withTaxes = toPaise(invoice.subtotal) + chargedTax + adjusted;
   check("tax_total", invoice.total, withTaxes);
 
   // Both of these add up perfectly and are still not a real invoice. They are

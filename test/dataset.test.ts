@@ -37,6 +37,7 @@ test("every invoice agrees with the status it claims", () => {
       subtotal: invoice.subtotal,
       taxes: invoice.taxes,
       taxes_read: true,
+      adjustments: [],
       total: invoice.total,
     });
     assert.equal(result.status, invoice.status, invoice.number);
