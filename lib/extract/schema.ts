@@ -97,7 +97,10 @@ export const extractedInvoiceSchema = z
     total: amount,
   })
   .refine(
-    (invoice) => (invoice.tax_id === null) === (invoice.tax_id_kind === null),
+    // A kind with no number is nonsense and still refused. A number with no
+    // kind is recoverable, so `readIdentity` gets to try before anything is
+    // thrown away over it.
+    (invoice) => !(invoice.tax_id === null && invoice.tax_id_kind !== null),
     {
       message: "tax_id and tax_id_kind must either both be present or both be null",
       path: ["tax_id"],
@@ -148,10 +151,32 @@ export function parseExtraction(raw: unknown): ParseResult {
 function settleTaxes(invoice: WireInvoice): ExtractedInvoice {
   return {
     ...invoice,
+    ...readIdentity(invoice),
     taxes: invoice.taxes
       .filter((tax) => tax.amount !== 0)
       .map((tax) => ({ ...tax, rate: readRate(tax.rate) })),
   };
+}
+
+/**
+ * A tax number whose kind the model forgot to say.
+ *
+ * The two have to agree or neither is usable, and refusing the pair threw away
+ * an otherwise perfect invoice. A GSTIN announces itself: fifteen characters,
+ * two digits, then a PAN, so it can be recognised without being guessed at.
+ * Anything else keeps the number and loses the kind, which means the vendor
+ * falls back to name and address rather than being filed under a registration
+ * nobody identified.
+ */
+const GSTIN_SHAPE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]{3}$/;
+
+function readIdentity(invoice: WireInvoice): Pick<WireInvoice, "tax_id" | "tax_id_kind"> {
+  if (invoice.tax_id === null || invoice.tax_id_kind !== null) {
+    return { tax_id: invoice.tax_id, tax_id_kind: invoice.tax_id_kind };
+  }
+  const tightened = invoice.tax_id.toUpperCase().replace(/[^A-Z0-9]+/g, "");
+  if (GSTIN_SHAPE.test(tightened)) return { tax_id: invoice.tax_id, tax_id_kind: "gstin" };
+  return { tax_id: null, tax_id_kind: null };
 }
 
 /**

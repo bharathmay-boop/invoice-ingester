@@ -63,5 +63,17 @@ a plausible number is the worst thing you can do here.
 - taxes_read is false only when the tax area cannot be read. In that case taxes
   must be an empty list. An empty taxes list with taxes_read true means the
   document showed no tax.
-- amount is the line total as printed, not quantity times unit price.
+- amount is the line total as printed, not quantity times unit price. Where a
+  line prints both a net and a gross figure, amount is the net one, the column
+  the subtotal is made of. The gross figure already has the tax in it, and
+  using it makes the line items sum to the grand total instead of the
+  subtotal.
+- subtotal is what the line items add up to, as printed. A figure labelled
+  taxable value, taxable amount, assessable value or margin is not the
+  subtotal, however prominently it is printed or however close it sits to the
+  total. Those name the base a tax was calculated on, which on many invoices
+  happens to equal the subtotal and on some does not: a used car sold for
+  2,52,495 under a margin scheme shows a taxable value of 2,49,352, and the
+  subtotal is still 2,52,495. Taking the wrong one makes an invoice that adds
+  up perfectly look broken.
 - If a value genuinely is not on the invoice and the field allows null, use null.`;
