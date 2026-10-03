@@ -20,8 +20,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 const QUESTIONS = [
   { key: "contract", label: "Am I being charged what we agreed?" },
   { key: "trend", label: "Is this getting more expensive?" },
-  { key: "vendor", label: "Who should I buy it from?" },
-  { key: "mismatch", label: "Which bills should I not have paid?" },
+  { key: "vendor", label: "Who last charged the least?" },
+  { key: "mismatch", label: "Which invoices do not add up?" },
 ] as const;
 
 type QuestionKey = (typeof QUESTIONS)[number]["key"];
@@ -138,23 +138,28 @@ function ContractAnswer() {
  * is. A line against a fixed scale rises without exaggerating.
  */
 function TrendAnswer() {
+  // Dates, not positions. Spacing four readings evenly when the gaps are one,
+  // two and two months draws a different line from the one the prices make,
+  // and a chart that misstates when something happened is worse than no chart.
   const points = [
-    { date: "Apr", price: 212 },
-    { date: "May", price: 230 },
-    { date: "Jul", price: 228 },
-    { date: "Sep", price: 249 },
+    { date: "Apr", month: 0, price: 212 },
+    { date: "May", month: 1, price: 230 },
+    { date: "Jul", month: 3, price: 228 },
+    { date: "Sep", month: 5, price: 249 },
   ];
+  const span = points[points.length - 1].month;
   const max = 260;
   const min = 200;
-  const x = (i: number) => (i / (points.length - 1)) * 100;
+  const x = (i: number) => (points[i].month / span) * 100;
   const y = (p: number) => 100 - ((p - min) / (max - min)) * 100;
   const path = points.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${y(p.price)}`).join(" ");
 
   return (
     <div>
       <Caption>
-        Line items are matched to one catalogue entry however they were typed,
-        so a price history survives the spelling.
+        Line items written differently are matched to one catalogue entry, so
+        a price history survives most of the respelling. The ones it cannot
+        join wait for a person rather than quietly becoming a second entry.
       </Caption>
 
       <p className="mt-5 text-sm font-medium">Microgreens, per kg</p>
@@ -179,11 +184,19 @@ function TrendAnswer() {
             />
           </g>
         </svg>
+        {/*
+          The scale starts at 200, not zero, which is right for a price that
+          never goes near zero and wrong to leave unsaid: without the numbers
+          a seventeen percent rise fills most of the height and reads as a
+          collapse. So the range is printed.
+        */}
         <div className="text-muted-foreground mt-1 flex justify-between text-xs">
-          {points.map((p) => (
-            <span key={p.date}>{p.date}</span>
-          ))}
+          <span>Apr</span>
+          <span>Sept</span>
         </div>
+        <p className="text-muted-foreground mt-1 text-xs">
+          ₹{min} to ₹{max} a kilogram. The scale starts at ₹{min}, not zero.
+        </p>
       </div>
 
       <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">

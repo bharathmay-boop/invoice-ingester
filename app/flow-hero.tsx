@@ -59,22 +59,22 @@ export function FlowHero() {
 
       <Connector delay={1.17} />
 
-      <Row icon={GitBranch} title="Condition" subtitle="value · period · item" delay={1.3} />
+      <Row icon={GitBranch} title="Is it what we agreed?" subtitle="rate · period · item" delay={1.3} />
 
       <Connector delay={1.43} branch="diverge" />
 
       <Pair>
         <Row
           icon={AlertTriangle}
-          title="Human intervention"
+          title="Held for a person"
           subtitle="Billed above contract"
           tone="amber"
           delay={1.56}
         />
         <Row
           icon={CheckCircle2}
-          title="Auto-clear"
-          subtitle="Condition met"
+          title="Nothing to query"
+          subtitle="Matches the contract"
           tone="emerald"
           delay={1.69}
         />
