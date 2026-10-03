@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server.js";
-import { head } from "@vercel/blob";
+import { get } from "@vercel/blob";
 import { query } from "@/lib/db.ts";
 import {
   beat,
@@ -10,6 +10,7 @@ import {
   waitingCount,
 } from "@/lib/contracts/queue.ts";
 import { readContract } from "@/lib/contracts/read.ts";
+import { locate, readPages } from "@/lib/contracts/locate.ts";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -46,10 +47,12 @@ export async function POST(request: NextRequest) {
   }, 20_000);
 
   try {
-    const blob = await head(contract.blob_url);
-    const file = await fetch(blob.downloadUrl);
-    if (!file.ok) throw new Error(`the stored file came back ${file.status}`);
-    const bytes = Buffer.from(await file.arrayBuffer());
+    // `get` rather than a fetch of a download URL: the contract is stored
+    // privately, so there is no URL that works without the store's own
+    // credentials.
+    const stored = await get(contract.blob_url, { access: "private" });
+    if (!stored) throw new Error("the stored contract could not be read back");
+    const bytes = Buffer.from(await new Response(stored.stream).arrayBuffer());
 
     const read = await readContract({
       data: bytes.toString("base64"),
@@ -57,8 +60,21 @@ export async function POST(request: NextRequest) {
     });
 
     if (read.ok) {
-      await recordRates(contract.id, read.contract.currency, read.contract.rates);
-      await markReadyForReview(contract.id, read.contract, read.meta, read.contract.other_terms);
+      // Checked against the document while the bytes are still here. The page
+      // a model names is a guess; the page a quote is found on is a fact, and
+      // a jump that lands nowhere costs more trust than no jump at all.
+      const pages = await readPages(bytes).catch(() => []);
+      const rates = read.contract.rates.map((rate) => ({
+        ...rate,
+        page: locate(pages, rate.quote).page,
+      }));
+      const terms = read.contract.other_terms.map((term) => ({
+        ...term,
+        page: locate(pages, term.quote).page,
+      }));
+
+      await recordRates(contract.id, read.contract.currency, rates);
+      await markReadyForReview(contract.id, { ...read.contract, rates }, read.meta, terms);
     } else if (read.notContract) {
       // Read and declined. Not a failure of the system, and never worth
       // another attempt, so it goes straight to terminal with what it is.

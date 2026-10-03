@@ -342,3 +342,135 @@ export async function getContract(id: string) {
 
   return { ...rows[0], rates };
 }
+
+/** Suppliers to pick from when confirming a contract, most used first. */
+export function listVendorChoices(): Promise<{ id: string; name: string }[]> {
+  return query<{ id: string; name: string }>(
+    `SELECT v.id, v.name FROM vendor v
+     LEFT JOIN invoice i ON i.vendor_id = v.id
+     GROUP BY v.id, v.name
+     ORDER BY count(i.id) DESC, v.name`,
+  );
+}
+
+/**
+ * The catalogue, for matching a contract's rate to a thing you buy. Most
+ * purchased first, because a contract's rate card and the things actually
+ * bought overlap heavily and the right answer is usually near the top.
+ */
+export function listItemChoices(): Promise<{ id: string; name: string }[]> {
+  return query<{ id: string; name: string }>(
+    `SELECT it.id, it.canonical_name AS name FROM item it
+     LEFT JOIN line_item li ON li.item_id = it.id
+     GROUP BY it.id, it.canonical_name
+     ORDER BY count(li.id) DESC, it.canonical_name`,
+  );
+}
+
+export type FindingRow = {
+  line_id: string;
+  invoice_id: string;
+  invoice_number: string;
+  invoice_date: string;
+  vendor_id: string;
+  vendor_name: string;
+  item_name: string | null;
+  raw_description: string;
+  currency: Currency;
+  unit: string | null;
+  quantity: number;
+  unit_price: number;
+  variance_tag: string;
+  variance_contracted: number | null;
+  variance_impact: number | null;
+  variance_reason: string | null;
+};
+
+/**
+ * Everything a contract disagrees with, worst first.
+ *
+ * Ordered by money rather than by count. Seventeen lines billed above contract
+ * is a number nobody can act on; forty one thousand rupees, twenty eight of it
+ * from one supplier, is a phone call. Count ordering also sorts badly, because
+ * a hundred lines two rupees out beats one line forty thousand out.
+ *
+ * `matches_contract` is excluded: it is the answer being right, not a finding.
+ */
+export function listFindings(tag?: string): Promise<FindingRow[]> {
+  return query<FindingRow>(
+    `SELECT li.id AS line_id, i.id AS invoice_id, i.invoice_number, i.invoice_date,
+            v.id AS vendor_id, v.name AS vendor_name,
+            it.canonical_name AS item_name, li.raw_description, i.currency,
+            li.unit, li.quantity::float, li.unit_price::float,
+            li.variance_tag, li.variance_contracted::float, li.variance_impact::float,
+            li.variance_reason
+     FROM line_item li
+     JOIN invoice i ON i.id = li.invoice_id
+     JOIN vendor v ON v.id = i.vendor_id
+     LEFT JOIN item it ON it.id = li.item_id
+     WHERE li.variance_tag IS NOT NULL
+       AND li.variance_tag <> 'matches_contract'
+       AND ($1::text IS NULL OR li.variance_tag = $1)
+     ORDER BY abs(coalesce(li.variance_impact, 0)) DESC, i.invoice_date DESC`,
+    [tag ?? null],
+  );
+}
+
+/** The totals above the list, per currency because they are never added up. */
+export function findingTotals(): Promise<
+  { currency: Currency; variance_tag: string; total: number; lines: number }[]
+> {
+  return query(
+    `SELECT i.currency, li.variance_tag,
+            coalesce(sum(li.variance_impact), 0)::float AS total,
+            count(*)::int AS lines
+     FROM line_item li JOIN invoice i ON i.id = li.invoice_id
+     WHERE li.variance_tag IS NOT NULL AND li.variance_tag <> 'matches_contract'
+     GROUP BY i.currency, li.variance_tag
+     ORDER BY i.currency, abs(coalesce(sum(li.variance_impact), 0)) DESC`,
+  );
+}
+
+export async function getFinding(lineId: string): Promise<(FindingRow & {
+  contract_title: string | null;
+  source_page: number | null;
+  source_quote: string | null;
+  contract_id: string | null;
+}) | null> {
+  const rows = await query<FindingRow & {
+    contract_title: string | null;
+    source_page: number | null;
+    source_quote: string | null;
+    contract_id: string | null;
+  }>(
+    `SELECT li.id AS line_id, i.id AS invoice_id, i.invoice_number, i.invoice_date,
+            v.id AS vendor_id, v.name AS vendor_name,
+            it.canonical_name AS item_name, li.raw_description, i.currency,
+            li.unit, li.quantity::float, li.unit_price::float,
+            li.variance_tag, li.variance_contracted::float, li.variance_impact::float,
+            li.variance_reason,
+            c.title AS contract_title, c.id AS contract_id,
+            r.source_page, r.source_quote
+     FROM line_item li
+     JOIN invoice i ON i.id = li.invoice_id
+     JOIN vendor v ON v.id = i.vendor_id
+     LEFT JOIN item it ON it.id = li.item_id
+     LEFT JOIN contract_rate r ON r.reviewed AND r.vendor_id = v.id
+          AND r.item_id = li.item_id
+          AND r.effective_from <= i.invoice_date
+          AND (r.effective_to IS NULL OR r.effective_to >= i.invoice_date)
+     LEFT JOIN contract c ON c.id = r.contract_id
+     WHERE li.id = $1
+     LIMIT 1`,
+    [lineId],
+  );
+  return rows[0] ?? null;
+}
+
+/** How many findings are waiting, for the count beside a vendor or an invoice. */
+export function countFindings(): Promise<{ n: number }[]> {
+  return query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM line_item
+     WHERE variance_tag IS NOT NULL AND variance_tag <> 'matches_contract'`,
+  );
+}
