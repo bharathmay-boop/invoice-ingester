@@ -1,12 +1,12 @@
 # Invoice Ingester
 
-Drop in an invoice, get the particulars extracted and stored, then search what you paid for a given thing and what you paid a given vendor in total.
+Drop in an invoice, get the particulars extracted and stored, then search what you paid for a given thing and what you paid a given vendor in total. Drop in the contracts behind those invoices and it checks what you were billed against what you agreed.
 
-Built for Indian invoices first: GSTIN, HSN codes, and the CGST, SGST and IGST split.
+Reads invoices in rupees, dollars and euros, and takes whatever tax the document actually printed rather than assuming a country: CGST and SGST, IGST, VAT, sales tax, cess.
 
 **Live:** [invoice-ingester.vercel.app](https://invoice-ingester.vercel.app). The home page shows what it does; the app itself is behind a password, because it holds real invoices.
 
-**Status:** in build, and working end to end. Upload, extraction, review, save, item matching, price history and vendor spend all work. Progress is tracked on the [board](https://github.com/users/bharathmay-boop/projects/1), and [`docs/spec.md`](docs/spec.md) says what is being built and why.
+**Status:** working end to end. Upload, extraction, review, save, item matching, price history, vendor spend, contract ingestion and variance checking all work. Progress is tracked on the [board](https://github.com/users/bharathmay-boop/projects/1), and [`docs/spec.md`](docs/spec.md) says what is being built and why.
 
 ## The problem
 
@@ -21,7 +21,7 @@ Both are answerable from invoices you already have. They just need the line item
 
 Upload a PDF or an image. A vision model reads it and returns structured fields against a fixed schema. Two arithmetic checks run before anything saves: line items must sum to the subtotal, and subtotal plus taxes must equal the total. If either fails the invoice is held for review with the disagreeing figures highlighted, rather than saved as if it were fine.
 
-Vendors are resolved by GSTIN, which is a real unique business identifier, so vendor identity is an exact key lookup rather than a guess. Line items are normalised and matched against a catalogue using Postgres trigram similarity. Strong matches link on their own, borderline ones wait in a queue to be accepted or rejected, and weak ones become new catalogue entries.
+Vendors are resolved by whatever tax registration the invoice carries, a GSTIN or a VAT number or an EIN, normalised so one registration printed two ways is one supplier. Where there is none, name and address must both agree, because a false merge blends two businesses into one price history and nothing says so. Line items are normalised and matched against a catalogue using Postgres trigram similarity. Strong matches link on their own, borderline ones wait in a queue to be accepted or rejected, and weak ones become new catalogue entries.
 
 One file can hold several invoices. A five page PDF of three invoices comes back as three, each with the pages it came from, each reviewed and saved on its own.
 
@@ -34,7 +34,9 @@ Worth knowing before you clone it:
 - **It will not save an invoice whose own figures disagree** without marking it. It is held for checking rather than folded into a spend total.
 - **It will not read a file that is not an invoice.** A photo or a bank statement is declined with a reason rather than turned into a draft of invented fields.
 - **It is one user with one password.** No accounts, no roles, no tenancy.
-- **Contracts are not built.** Checking a billed rate against a contracted one is the most useful thing this could eventually do, and it is deliberately last: a variance check on shaky extraction produces confident wrong answers.
+- **It will not compare prices in two currencies.** No exchange rate exists anywhere in the codebase, deliberately. A live rate means a price history that changes shape when the euro moves; a stored one means a provider, a key and a new class of wrong answer. Rupees and euros are reported separately and said to be incomparable.
+- **It will not check a contract term it cannot verify.** Volume slabs, rebates, revenue share and minimum guarantees are read out of the contract, shown with the page and the words they came from, and explicitly not checked. None can be verified against a single invoice, so checking them would mean guessing.
+- **It will not act on a contract nobody has read.** Every rate is inert until a person has confirmed it with the document open beside them. That is what makes reading a two hundred page PDF with a cheap model safe.
 
 ## Extraction providers
 
@@ -95,7 +97,15 @@ The store tests need a database and skip themselves without one, so `npm test` s
 
 ## Screenshots
 
-_To be added: the review screen with an invoice beside its extracted fields, and an item's price history._
+The review screen. The original on the left, what was read out of it on the right, every field editable and nothing stored until you save.
+
+![The review screen: an Indian e-invoice beside the fields extracted from it](docs/screenshots/review.png)
+
+An item's price history, with the three figures worth having above it and the names a person has taught the matcher below.
+
+![An item screen: total paid, current price, cheapest vendor, and a price line over six months](docs/screenshots/price-history.png)
+
+Both are taken by `npm run screenshots` against the running app, not captured by hand. A hand captured image goes stale silently: the screen changes, the picture does not, and the front page starts describing a product that no longer exists.
 
 ## Using it
 
@@ -141,11 +151,30 @@ Work is tracked on the board, not in these documents. The documents say what is 
 
 Reading an invoice costs about a quarter of a cent with Gemini 2.5 Flash through OpenRouter, or a few cents with Claude directly. The upload screen says what a batch will cost before it starts, and what it actually cost afterwards, from the token counts each call reported. Every call is recorded, so settings can show spend for today and this month.
 
+## Contracts
+
+Drop a supply contract in and it is read into dated rates: an item, a unit, a figure, and the period it applies for. An escalation is written out when the contract is read rather than interpreted later, so a rate rising five percent each April becomes three rate rows with three date ranges, and "what was agreed on this date" stays a date lookup.
+
+Reading a two hundred page agreement takes longer than a request stays open, so the files go from the browser straight to storage and a queue reads them one at a time. The queue drains itself: each worker hands on to the next before it returns, and a daily sweep hands back anything a function died holding.
+
+The review screen puts the contract on the left and what was read on the right. Clicking a rate moves the document to the page that rate came from, and that page is found by searching the document's own text for the quoted line, not taken from the model's word for it. A quote that cannot be found says so, which is a better reason to look closely than any confidence score.
+
+Then every invoice from that supplier is checked, including ones saved months earlier. Six answers, and three of them are right even when a rate was read badly, because they turn on dates, item identity and units rather than on a number:
+
+| | |
+|---|---|
+| `matches contract` | billed what was agreed, within a tolerance you set |
+| `billed above contract` | and by how much, over the quantity on the line |
+| `billed below contract` | said separately, because it is not leakage and should not read like an accusation |
+| `outside contract period` | this supplier has contracts, none covering this invoice date |
+| `not in contract` | a contract covers the date and never prices this item |
+| `units differ` | agreed by the kilogram, billed by the pack, and no honest way to convert |
+
+Findings are sorted by money, never by count. Seventeen lines billed above contract is not something anyone can act on, and a hundred lines two rupees out would otherwise outrank one line forty thousand out.
+
 ## Scope
 
-Version one covers upload, extraction, vendor matching, item matching, item price history, and vendor spend totals.
-
-Contracts are version two. The intent is that an invoice gets checked against the contract in force on its date, and a billed rate that disagrees with the contracted rate gets flagged. That is the most useful thing this could eventually do, and it is not worth building until extraction and matching are reliable, because a variance check on top of shaky data produces confident wrong answers.
+Not built, and listed so the gap is visible rather than implied: volume slabs, retrospective rebates, revenue share and minimum guarantees are read out of a contract and shown, and never checked. Each needs either a running total across invoices or a figure no invoice carries, so checking one against a single invoice would mean guessing.
 
 ## Licence
 

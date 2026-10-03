@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { query } from "@/lib/db.ts";
+import { upgradeStoredInvoice } from "@/lib/extract/stored.ts";
 import { originalHref, originalSrc } from "@/lib/original.ts";
 import type { ExtractedInvoice } from "@/lib/extract/schema.ts";
 import { describeDiscrepancy, isValidityWarning, type Discrepancy } from "@/lib/extract/validate.ts";
@@ -34,6 +35,12 @@ export default async function Review({ params }: { params: Promise<{ id: string 
     [id],
   );
   if (!draft) notFound();
+
+  // A draft can outlive a schema change: it is an invoice that was extracted
+  // and not yet saved, so one written in September is read by code that did
+  // not exist then. Brought up to the current shape here rather than left to
+  // every screen that touches it.
+  draft.extracted = upgradeStoredInvoice(draft.extracted);
 
   // The next draft from the same file, so a batch can be walked without going
   // back to the upload list between invoices.
