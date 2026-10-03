@@ -7,6 +7,7 @@ import { pool, query } from "@/lib/db.ts";
 import { normalize } from "@/lib/items/normalize.ts";
 import { normalizeAddress, normalizeTaxId } from "@/lib/vendors/normalize.ts";
 import { track } from "@/lib/analytics/server.ts";
+import { recomputeVariance } from "@/lib/contracts/recompute.ts";
 
 export type ReviewOutcome = { ok: false; message: string } | null;
 
@@ -67,6 +68,7 @@ export async function confirmContract(
   if (to && !DATE.test(to)) return { ok: false, message: "That end date is not a date." };
   if (to && to < from) return { ok: false, message: "The end date is before the start date." };
 
+  let confirmedVendorId = "";
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -123,6 +125,7 @@ export async function confirmContract(
     );
 
     await client.query("COMMIT");
+    confirmedVendorId = vendorId;
   } catch (error) {
     await client.query("ROLLBACK");
     return {
@@ -133,8 +136,15 @@ export async function confirmContract(
     client.release();
   }
 
+  // Every invoice already saved from this supplier is checked now, which is
+  // the moment the epic is worth having: review one contract and months of
+  // invoices answer back. Done after the commit rather than inside it, so a
+  // slow recompute cannot hold the transaction that made the contract live.
+  await recomputeVariance(confirmedVendorId);
+
   await track("contract_reviewed", { contract_id: contractId });
   revalidatePath(`/contracts/${contractId}`);
+  revalidatePath("/findings");
   revalidatePath("/contracts");
   return null;
 }

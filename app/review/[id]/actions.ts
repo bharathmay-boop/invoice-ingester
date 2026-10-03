@@ -14,6 +14,7 @@ import { getThresholds } from "@/lib/items/match.ts";
 import { saveLine } from "@/lib/items/save-line.ts";
 import { releaseDraft } from "@/lib/blob.ts";
 import { track } from "@/lib/analytics/server.ts";
+import { recomputeVariance } from "@/lib/contracts/recompute.ts";
 
 export type SaveResult = { ok: false; message: string; duplicateId?: string } | null;
 
@@ -82,6 +83,7 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
   const client = await pool.connect();
   let savedId: string;
   let blobUrl: string;
+  let recomputeFor = "";
   try {
     await client.query("BEGIN");
 
@@ -168,6 +170,7 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
 
     await client.query("DELETE FROM draft WHERE id = $1", [draftId]);
     await client.query("COMMIT");
+    recomputeFor = vendorId;
   } catch (error) {
     await client.query("ROLLBACK");
 
@@ -205,6 +208,11 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
   } finally {
     client.release();
   }
+
+  // Checked against whatever this supplier agreed to, now that the lines
+  // exist. Only reviewed rates are visible to the lookup, so a vendor with no
+  // confirmed contract gets no tags and no delay worth noticing.
+  if (recomputeFor) await recomputeVariance(recomputeFor);
 
   // Sent here rather than from the click, so the event means an invoice was
   // saved rather than that someone tried.
