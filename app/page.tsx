@@ -38,8 +38,8 @@ export default async function Home() {
             before reaching a button.
           */}
           <p className="text-muted-foreground mt-5 max-w-md text-lg leading-relaxed">
-            Drop them in. Find out what things really cost, who charges least,
-            and which bills do not add up.
+            Drop them in with the contracts behind them. Find out what you were
+            charged against what you agreed.
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">
@@ -66,7 +66,7 @@ export default async function Home() {
           {!signedIn && (
             <p className="text-muted-foreground mt-3 text-xs">
               Behind a password, since it holds real invoices. Everything below
-              is the real screens.
+              is drawn to match the real screens, with invented figures.
             </p>
           )}
         </div>
@@ -102,8 +102,8 @@ export default async function Home() {
         <section className="mx-auto w-full max-w-6xl px-4 pb-14 sm:px-6">
           <div className="border-border bg-card flex flex-wrap items-center justify-between gap-4 rounded-xl border p-6">
             <p className="max-w-xl text-sm leading-relaxed">
-              The screens above are the real ones. To use them on your own
-              invoices, sign in.
+              Those are drawings of the real screens. To use the real ones on
+              your own invoices, sign in.
             </p>
             <Button asChild>
               <Link href="/login">Sign in</Link>
@@ -115,8 +115,9 @@ export default async function Home() {
       <footer className="border-border mt-6 border-t">
         <div className="text-muted-foreground mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-6 text-xs sm:px-6">
           <p>
-            Every figure on this page is invented, so none of it is anyone&rsquo;s
-            real spending.
+            Every figure, name and quoted line on this page is invented,
+            including the contract it cites. None of it is anyone&rsquo;s real
+            spending or anyone&rsquo;s real agreement.
           </p>
           <Link
             href="https://github.com/bharathmay-boop/invoice-ingester"

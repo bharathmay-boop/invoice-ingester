@@ -25,7 +25,7 @@ export function FlowHero() {
     <div className="border-border bg-card flex flex-col gap-2 rounded-xl border p-4 shadow-sm sm:p-5">
       <Pair>
         <Row icon={FileText} title="Invoice" subtitle="1 file" delay={0} />
-        <Row icon={Copy} title="Contract" subtitle="Coming soon" ghost delay={0.13} />
+        <Row icon={Copy} title="Contract" subtitle="1 file" delay={0.13} />
       </Pair>
 
       <Connector delay={0.26} branch="converge" />
@@ -43,7 +43,7 @@ export function FlowHero() {
 
       <Pair>
         <Row icon={Table2} title="Invoice fields" subtitle="₹18,400 · Q3" delay={0.65} />
-        <Row icon={Copy} title="Contract terms" subtitle="Coming soon" ghost delay={0.78} />
+        <Row icon={Copy} title="Agreed rates" subtitle="12 rates · 2025-26" delay={0.78} />
       </Pair>
 
       <Connector delay={0.91} branch="converge" />
@@ -51,7 +51,7 @@ export function FlowHero() {
       <Row
         icon={Search}
         title="Cross-check"
-        subtitle="3 of 3 matched"
+        subtitle="3 of 3 against contract"
         badge="comparing → matched"
         highlight
         delay={1.04}
@@ -59,22 +59,22 @@ export function FlowHero() {
 
       <Connector delay={1.17} />
 
-      <Row icon={GitBranch} title="Condition" subtitle="value · period · item" delay={1.3} />
+      <Row icon={GitBranch} title="Is it what we agreed?" subtitle="rate · period · item" delay={1.3} />
 
       <Connector delay={1.43} branch="diverge" />
 
       <Pair>
         <Row
           icon={AlertTriangle}
-          title="Human intervention"
-          subtitle="Mismatch · needs review"
+          title="Held for a person"
+          subtitle="Billed above contract"
           tone="amber"
           delay={1.56}
         />
         <Row
           icon={CheckCircle2}
-          title="Auto-clear"
-          subtitle="Condition met"
+          title="Nothing to query"
+          subtitle="Matches the contract"
           tone="emerald"
           delay={1.69}
         />

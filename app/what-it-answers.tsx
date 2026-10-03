@@ -18,15 +18,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
  */
 
 const QUESTIONS = [
+  { key: "contract", label: "Am I being charged what we agreed?" },
   { key: "trend", label: "Is this getting more expensive?" },
-  { key: "vendor", label: "Who should I buy it from?" },
-  { key: "mismatch", label: "Which bills should I not have paid?" },
+  { key: "vendor", label: "Who last charged the least?" },
+  { key: "mismatch", label: "Which invoices do not add up?" },
 ] as const;
 
 type QuestionKey = (typeof QUESTIONS)[number]["key"];
 
 export function WhatItAnswers() {
-  const [tab, setTab] = useState<QuestionKey>("trend");
+  const [tab, setTab] = useState<QuestionKey>("contract");
   // Keying the panel by a run count forces the fade-up/sweep animations to
   // replay on every switch, including re-selecting the tab already showing.
   const [run, setRun] = useState(0);
@@ -55,6 +56,9 @@ export function WhatItAnswers() {
       </div>
 
       <div className="border-border bg-card mt-4 rounded-xl border p-5 sm:p-6">
+        <TabsContent value="contract">
+          <ContractAnswer key={run} />
+        </TabsContent>
         <TabsContent value="trend">
           <TrendAnswer key={run} />
         </TabsContent>
@@ -66,6 +70,57 @@ export function WhatItAnswers() {
         </TabsContent>
       </div>
     </Tabs>
+  );
+}
+
+/**
+ * What a contract says about a line somebody was billed for.
+ *
+ * First, because it is the thing nothing else in the product does: a price
+ * history tells you a price went up, and this tells you it went up past what
+ * was agreed, and by how much, and points at the line of the contract that
+ * says so.
+ */
+function ContractAnswer() {
+  return (
+    <div>
+      <Caption>
+        One line from an invoice, against the rate the contract sets for it.
+      </Caption>
+
+      <div className="mt-5 flex flex-col gap-3">
+        <span className="inline-block self-start rounded-full bg-amber-500/20 px-2.5 py-0.5 text-xs font-medium text-amber-900 dark:text-amber-200">
+          billed above contract
+        </span>
+
+        <dl className="motion-safe:animate-[fade-up_0.5s_ease-out_backwards] grid gap-x-8 gap-y-2 sm:grid-cols-2">
+          <Row label="Billed" value="₹312.00 per ream" />
+          <Row label="Contracted" value="₹285.00 per ream" />
+          <Row label="Difference" value="₹27.00, over" off />
+          <Row label="Quantity" value="1,051 reams" />
+        </dl>
+
+        <div
+          className="motion-safe:animate-[fade-up_0.5s_ease-out_0.12s_backwards] flex items-baseline justify-between rounded-lg bg-black/5 px-4 py-3 dark:bg-white/10"
+        >
+          <span className="text-xs uppercase tracking-wide opacity-60">
+            Overbilled on this line
+          </span>
+          <span className="text-2xl font-semibold tabular-nums">₹28,377</span>
+        </div>
+
+        <div className="motion-safe:animate-[fade-up_0.5s_ease-out_0.24s_backwards]">
+          <p className="text-muted-foreground text-xs uppercase tracking-wide">
+            The rate came from
+          </p>
+          <p className="mt-1 text-sm font-medium">Rate Contract 2025-26, page 44</p>
+          <blockquote className="text-muted-foreground mt-1 border-l-2 border-black/20 pl-3 text-sm dark:border-white/20">
+            &ldquo;A4 Paper 80 GSM, white, per ream, Rs. 285.00, firm for the
+            contract period&rdquo;
+          </blockquote>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -83,23 +138,28 @@ export function WhatItAnswers() {
  * is. A line against a fixed scale rises without exaggerating.
  */
 function TrendAnswer() {
+  // Dates, not positions. Spacing four readings evenly when the gaps are one,
+  // two and two months draws a different line from the one the prices make,
+  // and a chart that misstates when something happened is worse than no chart.
   const points = [
-    { date: "Apr", price: 212 },
-    { date: "May", price: 230 },
-    { date: "Jul", price: 228 },
-    { date: "Sep", price: 249 },
+    { date: "Apr", month: 0, price: 212 },
+    { date: "May", month: 1, price: 230 },
+    { date: "Jul", month: 3, price: 228 },
+    { date: "Sep", month: 5, price: 249 },
   ];
+  const span = points[points.length - 1].month;
   const max = 260;
   const min = 200;
-  const x = (i: number) => (i / (points.length - 1)) * 100;
+  const x = (i: number) => (points[i].month / span) * 100;
   const y = (p: number) => 100 - ((p - min) / (max - min)) * 100;
   const path = points.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${y(p.price)}`).join(" ");
 
   return (
     <div>
       <Caption>
-        Line items are matched to one catalogue entry however they were typed,
-        so a price history survives the spelling.
+        Line items written differently are matched to one catalogue entry, so
+        a price history survives most of the respelling. The ones it cannot
+        join wait for a person rather than quietly becoming a second entry.
       </Caption>
 
       <p className="mt-5 text-sm font-medium">Microgreens, per kg</p>
@@ -124,11 +184,19 @@ function TrendAnswer() {
             />
           </g>
         </svg>
+        {/*
+          The scale starts at 200, not zero, which is right for a price that
+          never goes near zero and wrong to leave unsaid: without the numbers
+          a seventeen percent rise fills most of the height and reads as a
+          collapse. So the range is printed.
+        */}
         <div className="text-muted-foreground mt-1 flex justify-between text-xs">
-          {points.map((p) => (
-            <span key={p.date}>{p.date}</span>
-          ))}
+          <span>Apr</span>
+          <span>Sept</span>
         </div>
+        <p className="text-muted-foreground mt-1 text-xs">
+          ₹{min} to ₹{max} a kilogram. The scale starts at ₹{min}, not zero.
+        </p>
       </div>
 
       <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
