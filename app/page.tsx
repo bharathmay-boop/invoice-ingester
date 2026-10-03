@@ -38,8 +38,8 @@ export default async function Home() {
             before reaching a button.
           */}
           <p className="text-muted-foreground mt-5 max-w-md text-lg leading-relaxed">
-            Drop them in. Find out what things really cost, who charges least,
-            and which bills do not add up.
+            Drop them in with the contracts behind them. Find out what you were
+            charged against what you agreed.
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">
