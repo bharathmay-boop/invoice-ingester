@@ -342,3 +342,27 @@ export async function getContract(id: string) {
 
   return { ...rows[0], rates };
 }
+
+/** Suppliers to pick from when confirming a contract, most used first. */
+export function listVendorChoices(): Promise<{ id: string; name: string }[]> {
+  return query<{ id: string; name: string }>(
+    `SELECT v.id, v.name FROM vendor v
+     LEFT JOIN invoice i ON i.vendor_id = v.id
+     GROUP BY v.id, v.name
+     ORDER BY count(i.id) DESC, v.name`,
+  );
+}
+
+/**
+ * The catalogue, for matching a contract's rate to a thing you buy. Most
+ * purchased first, because a contract's rate card and the things actually
+ * bought overlap heavily and the right answer is usually near the top.
+ */
+export function listItemChoices(): Promise<{ id: string; name: string }[]> {
+  return query<{ id: string; name: string }>(
+    `SELECT it.id, it.canonical_name AS name FROM item it
+     LEFT JOIN line_item li ON li.item_id = it.id
+     GROUP BY it.id, it.canonical_name
+     ORDER BY count(li.id) DESC, it.canonical_name`,
+  );
+}

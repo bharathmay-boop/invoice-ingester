@@ -4,6 +4,8 @@ import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { getContract } from "@/lib/queries.ts";
 import { formatDate, money } from "@/lib/format.ts";
 import { Empty, Page } from "../../ui.tsx";
+import { ContractReview } from "./review.tsx";
+import { listVendorChoices, listItemChoices } from "@/lib/queries.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +26,44 @@ export default async function Contract({ params }: { params: Promise<{ id: strin
 
   const contract = await getContract(id);
   if (!contract) notFound();
+
+  // A contract waiting on a person gets the review screen. One already
+  // confirmed gets the read only view below it, because re-presenting a form
+  // for something already agreed invites it to be agreed again by accident.
+  if (contract.status === "ready_for_review") {
+    const [vendors, items] = await Promise.all([listVendorChoices(), listItemChoices()]);
+    const read = (contract.extraction ?? {}) as {
+      vendor_name?: string;
+      vendor_address?: string | null;
+      tax_id?: string | null;
+      tax_id_kind?: string | null;
+      effective_from?: string | null;
+      effective_to?: string | null;
+    };
+
+    return (
+      <Page
+        title={contract.title}
+        lead="Check this against the document before it starts counting. Nothing here affects an invoice until you confirm."
+      >
+        <ContractReview
+          contractId={contract.id}
+          blobUrl={contract.blob_url}
+          scanned={contract.rates.length > 0 && contract.rates.every((r) => r.source_page === null)}
+          vendors={vendors}
+          suggested={{
+            name: read.vendor_name ?? contract.title,
+            address: read.vendor_address ?? null,
+            taxId: read.tax_id ?? null,
+            taxIdKind: read.tax_id_kind ?? null,
+          }}
+          period={{ from: read.effective_from ?? null, to: read.effective_to ?? null }}
+          rates={contract.rates}
+          items={items}
+        />
+      </Page>
+    );
+  }
 
   return (
     <Page

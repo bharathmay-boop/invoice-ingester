@@ -27,6 +27,8 @@ export async function GET(request: NextRequest) {
        SELECT blob_url FROM draft WHERE blob_url = $1
        UNION ALL
        SELECT blob_url FROM invoice WHERE blob_url = $1
+       UNION ALL
+       SELECT blob_url FROM contract WHERE blob_url = $1
      ) AS m`,
     [url],
   );

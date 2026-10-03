@@ -52,7 +52,11 @@ export function ContractDropzone() {
         const digest = await sha256(file);
         update(i, { state: "uploading" });
         await upload(`contracts/${file.name}`, file, {
-          access: "public",
+          // Private, like the invoices. A supply contract is the most
+          // confidential document a business has, and putting it on a world
+          // readable URL because that is the easier call would be a bad trade.
+          // It is read back through /api/original, which checks the session.
+          access: "private",
           handleUploadUrl: "/api/contracts/upload",
           clientPayload: JSON.stringify({ name: file.name, digest }),
         });

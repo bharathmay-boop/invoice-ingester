@@ -50,6 +50,9 @@ export async function POST(request: NextRequest) {
 
         return {
           allowedContentTypes: ["application/pdf"],
+          // Matches what the browser asks for. A mismatch here is refused by
+          // Blob rather than quietly downgraded, which is the right way round.
+          access: "private" as const,
           maximumSizeInBytes: MAX_CONTRACT_BYTES,
           // Carried through to the callback, which runs without a session.
           tokenPayload: JSON.stringify(sent),
