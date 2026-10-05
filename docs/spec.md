@@ -39,6 +39,8 @@ The app is deployed so the link works for anyone who opens it. What they get is 
 
 A page requested without a session redirects to sign in, carrying where you were going, so signing in lands you there rather than at the start. That return path is only ever a path on this site: it arrives in the URL, and a sign in page that forwards to another site on request is a phishing tool with your own domain on it. An API route answers 401 instead, so a fetch gets a readable error rather than the HTML of the sign in page.
 
+A session lasts 14 days and nothing about it is stored on the server. Signing out clears the cookie in that browser only. Changing the password ends every session at once, because the password is part of what each session's signature covers, so a cookie copied off another machine stops working the moment the password changes.
+
 ## 3. Stack
 
 - Next.js App Router, TypeScript, deployed on Vercel.
