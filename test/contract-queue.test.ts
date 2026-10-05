@@ -39,10 +39,53 @@ before(async () => {
       created_at timestamptz NOT NULL DEFAULT now(),
       reviewed_at timestamptz
     )`);
+  // `recordRates` writes rate rows and matches each printed name against the
+  // catalogue as it goes, so the item side has to be here too, trigram index
+  // and all, or the matching it does is not the matching production does.
+  await db.query(`
+    CREATE TABLE item (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      canonical_name text NOT NULL,
+      normalized_name text NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )`);
+  await db.query("CREATE INDEX ON item USING gin (normalized_name gin_trgm_ops)");
+  await db.query(`
+    CREATE TABLE item_alias (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      item_id uuid NOT NULL REFERENCES item (id) ON DELETE CASCADE,
+      alias text NOT NULL,
+      normalized_name text NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (normalized_name)
+    )`);
+  await db.query("CREATE INDEX ON item_alias USING gin (normalized_name gin_trgm_ops)");
+  await db.query(`
+    CREATE TABLE contract_rate (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      contract_id uuid NOT NULL REFERENCES contract (id) ON DELETE CASCADE,
+      vendor_id uuid,
+      item_id uuid REFERENCES item (id),
+      printed_name text NOT NULL,
+      unit text,
+      rate numeric(14,4) NOT NULL,
+      currency text NOT NULL,
+      effective_from date NOT NULL,
+      effective_to date,
+      source_page integer,
+      source_quote text,
+      reviewed boolean NOT NULL DEFAULT false
+    )`);
+  await db.query(`CREATE TABLE setting (
+    key text PRIMARY KEY, value jsonb NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now())`);
 });
 
 beforeEach(async () => {
   if (!db) return;
+  await db.query("DELETE FROM contract_rate");
+  await db.query("DELETE FROM item_alias");
+  await db.query("DELETE FROM item");
   await db.query("DELETE FROM contract");
 });
 
@@ -185,4 +228,80 @@ test("ready for review clears whatever failed last time", { skip }, async () => 
   const after = await statusOf(id);
   assert.equal(after.status, "ready_for_review");
   assert.equal(after.failure, null, "a stale reason beside a successful read reads as a warning");
+});
+
+const RATE = {
+  printed_name: "A4 Paper 80 GSM white",
+  unit: "ream" as string | null,
+  rate: 285,
+  effective_from: "2026-04-01",
+  effective_to: null as string | null,
+  page: 44,
+  quote: "A4 Paper 80 GSM, white, per ream, Rs. 285.00",
+};
+
+async function ratesOf(contractId: string) {
+  return db!.query<{
+    printed_name: string;
+    item_id: string | null;
+    rate: string;
+    reviewed: boolean;
+    source_page: number | null;
+  }>(
+    `SELECT printed_name, item_id, rate, reviewed, source_page
+     FROM contract_rate WHERE contract_id = $1 ORDER BY printed_name`,
+    [contractId],
+  );
+}
+
+test("a rate is written inert, whatever the model said", { skip }, async () => {
+  const id = await queued("rate card");
+  assert.equal(await queue!.recordRates(id, "INR", [RATE]), 1);
+
+  const [row] = await ratesOf(id);
+  assert.equal(row.reviewed, false, "a model read it, nobody agreed with it yet");
+  assert.equal(Number(row.rate), 285);
+  assert.equal(row.source_page, 44, "a rate nobody can point at is a claim");
+});
+
+test("a rate whose printed name is in the catalogue is linked to it", { skip }, async () => {
+  // Through `normalize`, not a hand written key: the catalogue is written that
+  // way, and a fixture that spells the key itself tests a matcher nothing uses.
+  const { normalize } = await import("../lib/items/normalize.ts");
+  const [{ id: itemId }] = await db!.query<{ id: string }>(
+    "INSERT INTO item (canonical_name, normalized_name) VALUES ($1,$2) RETURNING id",
+    [RATE.printed_name, normalize(RATE.printed_name)],
+  );
+  const id = await queued("rate card");
+  await queue!.recordRates(id, "INR", [RATE]);
+
+  const [row] = await ratesOf(id);
+  assert.equal(row.item_id, itemId);
+});
+
+test("a rate for something not in the catalogue waits for a person", { skip }, async () => {
+  const id = await queued("rate card");
+  await queue!.recordRates(id, "INR", [{ ...RATE, printed_name: "Teakwood batten 2x2" }]);
+
+  const [row] = await ratesOf(id);
+  assert.equal(row.item_id, null, "an unresolved rate is never used for anything");
+});
+
+test("re-reading a contract replaces its rates rather than doubling them", { skip }, async () => {
+  const id = await queued("rate card");
+  await queue!.recordRates(id, "INR", [RATE]);
+  // A better prompt, run over the same document. The old figure must not be
+  // left sitting beside the new one: the lookup takes the latest start date,
+  // not the latest row, so a stale rate would keep winning on equal dates.
+  await queue!.recordRates(id, "INR", [{ ...RATE, rate: 299 }]);
+
+  const rows = await ratesOf(id);
+  assert.equal(rows.length, 1);
+  assert.equal(Number(rows[0].rate), 299);
+});
+
+test("a read that found no rates writes nothing and says so", { skip }, async () => {
+  const id = await queued("a letter, not a rate card");
+  assert.equal(await queue!.recordRates(id, "INR", []), 0);
+  assert.equal((await ratesOf(id)).length, 0);
 });
