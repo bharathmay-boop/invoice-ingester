@@ -24,6 +24,18 @@ export const ACCEPT_ATTRIBUTE = Object.keys(ACCEPTED).join(",");
 export type Rejection = { reason: string };
 
 /**
+ * The type a stored file is treated as. The browser's type is a guess from the
+ * extension, so a file whose bytes start like a PDF is a PDF: otherwise a PDF
+ * named .png would skip the page count. Anything else keeps the type it was
+ * accepted with, and a declared PDF that is not one stays a PDF so the page
+ * count refuses it.
+ */
+export function storedType(bytes: Uint8Array, accepted: string): string {
+  const head = String.fromCharCode(...bytes.subarray(0, 5));
+  return head === "%PDF-" ? "application/pdf" : accepted;
+}
+
+/**
  * A rejection is per file and says what is wrong with that file. A batch that
  * fails as a whole because one file was a HEIC is the worst version of this.
  */

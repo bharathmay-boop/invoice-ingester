@@ -16,7 +16,7 @@ import {
   warning,
 } from "@/lib/extract/validate.ts";
 import type { ExtractedInvoice } from "@/lib/extract/schema.ts";
-import { MAX_INVOICES_PER_FILE } from "@/lib/upload.ts";
+import { MAX_INVOICES_PER_FILE, MAX_PDF_PAGES, storedType } from "@/lib/upload.ts";
 import { normalize } from "@/lib/items/normalize.ts";
 import { normalizeAddress, normalizeTaxId } from "@/lib/vendors/normalize.ts";
 import { countPages } from "@/lib/pdf.ts";
@@ -64,8 +64,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Sign in to upload." }, { status: 401 });
   }
 
-  const { url, name, contentType } = await request.json().catch(() => ({}));
-  if (typeof url !== "string" || typeof name !== "string" || typeof contentType !== "string") {
+  // Only the URL is taken from the request. The name and type come from the
+  // upload row and the bytes, since the browser can send anything.
+  const { url } = await request.json().catch(() => ({}));
+  if (typeof url !== "string") {
     return NextResponse.json({ error: "Expected a stored file." }, { status: 400 });
   }
 
@@ -73,8 +75,8 @@ export async function POST(request: NextRequest) {
   // requests for the same file cannot both win it, so they cannot both call the
   // provider and end up with two drafts pointing at one blob, where discarding
   // either would pull the original out from under the other.
-  const claimed = await query<{ id: string }>(
-    "DELETE FROM upload WHERE blob_url = $1 RETURNING id",
+  const claimed = await query<{ id: string; file_name: string; content_type: string }>(
+    "DELETE FROM upload WHERE blob_url = $1 RETURNING id, file_name, content_type",
     [url],
   );
   if (!claimed.length) {
@@ -100,12 +102,22 @@ export async function POST(request: NextRequest) {
     }
     const bytes = Buffer.from(await new Response(stored.stream).arrayBuffer());
     const data = bytes.toString("base64");
+    const name = claimed[0].file_name;
+    const contentType = storedType(bytes, claimed[0].content_type);
     // The upload route refused any PDF it could not count, so null here means
-    // the stored file is not what was checked.
+    // the stored file is not what was checked. Counted again rather than
+    // trusted, because a PDF accepted as an image was never counted there.
     const pages = contentType === "application/pdf" ? await countPages(bytes) : 1;
     if (pages === null) {
       await discardUpload(url);
       return NextResponse.json({ error: "Could not open the stored PDF." }, { status: 422 });
+    }
+    if (pages > MAX_PDF_PAGES) {
+      await discardUpload(url);
+      return NextResponse.json(
+        { error: `${pages} pages is over the ${MAX_PDF_PAGES} page limit.` },
+        { status: 413 },
+      );
     }
 
     // Kept for the record below, so a failed call is still attributable to the
@@ -212,7 +224,7 @@ export async function POST(request: NextRequest) {
     // nothing owning the file.
     await discardUpload(url);
     console.error("extraction failed after claiming the upload", error);
-    await trackError(error, { route: "extract", content_type: contentType });
+    await trackError(error, { route: "extract", content_type: claimed[0].content_type });
     return NextResponse.json({ error: "Could not read that invoice." }, { status: 500 });
   }
 }
