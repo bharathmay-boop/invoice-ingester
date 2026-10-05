@@ -58,7 +58,10 @@ before(async () => {
       unit_price numeric(14,4) NOT NULL,
       amount numeric(14,2) NOT NULL,
       item_id uuid REFERENCES item (id),
-      variance_tag text,
+      variance_tag text CHECK (variance_tag IS NULL OR variance_tag IN (
+        'matches_contract', 'billed_above_contract', 'billed_below_contract',
+        'outside_contract_period', 'not_in_contract', 'units_differ',
+        'currency_differs')),
       variance_contracted numeric(14,4),
       variance_impact numeric(14,2),
       variance_reason text
@@ -145,23 +148,23 @@ async function rate(
   value: number,
   from: string,
   to: string | null,
-  { reviewed = true, unit = "ream" as string | null } = {},
+  { reviewed = true, unit = "ream" as string | null, currency = "INR" } = {},
 ) {
   const [row] = await db!.query<{ id: string }>(
     `INSERT INTO contract_rate
        (contract_id, vendor_id, item_id, printed_name, unit, rate,
-        effective_from, effective_to, reviewed)
-     VALUES ($1,$2,$3,'A4 Paper 80 GSM',$4,$5,$6,$7,$8) RETURNING id`,
-    [contractId, vendorId, itemId, unit, value, from, to, reviewed],
+        effective_from, effective_to, reviewed, currency)
+     VALUES ($1,$2,$3,'A4 Paper 80 GSM',$4,$5,$6,$7,$8,$9) RETURNING id`,
+    [contractId, vendorId, itemId, unit, value, from, to, reviewed, currency],
   );
   return row.id;
 }
 
-async function invoice(vendorId: string, number: string, date: string) {
+async function invoice(vendorId: string, number: string, date: string, currency = "INR") {
   const [row] = await db!.query<{ id: string }>(
-    `INSERT INTO invoice (vendor_id, invoice_number, invoice_date)
-     VALUES ($1,$2,$3) RETURNING id`,
-    [vendorId, number, date],
+    `INSERT INTO invoice (vendor_id, invoice_number, invoice_date, currency)
+     VALUES ($1,$2,$3,$4) RETURNING id`,
+    [vendorId, number, date, currency],
   );
   return row.id;
 }
@@ -186,8 +189,10 @@ async function tagOf(lineId: string) {
   const [row] = await db!.query<{
     variance_tag: string | null;
     variance_impact: string | null;
+    variance_contracted: string | null;
   }>(
-    "SELECT variance_tag, variance_impact FROM line_item WHERE id = $1",
+    `SELECT variance_tag, variance_impact, variance_contracted
+     FROM line_item WHERE id = $1`,
     [lineId],
   );
   return row;
@@ -360,4 +365,52 @@ test("the tolerance setting decides what counts as agreeing", { skip }, async ()
   await setSetting("variance_tolerance_percent", 0);
   await recompute!.recomputeVariance(v);
   assert.equal((await tagOf(l)).variance_tag, "billed_above_contract");
+});
+
+test("the rate carries the currency it was agreed in", { skip }, async () => {
+  // Without this the comparison has nothing to refuse with, which is how a
+  // dollar rate came to be subtracted from a rupee price.
+  const v = await vendor("Gupta Traders");
+  const i = await item("a4 paper");
+  const c = await contract(v);
+  await rate(c, v, i, 285, "2026-04-01", "2027-03-31", { currency: "USD" });
+
+  const coverage = await lookup!.coverageFor(v, i, "2026-05-01");
+  assert.equal(coverage.kind === "covered" && coverage.rate.currency, "USD");
+});
+
+test("a rate in another currency is refused, not compared", { skip }, async () => {
+  // The same number in two currencies is not a match, and the gap between two
+  // numbers in two currencies is not money. Either answer would be confidently
+  // wrong, which is worse than saying nothing.
+  const v = await vendor("Gupta Traders");
+  const i = await item("a4 paper");
+  const c = await contract(v);
+  await rate(c, v, i, 285, "2026-04-01", "2027-03-31", { currency: "USD" });
+
+  const inv = await invoice(v, "INV-1", "2026-05-01", "INR");
+  const l = await line(inv, i, 285, 10);
+  await recompute!.recomputeVariance(v);
+
+  const row = await tagOf(l);
+  assert.equal(row.variance_tag, "currency_differs");
+  assert.equal(row.variance_impact, null, "there is no figure to put against this");
+  assert.equal(row.variance_contracted, "285.0000", "the agreed number is still worth showing");
+});
+
+test("the same currency on both sides still compares", { skip }, async () => {
+  // The guard refuses a mismatch and nothing else: a pair that does match must
+  // come out the same as it did before currency was looked at.
+  const v = await vendor("Gupta Traders");
+  const i = await item("a4 paper");
+  const c = await contract(v);
+  await rate(c, v, i, 270, "2026-04-01", "2027-03-31", { currency: "INR" });
+
+  const inv = await invoice(v, "INV-1", "2026-05-01", "INR");
+  const l = await line(inv, i, 297, 10);
+  await recompute!.recomputeVariance(v);
+
+  const row = await tagOf(l);
+  assert.equal(row.variance_tag, "billed_above_contract");
+  assert.equal(row.variance_impact, "270.00");
 });

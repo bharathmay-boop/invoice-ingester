@@ -4,11 +4,11 @@ import { printedUnit, toBaseUnit } from "../units.ts";
 /**
  * What a contract says about one invoice line.
  *
- * Six answers, and three of them are right even when the rate itself was read
- * badly. `outside_period`, `not_in_contract` and `units_differ` depend on
- * dates, item identity and unit strings rather than on a model reading a
- * number off a table correctly, which makes them the sturdiest thing this
- * epic produces.
+ * Seven answers, and four of them are right even when the rate itself was read
+ * badly. `outside_period`, `not_in_contract`, `units_differ` and
+ * `currency_differs` depend on dates, item identity, unit strings and currency
+ * codes rather than on a model reading a number off a table correctly, which
+ * makes them the sturdiest thing this epic produces.
  */
 
 export type Tag =
@@ -17,7 +17,8 @@ export type Tag =
   | "billed_below_contract"
   | "outside_contract_period"
   | "not_in_contract"
-  | "units_differ";
+  | "units_differ"
+  | "currency_differs";
 
 export type Finding = {
   tag: Tag;
@@ -35,6 +36,7 @@ export type Finding = {
 export type Rate = {
   rate: number;
   unit: string | null;
+  currency: string;
   effective_from: string;
   effective_to: string | null;
 };
@@ -43,6 +45,7 @@ export type Line = {
   unit_price: number;
   quantity: number;
   unit: string | null;
+  currency: string;
 };
 
 export const DEFAULT_TOLERANCE_PERCENT = 0.5;
@@ -123,7 +126,26 @@ export function assess(
 
   const { rate } = coverage;
 
-  // Units first, for the same reason `comparePrices` checks them: a price per
+  // Currency before anything else. Two numbers in different currencies are not
+  // comparable at any unit, and subtracting one from the other produces a
+  // figure that looks like money and is not. `comparePrices` refuses the same
+  // pair and the findings totals are grouped by currency, so this is the one
+  // place that could have reported a rupee gap against a dollar rate.
+  //
+  // No conversion: a rate is what was agreed, and converting it would mean
+  // picking a date for the exchange rate and defending that choice later.
+  if (rate.currency !== line.currency) {
+    return {
+      tag: "currency_differs",
+      contracted: rate.rate,
+      billed: line.unit_price,
+      difference: null,
+      impact: null,
+      reason: `Agreed in ${rate.currency} and billed in ${line.currency}. Converting one to the other would need an exchange rate for the invoice date, which is a decision this does not make on its own.`,
+    };
+  }
+
+  // Units next, for the same reason `comparePrices` checks them: a price per
   // ream against a price per sheet is out by a factor of five hundred, and
   // contracting per kilogram then billing per nine hundred gram pack is a
   // documented way to hide a rise. Saying nothing about it would be worse than
