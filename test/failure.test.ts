@@ -93,3 +93,48 @@ test("an aborted call is recognised as a timeout", () => {
   assert.equal(isTimeout(new Error("something else")), false);
   assert.equal(isTimeout(null), false);
 });
+
+// --- what a retry is allowed to cost ----------------------------------------
+
+const { worthRetrying } = await import("../lib/extract/failure.ts");
+const { default: Anthropic } = await import("@anthropic-ai/sdk");
+
+test("a call that timed out is never retried", () => {
+  // A second full-length attempt cannot finish inside the route's time limit,
+  // so it would be paid for and then killed.
+  const timeout = new DOMException("The operation timed out.", "TimeoutError");
+  assert.equal(worthRetrying(timeout), false);
+  assert.equal(worthRetrying(new Anthropic.APIConnectionTimeoutError()), false);
+});
+
+test("a fast failure from a busy or unreachable provider is retried", () => {
+  assert.equal(worthRetrying(new Response(null, { status: 429 })), true);
+  assert.equal(worthRetrying(new Response(null, { status: 503 })), true);
+  assert.equal(worthRetrying(new TypeError("fetch failed")), true);
+  assert.equal(worthRetrying(new Anthropic.RateLimitError(429, undefined, "busy", new Headers())), true);
+  assert.equal(worthRetrying(new Anthropic.APIConnectionError({ message: "refused" })), true);
+});
+
+test("an answer, a rejected key or a refusal is not retried", () => {
+  assert.equal(worthRetrying(new Response("{}", { status: 200 })), false);
+  assert.equal(worthRetrying(new Response(null, { status: 401 })), false);
+  assert.equal(worthRetrying(new Anthropic.AuthenticationError(401, undefined, "no", new Headers())), false);
+  assert.equal(worthRetrying({ content: [] }), false);
+});
+
+test("a timeout says how long was waited, and does not claim a retry", () => {
+  const { message } = describeTimeout("OpenRouter", 45_000);
+  assert.match(message, /45 seconds/);
+  assert.doesNotMatch(message, /twice/);
+  assert.match(describeTimeout("OpenRouter").message, /90 seconds/);
+});
+
+test("every provider call fits inside the route that makes it", async () => {
+  // Invoice extract has 120 seconds, the contract worker 60 (each route's
+  // maxDuration). A call still running when the platform stops the function is
+  // paid for and its answer lost.
+  const { CALL_TIMEOUT_MS } = await import("../lib/extract/failure.ts");
+  const { CONTRACT_CALL_TIMEOUT_MS } = await import("../lib/contracts/read.ts");
+  assert.ok(CALL_TIMEOUT_MS < 120_000);
+  assert.ok(CONTRACT_CALL_TIMEOUT_MS < 60_000);
+});

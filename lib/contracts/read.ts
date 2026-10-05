@@ -1,12 +1,12 @@
 import "server-only";
 import { getSecret, getSetting } from "../settings/store.ts";
 import {
-  CALL_TIMEOUT_MS,
   describeStatus,
   describeTimeout,
   describeUnreachable,
   describeUnusable,
   isTimeout,
+  MAX_OUTPUT_TOKENS,
 } from "../extract/failure.ts";
 import { MODEL_SETTING } from "../extract/provider.ts";
 import { DEFAULT_OPENROUTER_MODEL, resolveModel } from "../extract/models.ts";
@@ -14,6 +14,14 @@ import { CONTRACT_INSTRUCTIONS } from "./prompt.ts";
 import { contractJsonSchema, parseContractResponse, type ContractParseResult } from "./schema.ts";
 
 const PROVIDER = "OpenRouter";
+
+/**
+ * Shorter than the invoice timeout because the worker only has 60 seconds
+ * (app/api/contracts/worker/route.ts). A call still running when the platform
+ * kills the function is paid for and lost; one that times out here leaves time
+ * to mark the contract and hand on to the next.
+ */
+export const CONTRACT_CALL_TIMEOUT_MS = 45_000;
 
 export type ContractRead = ContractParseResult & { meta?: unknown };
 
@@ -60,6 +68,7 @@ export async function readContract(source: {
       headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
       body: JSON.stringify({
         model,
+        max_tokens: MAX_OUTPUT_TOKENS,
         messages: [
           { role: "user", content: [part, { type: "text", text: CONTRACT_INSTRUCTIONS }] },
         ],
@@ -68,10 +77,10 @@ export async function readContract(source: {
           json_schema: { name: "contract", strict: true, schema: contractJsonSchema },
         },
       }),
-      signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
+      signal: AbortSignal.timeout(CONTRACT_CALL_TIMEOUT_MS),
     });
   } catch (error) {
-    if (isTimeout(error)) return { ok: false, failure: describeTimeout(PROVIDER) };
+    if (isTimeout(error)) return { ok: false, failure: describeTimeout(PROVIDER, CONTRACT_CALL_TIMEOUT_MS) };
     return { ok: false, failure: describeUnreachable(PROVIDER) };
   }
 

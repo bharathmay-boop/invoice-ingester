@@ -7,9 +7,10 @@ import {
   describeTimeout,
   describeUnreachable,
   describeUnusable,
-  isRetryableStatus,
   isTimeout,
+  MAX_OUTPUT_TOKENS,
   withOneRetry,
+  worthRetrying,
 } from "./failure.ts";
 import { extractionJsonSchema, parseResponse } from "./schema.ts";
 import { MODEL_SETTING } from "./provider.ts";
@@ -44,7 +45,7 @@ export async function extractWithOpenRouter(
   try {
     // Tried twice at most, and only when the first failure was the provider
     // being busy or briefly broken. A rejected key or a refusal gives the same
-    // answer the second time, slower.
+    // answer the second time, slower, and a timeout leaves no time for another.
     const response = await withOneRetry(
       () =>
         fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -55,6 +56,7 @@ export async function extractWithOpenRouter(
           },
           body: JSON.stringify({
             model,
+            max_tokens: MAX_OUTPUT_TOKENS,
             messages: [{ role: "user", content: [part, { type: "text", text: INSTRUCTIONS }] }],
             response_format: {
               type: "json_schema",
@@ -65,10 +67,7 @@ export async function extractWithOpenRouter(
           // kills it, and the person watching learns nothing for two minutes.
           signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
         }).catch((error: unknown) => error),
-      (result) =>
-        result instanceof Response
-          ? isRetryableStatus(result.status)
-          : isTimeout(result) || result instanceof TypeError,
+      worthRetrying,
     );
 
     if (!(response instanceof Response)) {
