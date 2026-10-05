@@ -51,3 +51,20 @@ test("the file picker offers what the check accepts", () => {
   // These two disagreeing means the picker shows a file the check then refuses.
   assert.equal(CONTRACT_ACCEPT_ATTRIBUTE, ".pdf");
 });
+
+// --- what the worker refuses before paying a provider to read it -----------
+
+const { refuseBeforeReading, MAX_CONTRACT_PAGES } = await import("../lib/contracts/limits.ts");
+
+test("the worker refuses an over-long contract before the paid read", () => {
+  assert.equal(refuseBeforeReading({ pages: MAX_CONTRACT_PAGES, encrypted: false }), null);
+  assert.match(
+    refuseBeforeReading({ pages: MAX_CONTRACT_PAGES + 1, encrypted: false }) ?? "",
+    new RegExp(`${MAX_CONTRACT_PAGES + 1} pages.*${MAX_CONTRACT_PAGES}`),
+  );
+});
+
+test("the worker refuses a locked or unreadable PDF before the paid read", () => {
+  assert.match(refuseBeforeReading({ pages: 3, encrypted: true }) ?? "", /password/);
+  assert.match(refuseBeforeReading(null) ?? "", /could not be opened/);
+});

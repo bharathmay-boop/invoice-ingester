@@ -11,6 +11,8 @@ import {
 } from "@/lib/contracts/queue.ts";
 import { readContract } from "@/lib/contracts/read.ts";
 import { locate, readPages } from "@/lib/contracts/locate.ts";
+import { refuseBeforeReading } from "@/lib/contracts/limits.ts";
+import { readPdf } from "@/lib/pdf.ts";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -54,12 +56,18 @@ export async function POST(request: NextRequest) {
     if (!stored) throw new Error("the stored contract could not be read back");
     const bytes = Buffer.from(await new Response(stored.stream).arrayBuffer());
 
-    const read = await readContract({
-      data: bytes.toString("base64"),
-      contentType: contract.content_type,
-    });
+    // Refused before the model is paid, and never worth another attempt.
+    const refusal = refuseBeforeReading(await readPdf(bytes));
+    const read = refusal
+      ? null
+      : await readContract({ data: bytes.toString("base64"), contentType: contract.content_type });
 
-    if (read.ok) {
+    if (!read) {
+      await query(
+        "UPDATE contract SET status = 'could_not_read', failure = $2, heartbeat_at = NULL WHERE id = $1",
+        [contract.id, refusal],
+      );
+    } else if (read.ok) {
       // Checked against the document while the bytes are still here. The page
       // a model names is a guess; the page a quote is found on is a fact, and
       // a jump that lands nowhere costs more trust than no jump at all.
