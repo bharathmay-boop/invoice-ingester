@@ -123,7 +123,19 @@ test("the return path can only ever be a page on this site", () => {
     "evil.example",
     "",
     null,
+    // Browsers read a backslash as a slash and drop tabs and newlines, so each
+    // of these starts with one "/" and still points at another host.
+    "/\\evil.example",
+    "/\\/evil.example",
+    "/\t/evil.example",
+    "/\n/evil.example",
+    "/\r/evil.example",
   ]) {
-    assert.equal(safeNext(hostile), "/", String(hostile));
+    assert.equal(safeNext(hostile), "/", JSON.stringify(hostile));
   }
+});
+
+test("a return path keeps its query and fragment", () => {
+  assert.equal(safeNext("/items?q=a%20b#top"), "/items?q=a%20b#top");
+  assert.equal(safeNext("/"), "/");
 });
