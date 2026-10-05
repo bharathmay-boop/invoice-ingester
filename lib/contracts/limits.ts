@@ -40,7 +40,11 @@ export function rejectContract(file: {
     };
   }
   if (file.size > MAX_CONTRACT_BYTES) {
-    const mb = Math.round(file.size / (1024 * 1024));
+    // Rounded up, not to the nearest: a file one byte over 50 MB rounds down
+    // to "is 50 MB, over the 50 MB limit", which reads as a bug rather than as
+    // a refusal. Up, the number is always above the limit it is being compared
+    // against, which is the only thing this sentence has to get right.
+    const mb = Math.ceil(file.size / (1024 * 1024));
     return {
       reason: `${file.name} is ${mb} MB, over the ${MAX_CONTRACT_BYTES / (1024 * 1024)} MB limit.`,
     };
