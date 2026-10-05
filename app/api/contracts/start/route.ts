@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server.js";
 import { cookies } from "next/headers";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { waitingCount } from "@/lib/contracts/queue.ts";
+import { callWorker } from "@/lib/contracts/cron.ts";
 
 export const runtime = "nodejs";
 
@@ -23,8 +24,7 @@ export async function POST(request: NextRequest) {
   const waiting = await waitingCount();
   if (waiting === 0) return NextResponse.json({ waiting: 0, started: false });
 
-  const secret = process.env.CRON_SECRET;
-  if (!secret) {
+  if (!process.env.CRON_SECRET) {
     return NextResponse.json(
       { error: "CRON_SECRET is not set, so the reader cannot be started." },
       { status: 500 },
@@ -33,10 +33,7 @@ export async function POST(request: NextRequest) {
 
   // Not awaited. The chain outlives this request by design, and waiting for it
   // would hold the browser for as long as the whole queue takes.
-  void fetch(new URL("/api/contracts/worker", request.nextUrl.origin), {
-    method: "POST",
-    headers: { authorization: `Bearer ${secret}` },
-  }).catch(() => {});
+  callWorker(request.nextUrl.origin);
 
   return NextResponse.json({ waiting, started: true });
 }
