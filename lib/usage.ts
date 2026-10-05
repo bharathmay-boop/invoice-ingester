@@ -13,9 +13,12 @@ export type ExtractionCall = {
   pages: number | null;
   invoices: number | null;
   durationMs: number;
+  /**
+   * The code is the whole story analytics gets. A failure's message is left out
+   * on purpose: for a file the model turns down it is the model's description of
+   * that file, and for a page range error it quotes the invoice number.
+   */
   outcome: Outcome;
-  /** Only for a failure, and only the app's own message, never a provider body. */
-  reason?: string;
 };
 
 /**
@@ -64,7 +67,6 @@ export async function recordExtraction(call: ExtractionCall): Promise<{ cost: nu
     invoices: call.invoices,
     duration_ms: call.durationMs,
     outcome: call.outcome,
-    reason: call.reason,
   });
 
   // Handed back so the upload screen can report what a batch actually cost,

@@ -1,5 +1,6 @@
 import "server-only";
 import { PostHog } from "posthog-node";
+import { messageless } from "./scrub.ts";
 
 /**
  * Server side events. No key configured means every call here does nothing, so
@@ -43,11 +44,15 @@ export async function track(event: string, properties: Record<string, unknown>):
   }
 }
 
-/** Crashes, from a route or a rendered page. */
+/**
+ * Crashes, from a route or a rendered page. The type and stack frames only: a
+ * message can quote what a document said. The full error goes to the function
+ * log, which stays with the deployment.
+ */
 export async function trackError(error: unknown, context: Record<string, unknown> = {}): Promise<void> {
   if (!client) return;
   try {
-    await client.captureException(error instanceof Error ? error : new Error(String(error)), DISTINCT_ID, context);
+    await client.captureException(messageless(error), DISTINCT_ID, context);
     await Promise.race([client.flush(), new Promise((resolve) => setTimeout(resolve, 2000))]);
   } catch (failure) {
     console.error("analytics error capture", failure instanceof Error ? failure.message : failure);

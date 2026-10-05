@@ -133,7 +133,6 @@ export async function POST(request: NextRequest) {
       invoices: outcome.ok ? outcome.invoices.length : 0,
       durationMs: Date.now() - startedAt,
       outcome: outcome.ok ? "extracted" : outcome.notInvoice ? "not_an_invoice" : "failed",
-      reason: outcome.ok ? undefined : outcome.error,
     });
 
     if (!outcome.ok) {
