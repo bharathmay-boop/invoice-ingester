@@ -11,6 +11,17 @@ import { isValidSession, sessionCookie } from "./lib/auth.ts";
 // Signing in has to be reachable while signed out, or there is no way in.
 const ALWAYS_OPEN = ["/api/session"];
 
+// Callers that never hold a session: the Vercel cron, the worker handing on to
+// itself, and Blob's upload-completed callback. Each route checks its own
+// secret or signature (and the upload route checks the session before it hands
+// out a token). Exact paths only: /api/contracts/start sends the cron secret on
+// the owner's behalf, so it stays behind the session.
+const MACHINE_ROUTES = new Set([
+  "/api/contracts/sweep",
+  "/api/contracts/worker",
+  "/api/contracts/upload",
+]);
+
 function isUnder(pathname: string, prefixes: string[]): boolean {
   return prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
@@ -18,7 +29,9 @@ function isUnder(pathname: string, prefixes: string[]): boolean {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (isUnder(pathname, ALWAYS_OPEN)) return NextResponse.next();
+  if (isUnder(pathname, ALWAYS_OPEN) || MACHINE_ROUTES.has(pathname)) {
+    return NextResponse.next();
+  }
 
   const authenticated = await isValidSession(
     request.cookies.get(sessionCookie.name)?.value,
