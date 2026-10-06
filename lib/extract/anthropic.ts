@@ -8,6 +8,9 @@ import {
   describeTimeout,
   describeUnreachable,
   describeUnusable,
+  MAX_OUTPUT_TOKENS,
+  withOneRetry,
+  worthRetrying,
 } from "./failure.ts";
 import { extractionJsonSchema, parseResponse, type FoundInvoice } from "./schema.ts";
 import { DEFAULT_ANTHROPIC_MODEL } from "./provider.ts";
@@ -36,9 +39,10 @@ export async function extractWithAnthropic(
     };
   }
 
-  // The SDK retries some failures itself; this keeps it to the same one retry
-  // the OpenRouter path makes, and bounds how long a hung call can hold on.
-  const client = new Anthropic({ apiKey: key, maxRetries: 1, timeout: CALL_TIMEOUT_MS });
+  // The SDK's own retries are off: it would also retry after a timeout, and a
+  // second 90 second attempt cannot finish inside the route's time limit. The
+  // one retry is made below, on the same rule as the OpenRouter path.
+  const client = new Anthropic({ apiKey: key, maxRetries: 0, timeout: CALL_TIMEOUT_MS });
 
   // Sent as base64 rather than a URL. The originals are stored privately, so
   // there is no URL the provider could fetch, and an invoice is not something
@@ -63,29 +67,39 @@ export async function extractWithAnthropic(
         ] as const);
 
   try {
-    const message = await client.messages.create({
-      model: DEFAULT_ANTHROPIC_MODEL,
-      // Up to 15 invoices in one reply. Kept under the SDK's ceiling for a
-      // request that is not streamed.
-      max_tokens: 16000,
-      tools: [
-        {
-          name: TOOL_NAME,
-          description: "Say whether the file holds invoices and record every one exactly as printed.",
-          input_schema: extractionJsonSchema as Anthropic.Tool["input_schema"],
-        },
-      ],
-      tool_choice: { type: "tool", name: TOOL_NAME },
-      messages: [
-        {
-          role: "user",
-          content: [
-            ...content,
-            { type: "text", text: INSTRUCTIONS },
-          ] as Anthropic.MessageParam["content"],
-        },
-      ],
-    });
+    const result = await withOneRetry(
+      () =>
+        client.messages
+          .create({
+            model: DEFAULT_ANTHROPIC_MODEL,
+            // Up to 15 invoices in one reply. Kept under the SDK's ceiling for a
+            // request that is not streamed.
+            max_tokens: MAX_OUTPUT_TOKENS,
+            tools: [
+              {
+                name: TOOL_NAME,
+                description: "Say whether the file holds invoices and record every one exactly as printed.",
+                input_schema: extractionJsonSchema as Anthropic.Tool["input_schema"],
+              },
+            ],
+            tool_choice: { type: "tool", name: TOOL_NAME },
+            messages: [
+              {
+                role: "user",
+                content: [
+                  ...content,
+                  { type: "text", text: INSTRUCTIONS },
+                ] as Anthropic.MessageParam["content"],
+              },
+            ],
+          })
+          .catch((error: unknown) => error),
+      worthRetrying,
+    );
+    // A failed call comes back as its error so it can be judged for a retry;
+    // thrown here so the catch below describes it as before.
+    if (!(result instanceof Object) || !("content" in result)) throw result;
+    const message = result as Anthropic.Message;
 
     const call = message.content.find((block) => block.type === "tool_use");
     if (!call || call.type !== "tool_use") {

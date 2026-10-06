@@ -6,6 +6,7 @@
  * "Extraction failed" tells someone none of that, and a stack trace tells them
  * less.
  */
+import Anthropic from "@anthropic-ai/sdk";
 
 export type Failure = {
   /** Shown to the person who uploaded the file. */
@@ -16,6 +17,13 @@ export type Failure = {
 
 /** Long enough for a slow model on a long PDF, short enough to not hang. */
 export const CALL_TIMEOUT_MS = 90_000;
+
+/**
+ * The most a model may write in one reply, on every provider. Up to 15
+ * invoices fit well inside it, and without a cap a document that steers the
+ * model into writing at length is paid for by the word.
+ */
+export const MAX_OUTPUT_TOKENS = 16_000;
 
 /**
  * Only two kinds of failure are worth retrying: the provider was busy, or it
@@ -65,11 +73,12 @@ export function describeStatus(provider: string, status: number): Failure {
 }
 
 /** A call that never came back, as opposed to one that came back badly. */
-export function describeTimeout(provider: string): Failure {
+/** Not retried by itself: a second full wait would not fit inside the route. */
+export function describeTimeout(provider: string, waitedMs = CALL_TIMEOUT_MS): Failure {
   return {
     message: `${provider} did not answer within ${Math.round(
-      CALL_TIMEOUT_MS / 1000,
-    )} seconds. It was tried twice; try again, or pick a faster model in settings.`,
+      waitedMs / 1000,
+    )} seconds. Try again, or pick a faster model in settings.`,
     retryable: true,
   };
 }
@@ -121,6 +130,20 @@ export async function withOneRetry<T>(
   if (!shouldRetry(first)) return first;
   await new Promise((resolve) => setTimeout(resolve, pauseMs));
   return call();
+}
+
+/**
+ * Whether a call's result is worth one more attempt: a fast failure from a busy
+ * or unreachable provider. Never a timeout. A second full-length attempt cannot
+ * finish inside the route's time limit, so it would be paid for and then killed.
+ * Takes whatever the call produced, a Response, a thrown error or an answer.
+ */
+export function worthRetrying(result: unknown): boolean {
+  if (result instanceof Response) return isRetryableStatus(result.status);
+  if (isTimeout(result) || result instanceof Anthropic.APIConnectionTimeoutError) return false;
+  if (result instanceof Anthropic.APIConnectionError) return true;
+  if (result instanceof Anthropic.APIError) return typeof result.status === "number" && isRetryableStatus(result.status);
+  return result instanceof TypeError;
 }
 
 /** An aborted fetch, whatever the runtime chose to call it. */
