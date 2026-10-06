@@ -62,6 +62,33 @@ test("a session signed with a different master key is refused", async () => {
   assert.equal(await isValidSession(token, NOW), true);
 });
 
+test("changing the password ends every existing session", async () => {
+  // Sign out only clears one browser's cookie. Changing the password is the way
+  // to cut off a copied cookie, so a token has to stop working when it changes.
+  const token = await mintSession(NOW);
+  const original = process.env.ADMIN_PASSWORD;
+
+  try {
+    process.env.ADMIN_PASSWORD = "a-different-long-test-password";
+    assert.equal(await isValidSession(token, NOW), false);
+    assert.equal(await isValidSession(await mintSession(NOW), NOW), true);
+  } finally {
+    process.env.ADMIN_PASSWORD = original;
+  }
+  assert.equal(await isValidSession(token, NOW), true);
+});
+
+test("a session cannot be checked without a password set", async () => {
+  const token = await mintSession(NOW);
+  const original = process.env.ADMIN_PASSWORD;
+  try {
+    delete process.env.ADMIN_PASSWORD;
+    await assert.rejects(isValidSession(token, NOW), /ADMIN_PASSWORD/);
+  } finally {
+    process.env.ADMIN_PASSWORD = original;
+  }
+});
+
 test("the password check accepts only the exact password", async () => {
   assert.equal(await isCorrectPassword("a-long-enough-test-password"), true);
   for (const wrong of [

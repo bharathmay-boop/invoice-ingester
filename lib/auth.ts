@@ -55,13 +55,25 @@ function fromBase64Url(value: string): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
 }
 
-/** `<expiry>.<signature>`. The expiry is in the signed payload, so it cannot be edited. */
+/**
+ * What a session signature covers: the expiry, so it cannot be edited, and the
+ * current password, so changing the password ends every session. Nothing is
+ * stored, so sign out alone cannot reach a copied cookie; a password change can.
+ * The password only goes into the HMAC and never into the token itself.
+ */
+function signedPayload(expiry: string): Uint8Array<ArrayBuffer> {
+  const password = process.env.ADMIN_PASSWORD;
+  if (!password) throw new Error("ADMIN_PASSWORD is not set");
+  return encoder.encode(`${expiry}.${password}`);
+}
+
+/** `<expiry>.<signature>`. */
 export async function mintSession(now = Date.now()): Promise<string> {
   const expiry = String(Math.floor(now / 1000) + TTL_SECONDS);
   const signature = await crypto.subtle.sign(
     "HMAC",
     await signingKey(),
-    encoder.encode(expiry),
+    signedPayload(expiry),
   );
   return `${expiry}.${toBase64Url(signature)}`;
 }
@@ -92,7 +104,7 @@ export async function isValidSession(
     "HMAC",
     await signingKey(),
     signatureBytes,
-    encoder.encode(expiry),
+    signedPayload(expiry),
   );
   if (!verified) return false;
 
