@@ -86,6 +86,22 @@ test("the session exemption does not extend to neighbouring paths", async () => 
   assert.equal(await status("/api/session-admin", "POST"), 401);
 });
 
+test("the cron, the worker chain and the Blob callback reach their own checks without a cookie", async () => {
+  // None of these callers holds a session. Each route checks its own secret or
+  // signature, so the proxy has to let them through or contracts are never read.
+  assert.equal(await status("/api/contracts/sweep", "GET"), 200);
+  assert.equal(await status("/api/contracts/worker", "POST"), 200);
+  assert.equal(await status("/api/contracts/upload", "POST"), 200);
+});
+
+test("the machine exemptions are exact paths, not a prefix of /api/contracts", async () => {
+  // start sends the cron secret on the owner's behalf, so it must stay behind the session.
+  assert.equal(await status("/api/contracts/start", "POST"), 401);
+  assert.equal(await status("/api/contracts", "POST"), 401);
+  assert.equal(await status("/api/contracts/worker/extra", "POST"), 401);
+  assert.equal(await status("/api/contracts/sweeper", "GET"), 401);
+});
+
 test("the home page is matched exactly, not as a prefix of everything", async () => {
   // "/" as a prefix would make every page public.
   assert.equal(await status("/items"), 307);
