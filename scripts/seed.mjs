@@ -2,10 +2,21 @@
 // rows it previously seeded, so this is also the "reset demo data" action from
 // settings and it cannot take a real invoice with it.
 //
+// Contracts come with it, and with a document each. `contract.blob_url` is NOT
+// NULL and the review screen opens the page a rate was read from, so a demo
+// contract without a PDF would be an empty viewer beside rates claiming to
+// come from it. The PDFs are generated here and written to blob storage at a
+// path derived from their own digest, so a reseed replaces them rather than
+// leaving the last run's behind.
+//
 // Run: npm run seed
+import { createHash } from "node:crypto";
 import pg from "pg";
+import { del, put } from "@vercel/blob";
 
 const { asExtraction, invoices, items, vendors } = await import("../lib/demo/dataset.ts");
+const { contracts } = await import("../lib/demo/contracts.ts");
+const { contractPdf } = await import("../lib/demo/contract-pdf.ts");
 const { validateArithmetic } = await import("../lib/extract/validate.ts");
 const { normalizeAddress, normalizeTaxId } = await import("../lib/vendors/normalize.ts");
 
@@ -14,6 +25,13 @@ if (!url) {
   console.error("DATABASE_URL is not set. Run `vercel env pull` first.");
   process.exit(1);
 }
+
+// Everything in this script has to be the same database. The client below
+// prefers the unpooled url, and `lib/db.ts`, which `recomputeVariance` uses,
+// reads DATABASE_URL and nothing else. With only the unpooled one set, the
+// inserts would commit here and the variance pass would run somewhere else, or
+// fail, leaving demo invoices with no findings against contracts that exist.
+process.env.DATABASE_URL = url;
 
 // Every invoice goes through the same checks a real extraction would, so the
 // demo data cannot quietly contradict the validator it is meant to demonstrate.
@@ -31,6 +49,14 @@ for (const invoice of invoices) {
 const client = new pg.Client({ connectionString: url });
 await client.connect();
 
+// Blob writes are not in the transaction and cannot be rolled back, so a
+// failure after one has to take it away by hand. Otherwise a failed seed
+// leaves a document nothing points at.
+const uploaded = [];
+let previous = [];
+let committed = false;
+let contractVendorIds = [];
+
 try {
   await client.query("BEGIN");
 
@@ -41,6 +67,16 @@ try {
   // vendors go next, but only where nothing real still points at them: a real
   // invoice may well have matched a catalogue item the demo created.
   await client.query("DELETE FROM invoice WHERE is_demo");
+  // Noted before the delete, so a document this database wrote on an earlier
+  // run can be cleaned up afterwards. Only these are ever deleted: the blob
+  // store is shared across environments, so sweeping a whole path would take
+  // another database's documents with it.
+  previous = (await client.query("SELECT blob_url FROM contract WHERE is_demo")).rows.map(
+    (row) => row.blob_url,
+  );
+  // Rates cascade from the contract. Before the items, since a rate points at
+  // one and the item delete below checks that nothing still does.
+  await client.query("DELETE FROM contract WHERE is_demo");
   await client.query(`
     DELETE FROM item
     WHERE is_demo
@@ -165,7 +201,85 @@ try {
     }
   }
 
+  // Contracts last: a rate points at an item and a contract at a vendor, so
+  // both have to be in place first.
+  let rateCount = 0;
+  for (const contract of contracts) {
+    const pdf = contractPdf(contract.pages);
+    const digest = createHash("sha256").update(pdf).digest("hex");
+    const blob = await put(`contracts/demo/${digest.slice(0, 12)}.pdf`, pdf, {
+      access: "private",
+      contentType: "application/pdf",
+      addRandomSuffix: false,
+      allowOverwrite: true,
+    });
+    uploaded.push(blob.url);
+
+    const { rows } = await client.query(
+      `INSERT INTO contract
+         (vendor_id, title, blob_url, content_type, pages, status, digest,
+          other_terms, extraction, extraction_meta, reviewed_at, is_demo)
+       VALUES ($1,$2,$3,'application/pdf',$4,'reviewed',$5,$6,$7,$8,now(),true)
+       RETURNING id`,
+      [
+        vendorIds.get(contract.gstin),
+        contract.title,
+        blob.url,
+        contract.pages.length,
+        digest,
+        JSON.stringify(contract.otherTerms),
+        // The shape a read leaves behind, so the contract screen has the same
+        // thing to show as it would for a real document.
+        JSON.stringify({
+          vendor_name: vendors.find((v) => v.gstin === contract.gstin)?.name ?? null,
+          vendor_address: null,
+          tax_id: contract.gstin,
+          tax_id_kind: "gstin",
+          currency: "INR",
+          effective_from: contract.effectiveFrom,
+          effective_to: contract.effectiveTo,
+          rates: contract.rates.map((rate) => ({
+            printed_name: rate.printedName,
+            unit: rate.unit,
+            rate: rate.rate,
+            effective_from: rate.effectiveFrom,
+            effective_to: rate.effectiveTo,
+            page: rate.page,
+            quote: rate.quote,
+          })),
+          other_terms: contract.otherTerms,
+        }),
+        // Labelled as a demo row, the same as the invoices. Nothing here came
+        // from a model and a screen that said otherwise would be lying.
+        JSON.stringify({ source: "demo-seed" }),
+      ],
+    );
+
+    for (const rate of contract.rates) {
+      await client.query(
+        `INSERT INTO contract_rate
+           (contract_id, vendor_id, item_id, printed_name, unit, rate, currency,
+            effective_from, effective_to, source_page, source_quote, reviewed)
+         VALUES ($1,$2,$3,$4,$5,$6,'INR',$7,$8,$9,$10,true)`,
+        [
+          rows[0].id,
+          vendorIds.get(contract.gstin),
+          rate.item ? itemIds.get(rate.item) : null,
+          rate.printedName,
+          rate.unit,
+          rate.rate,
+          rate.effectiveFrom,
+          rate.effectiveTo,
+          rate.page,
+          rate.quote,
+        ],
+      );
+      rateCount += 1;
+    }
+  }
+
   await client.query("COMMIT");
+  committed = true;
 
   const spend = invoices
     .filter((i) => i.status === "confirmed")
@@ -173,16 +287,81 @@ try {
 
   console.log(
     `seeded ${vendors.length} vendors, ${items.length} items, ` +
-      `${invoices.length} invoices, ${lineCount} line items`,
+      `${invoices.length} invoices, ${lineCount} line items, ` +
+      `${contracts.length} contracts, ${rateCount} rates`,
   );
   console.log(
     `confirmed spend Rs${spend.toFixed(2)}, ` +
       `${invoices.filter((i) => i.status === "needs_review").length} needing review`,
   );
+
+  contractVendorIds = [...new Set(contracts.map((c) => c.gstin))].map((gstin) =>
+    vendorIds.get(gstin),
+  );
 } catch (error) {
   await client.query("ROLLBACK");
+
+  // A demo document's path comes from its own digest and is written with
+  // overwrite, so a reseed of an unchanged contract writes the same bytes to
+  // the same place. After the rollback the previous row is back and still
+  // points there, so deleting it would leave a committed contract with no
+  // document. Only remove what nothing points at.
+  for (const uploadedUrl of uploaded) {
+    const { rowCount } = await client.query("SELECT 1 FROM contract WHERE blob_url = $1", [
+      uploadedUrl,
+    ]);
+    if (!rowCount) await del(uploadedUrl).catch(() => {});
+  }
+
   console.error("seed failed, nothing was written:", error.message);
   process.exitCode = 1;
 } finally {
   await client.end();
+}
+
+// Past this point the data is committed. Anything that fails here is worth
+// reporting and is not worth deleting a document over, which is why it is
+// outside the block that cleans blobs up.
+if (committed) {
+  const { pool } = await import("../lib/db.ts");
+  try {
+    // First, before anything that can fail. The rows that named these
+    // documents are already gone, so if this is skipped nothing afterwards
+    // knows the urls and the files stay in paid storage for good.
+    //
+    // Editing a demo contract changes its text, so its digest and its path
+    // change with it, and the document the last run wrote is left behind with
+    // nothing pointing at it. Only the ones this database had before are
+    // considered, and only where nothing points at them now.
+    const live = new Set(
+      (await pool.query("SELECT blob_url FROM contract")).rows.map((row) => row.blob_url),
+    );
+    let swept = 0;
+    for (const old of new Set(previous)) {
+      if (live.has(old)) continue;
+      await del(old).catch(() => {});
+      swept += 1;
+    }
+    if (swept) console.log(`removed ${swept} demo contract document(s) nothing points at`);
+
+    // The tags a visitor sees are written by the function that writes the real
+    // ones. A demo whose findings were typed in would agree with itself and
+    // prove nothing about the check.
+    const { recomputeVariance } = await import("../lib/contracts/recompute.ts");
+    let checked = 0;
+    for (const vendorId of contractVendorIds) checked += await recomputeVariance(vendorId);
+
+    const tags = await pool.query(
+      `SELECT variance_tag, count(*)::int AS n FROM line_item
+       WHERE variance_tag IS NOT NULL GROUP BY variance_tag ORDER BY n DESC`,
+    );
+    console.log(`checked ${checked} lines against those contracts:`);
+    for (const row of tags.rows) console.log(`  ${row.variance_tag}: ${row.n}`);
+
+  } catch (error) {
+    console.error("the data is in, but the variance pass did not finish:", error.message);
+    process.exitCode = 1;
+  } finally {
+    await pool.end();
+  }
 }
