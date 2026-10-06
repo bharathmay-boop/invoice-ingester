@@ -12,7 +12,8 @@
     "backfill-originals": "node --env-file-if-exists=.env.local scripts/backfill-originals.mjs",
     "test": "node --conditions=react-server --env-file-if-exists=.env.local --test \"test/*.test.ts\"",
     "seed": "node --conditions=react-server --env-file-if-exists=.env.local scripts/seed.mjs",
-    "screenshots": "node --conditions=react-server --env-file-if-exists=.env.local scripts/screenshots.mjs"
+    "screenshots": "node --conditions=react-server --env-file-if-exists=.env.local scripts/screenshots.mjs",
+    "check:replay": "node --conditions=react-server scripts/check-replay-masking.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.127.0",

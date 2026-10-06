@@ -38,3 +38,25 @@ export function scrubEvent<E extends OutgoingEvent>(event: E): E {
   }
   return event;
 }
+
+/**
+ * Session replay, when the PostHog project has it switched on. A recording is
+ * the rendered page, so without these it would show every vendor, amount and
+ * search term on screen. Text and inputs are masked, so a replay still shows
+ * layout and clicks, and network capture keeps a request's path but never its
+ * query string, headers or bodies.
+ */
+type CapturedRequest = { name?: string; requestBody?: unknown; responseBody?: unknown } & Record<string, unknown>;
+
+export const replayOptions = {
+  maskTextSelector: "*",
+  maskAllInputs: true,
+  recordHeaders: false,
+  recordBody: false,
+  maskCapturedNetworkRequestFn<R extends CapturedRequest>(request: R): R {
+    const kept = { ...request, name: withoutQuery(request.name) };
+    delete kept.requestBody;
+    delete kept.responseBody;
+    return kept;
+  },
+};
