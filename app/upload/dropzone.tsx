@@ -188,7 +188,7 @@ export function Dropzone({ enabled, estimate }: { enabled: boolean; estimate: Es
         const extracted = await fetch("/api/extract", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ url: result.url, name: result.name, contentType: result.contentType }),
+          body: JSON.stringify({ url: result.url }),
         });
         const outcome = await extracted.json().catch(() => ({}));
         if (typeof outcome.cost === "number") setSpent((total) => total + outcome.cost);
