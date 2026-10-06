@@ -18,6 +18,15 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
         ],
       },
+      {
+        // A stored original's bytes come from whoever wrote the document, and
+        // they are served from this origin, so nothing in one may ever run as
+        // the app. Checked in Chromium and Firefox: a sandboxed PDF still
+        // renders in the dialog's object, the review's iframe and its own tab.
+        // After the rule above on purpose: the last match for a header wins.
+        source: "/api/original",
+        headers: [{ key: "Content-Security-Policy", value: "frame-ancestors 'self'; sandbox" }],
+      },
     ];
   },
 };
