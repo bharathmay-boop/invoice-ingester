@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { invoices, items, vendors } from "../lib/demo/dataset.ts";
+import { asExtraction, invoices, items, vendors } from "../lib/demo/dataset.ts";
 import { validateArithmetic } from "../lib/extract/validate.ts";
 import { normalize } from "../lib/items/normalize.ts";
 
@@ -18,28 +18,7 @@ const paperLines = invoices.flatMap((invoice) =>
 
 test("every invoice agrees with the status it claims", () => {
   for (const invoice of invoices) {
-    const result = validateArithmetic({
-      vendor_name: "",
-      vendor_address: null,
-      tax_id: invoice.gstin,
-      tax_id_kind: "gstin",
-      invoice_number: invoice.number,
-      invoice_date: invoice.date,
-      currency: "INR",
-      line_items: invoice.lines.map((line) => ({
-        description: line.description,
-        item_code: line.itemCode,
-        quantity: line.quantity,
-        unit: line.unit,
-        unit_price: line.unitPrice,
-        amount: line.amount,
-      })),
-      subtotal: invoice.subtotal,
-      taxes: invoice.taxes,
-      taxes_read: true,
-      adjustments: [],
-      total: invoice.total,
-    });
+    const result = validateArithmetic(asExtraction(invoice));
     assert.equal(result.status, invoice.status, invoice.number);
   }
 });

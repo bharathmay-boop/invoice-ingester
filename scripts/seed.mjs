@@ -5,7 +5,7 @@
 // Run: npm run seed
 import pg from "pg";
 
-const { invoices, items, vendors } = await import("../lib/demo/dataset.ts");
+const { asExtraction, invoices, items, vendors } = await import("../lib/demo/dataset.ts");
 const { validateArithmetic } = await import("../lib/extract/validate.ts");
 const { normalizeAddress, normalizeTaxId } = await import("../lib/vendors/normalize.ts");
 
@@ -18,27 +18,7 @@ if (!url) {
 // Every invoice goes through the same checks a real extraction would, so the
 // demo data cannot quietly contradict the validator it is meant to demonstrate.
 for (const invoice of invoices) {
-  const result = validateArithmetic({
-    vendor_name: "",
-    vendor_address: null,
-    tax_id: invoice.gstin,
-    tax_id_kind: "gstin",
-    invoice_number: invoice.number,
-    invoice_date: invoice.date,
-    currency: "INR",
-    line_items: invoice.lines.map((l) => ({
-      description: l.description,
-      item_code: l.itemCode,
-      quantity: l.quantity,
-      unit: l.unit,
-      unit_price: l.unitPrice,
-      amount: l.amount,
-    })),
-    subtotal: invoice.subtotal,
-    taxes: invoice.taxes,
-    taxes_read: true,
-    total: invoice.total,
-  });
+  const result = validateArithmetic(asExtraction(invoice));
 
   if (result.status !== invoice.status) {
     console.error(
