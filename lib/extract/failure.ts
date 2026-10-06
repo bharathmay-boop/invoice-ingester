@@ -56,13 +56,13 @@ export function describeStatus(provider: string, status: number): Failure {
   }
   if (status === 429) {
     return {
-      message: `${provider} is rate limiting this key. It was tried twice; wait a minute and upload again.`,
+      message: `${provider} is rate limiting this key. Wait a minute and try again.`,
       retryable: true,
     };
   }
   if (status >= 500) {
     return {
-      message: `${provider} had a problem at their end (${status}). It was tried twice; try again shortly.`,
+      message: `${provider} had a problem at their end (${status}). Try again shortly.`,
       retryable: true,
     };
   }

@@ -138,3 +138,14 @@ test("every provider call fits inside the route that makes it", async () => {
   assert.ok(CALL_TIMEOUT_MS < 120_000);
   assert.ok(CONTRACT_CALL_TIMEOUT_MS < 60_000);
 });
+
+test("no failure message claims a retry", () => {
+  // The contract reader never retries a call; its next attempt is the queue's.
+  // The messages are shared, so none of them may say a call was tried again.
+  const all = [
+    ...[400, 401, 402, 408, 413, 429, 500, 503].map((s) => describeStatus("OpenRouter", s).message),
+    describeTimeout("OpenRouter").message,
+    describeUnreachable("OpenRouter").message,
+  ];
+  for (const message of all) assert.doesNotMatch(message, /twice|again\b.*tried|retried/i, message);
+});
