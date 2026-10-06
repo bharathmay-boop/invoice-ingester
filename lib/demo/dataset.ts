@@ -209,6 +209,43 @@ export type SeedInvoice = {
   status: "confirmed" | "needs_review";
 };
 
+/**
+ * A demo invoice in the shape `validateArithmetic` takes.
+ *
+ * Here rather than written out at each call site, because it was written out
+ * twice: the test was updated when migration 018 made `adjustments` required
+ * and the seed was not, so `npm run seed` threw on the first invoice and
+ * nothing noticed until somebody ran it. One shape means the next required
+ * field breaks both at once, in the test, before it breaks the seed.
+ *
+ * No demo invoice carries a discount or a rounding line, so `adjustments` is
+ * empty, and the taxes are always read since they are written down here.
+ */
+export function asExtraction(invoice: SeedInvoice) {
+  return {
+    vendor_name: "",
+    vendor_address: null,
+    tax_id: invoice.gstin,
+    tax_id_kind: "gstin" as const,
+    invoice_number: invoice.number,
+    invoice_date: invoice.date,
+    currency: "INR" as const,
+    line_items: invoice.lines.map((line) => ({
+      description: line.description,
+      item_code: line.itemCode,
+      quantity: line.quantity,
+      unit: line.unit,
+      unit_price: line.unitPrice,
+      amount: line.amount,
+    })),
+    subtotal: invoice.subtotal,
+    taxes: invoice.taxes,
+    taxes_read: true,
+    adjustments: [],
+    total: invoice.total,
+  };
+}
+
 function build(draft: Draft): SeedInvoice {
   const lines = draft.lines.map((line) => ({
     description: line.description,
