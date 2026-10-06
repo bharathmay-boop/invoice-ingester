@@ -13,6 +13,7 @@ import { readContract } from "@/lib/contracts/read.ts";
 import { locate, readPages } from "@/lib/contracts/locate.ts";
 import { refuseBeforeReading } from "@/lib/contracts/limits.ts";
 import { readPdf } from "@/lib/pdf.ts";
+import { callWorker, isCronRequest } from "@/lib/contracts/cron.ts";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -34,8 +35,7 @@ export async function POST(request: NextRequest) {
   // know the secret; nothing a browser sends can reach it. Guarded this way
   // rather than by session because the chain outlives the request that started
   // it, and by then there is no session to check.
-  const expected = process.env.CRON_SECRET;
-  if (!expected || request.headers.get("authorization") !== `Bearer ${expected}`) {
+  if (!isCronRequest(request.headers.get("authorization"))) {
     return NextResponse.json({ error: "Not for you." }, { status: 401 });
   }
 
@@ -119,14 +119,8 @@ export async function POST(request: NextRequest) {
  * Start the next one without waiting for it.
  *
  * Deliberately not awaited: awaiting would make this function's lifetime the
- * whole queue's, and sixty seconds is one contract. The catch is there because
- * an unhandled rejection from a request nobody is waiting on would take the
- * function down and strand the contract it had already finished.
+ * whole queue's, and sixty seconds is one contract.
  */
 function handOn(request: NextRequest) {
-  const url = new URL("/api/contracts/worker", request.nextUrl.origin);
-  void fetch(url, {
-    method: "POST",
-    headers: { authorization: `Bearer ${process.env.CRON_SECRET}` },
-  }).catch(() => {});
+  callWorker(request.nextUrl.origin);
 }

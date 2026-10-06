@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server.js";
 import { reclaimStale, waitingCount } from "@/lib/contracts/queue.ts";
+import { callWorker, isCronRequest } from "@/lib/contracts/cron.ts";
 
 export const runtime = "nodejs";
 
@@ -16,20 +17,14 @@ export const runtime = "nodejs";
  * the queue. The chain does the driving.
  */
 export async function GET(request: NextRequest) {
-  const expected = process.env.CRON_SECRET;
-  if (!expected || request.headers.get("authorization") !== `Bearer ${expected}`) {
+  if (!isCronRequest(request.headers.get("authorization"))) {
     return NextResponse.json({ error: "Not for you." }, { status: 401 });
   }
 
   const reclaimed = await reclaimStale();
   const waiting = await waitingCount();
 
-  if (waiting > 0) {
-    void fetch(new URL("/api/contracts/worker", request.nextUrl.origin), {
-      method: "POST",
-      headers: { authorization: `Bearer ${expected}` },
-    }).catch(() => {});
-  }
+  if (waiting > 0) callWorker(request.nextUrl.origin);
 
   return NextResponse.json({ reclaimed, waiting });
 }
