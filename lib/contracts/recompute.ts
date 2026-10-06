@@ -29,10 +29,11 @@ export async function recomputeVariance(vendorId: string): Promise<number> {
       unit: string | null;
       unit_price: number;
       quantity: number;
+      currency: string;
       invoice_date: string;
     }>(
       `SELECT li.id, li.item_id, li.unit, li.unit_price::float, li.quantity::float,
-              i.invoice_date
+              i.currency, i.invoice_date
        FROM line_item li JOIN invoice i ON i.id = li.invoice_id
        WHERE i.vendor_id = $1`,
       [vendorId],

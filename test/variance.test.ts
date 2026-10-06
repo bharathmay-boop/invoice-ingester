@@ -1,4 +1,4 @@
-// What a contract says about one invoice line. Three of the six answers are
+// What a contract says about one invoice line. Four of the seven answers are
 // right even when the rate was read badly, so they are tested hardest: they are
 // the part of this epic that does not depend on a model getting a number off a
 // table correctly.
@@ -7,16 +7,20 @@ import { test } from "node:test";
 
 import { assess, checkTolerance, MAX_TOLERANCE_PERCENT } from "../lib/contracts/variance.ts";
 
-const line = (over: Partial<{ unit_price: number; quantity: number; unit: string | null }> = {}) => ({
+const line = (
+  over: Partial<{ unit_price: number; quantity: number; unit: string | null; currency: string }> = {},
+) => ({
   unit_price: 285,
   quantity: 10,
   unit: "ream" as string | null,
+  currency: "INR",
   ...over,
 });
 
-const rate = (over: Partial<{ rate: number; unit: string | null }> = {}) => ({
+const rate = (over: Partial<{ rate: number; unit: string | null; currency: string }> = {}) => ({
   rate: 285,
   unit: "ream" as string | null,
+  currency: "INR",
   effective_from: "2025-04-01",
   effective_to: "2026-03-31",
   ...over,
@@ -118,4 +122,32 @@ test("a wider tolerance forgives more, and is the only thing that changes", () =
 
   const loose = assess({ kind: "covered", rate: rate() }, line({ unit_price: 290 }), 5);
   assert.equal(loose?.tag, "matches_contract");
+});
+
+test("the same number in two currencies is not a match", () => {
+  // The bug this closes: currency was never read, so 285 USD agreed against
+  // 285 INR billed came out as matches_contract and the line was waved
+  // through at roughly eighty times the agreed price.
+  const found = assess({ kind: "covered", rate: rate({ currency: "USD" }) }, line({ currency: "INR" }));
+  assert.equal(found?.tag, "currency_differs");
+  assert.equal(found?.difference, null);
+  assert.equal(found?.impact, null, "a gap between two currencies is not an amount of money");
+  assert.match(found?.reason ?? "", /USD/);
+  assert.match(found?.reason ?? "", /INR/);
+});
+
+test("currency is answered before units, since no unit makes them comparable", () => {
+  // Both differ. Reporting the units would send someone to check a pack size
+  // when the real answer is that these two numbers cannot be compared at all.
+  const found = assess(
+    { kind: "covered", rate: rate({ currency: "USD", unit: "sheet" }) },
+    line({ currency: "INR", unit: "ream" }),
+  );
+  assert.equal(found?.tag, "currency_differs");
+});
+
+test("matching currencies compare exactly as before", () => {
+  const found = assess({ kind: "covered", rate: rate({ rate: 270 }) }, line({ unit_price: 297 }));
+  assert.equal(found?.tag, "billed_above_contract");
+  assert.equal(found?.impact, 270);
 });

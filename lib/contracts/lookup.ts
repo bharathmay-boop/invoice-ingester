@@ -28,10 +28,13 @@ export async function coverageFor(
   const covering = await query<{
     rate: number;
     unit: string | null;
+    currency: string;
     effective_from: string;
     effective_to: string | null;
   }>(
-    `SELECT rate::float, unit, effective_from, effective_to
+    // Currency comes with the rate, not as an afterthought: the comparison
+    // refuses a pair in two currencies, and it can only refuse what it is told.
+    `SELECT rate::float, unit, currency, effective_from, effective_to
      FROM contract_rate
      WHERE reviewed AND vendor_id = $1 AND item_id = $2
        AND effective_from <= $3::date
