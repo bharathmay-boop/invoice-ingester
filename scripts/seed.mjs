@@ -12,7 +12,7 @@
 // Run: npm run seed
 import { createHash } from "node:crypto";
 import pg from "pg";
-import { del, list, put } from "@vercel/blob";
+import { del, put } from "@vercel/blob";
 
 const { asExtraction, invoices, items, vendors } = await import("../lib/demo/dataset.ts");
 const { contracts } = await import("../lib/demo/contracts.ts");
@@ -53,6 +53,7 @@ await client.connect();
 // failure after one has to take it away by hand. Otherwise a failed seed
 // leaves a document nothing points at.
 const uploaded = [];
+let previous = [];
 let committed = false;
 let contractVendorIds = [];
 
@@ -66,6 +67,13 @@ try {
   // vendors go next, but only where nothing real still points at them: a real
   // invoice may well have matched a catalogue item the demo created.
   await client.query("DELETE FROM invoice WHERE is_demo");
+  // Noted before the delete, so a document this database wrote on an earlier
+  // run can be cleaned up afterwards. Only these are ever deleted: the blob
+  // store is shared across environments, so sweeping a whole path would take
+  // another database's documents with it.
+  previous = (await client.query("SELECT blob_url FROM contract WHERE is_demo")).rows.map(
+    (row) => row.blob_url,
+  );
   // Rates cascade from the contract. Before the items, since a rate points at
   // one and the item delete below checks that nothing still does.
   await client.query("DELETE FROM contract WHERE is_demo");
@@ -333,15 +341,15 @@ if (committed) {
 
     // Editing a demo contract changes its text, so its digest and its path
     // change with it, and the document the last run wrote is left behind with
-    // nothing pointing at it. Sweep those rather than paying to store them.
+    // nothing pointing at it. Only the ones this database had before are
+    // considered, and only where nothing points at them now.
     const live = new Set(
       (await pool.query("SELECT blob_url FROM contract")).rows.map((row) => row.blob_url),
     );
-    const { blobs } = await list({ prefix: "contracts/demo/", limit: 1000 });
     let swept = 0;
-    for (const blob of blobs) {
-      if (live.has(blob.url)) continue;
-      await del(blob.url).catch(() => {});
+    for (const old of new Set(previous)) {
+      if (live.has(old)) continue;
+      await del(old).catch(() => {});
       swept += 1;
     }
     if (swept) console.log(`removed ${swept} demo contract document(s) nothing points at`);
