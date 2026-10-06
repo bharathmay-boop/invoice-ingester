@@ -325,20 +325,10 @@ try {
 if (committed) {
   const { pool } = await import("../lib/db.ts");
   try {
-    // The tags a visitor sees are written by the function that writes the real
-    // ones. A demo whose findings were typed in would agree with itself and
-    // prove nothing about the check.
-    const { recomputeVariance } = await import("../lib/contracts/recompute.ts");
-    let checked = 0;
-    for (const vendorId of contractVendorIds) checked += await recomputeVariance(vendorId);
-
-    const tags = await pool.query(
-      `SELECT variance_tag, count(*)::int AS n FROM line_item
-       WHERE variance_tag IS NOT NULL GROUP BY variance_tag ORDER BY n DESC`,
-    );
-    console.log(`checked ${checked} lines against those contracts:`);
-    for (const row of tags.rows) console.log(`  ${row.variance_tag}: ${row.n}`);
-
+    // First, before anything that can fail. The rows that named these
+    // documents are already gone, so if this is skipped nothing afterwards
+    // knows the urls and the files stay in paid storage for good.
+    //
     // Editing a demo contract changes its text, so its digest and its path
     // change with it, and the document the last run wrote is left behind with
     // nothing pointing at it. Only the ones this database had before are
@@ -353,6 +343,21 @@ if (committed) {
       swept += 1;
     }
     if (swept) console.log(`removed ${swept} demo contract document(s) nothing points at`);
+
+    // The tags a visitor sees are written by the function that writes the real
+    // ones. A demo whose findings were typed in would agree with itself and
+    // prove nothing about the check.
+    const { recomputeVariance } = await import("../lib/contracts/recompute.ts");
+    let checked = 0;
+    for (const vendorId of contractVendorIds) checked += await recomputeVariance(vendorId);
+
+    const tags = await pool.query(
+      `SELECT variance_tag, count(*)::int AS n FROM line_item
+       WHERE variance_tag IS NOT NULL GROUP BY variance_tag ORDER BY n DESC`,
+    );
+    console.log(`checked ${checked} lines against those contracts:`);
+    for (const row of tags.rows) console.log(`  ${row.variance_tag}: ${row.n}`);
+
   } catch (error) {
     console.error("the data is in, but the variance pass did not finish:", error.message);
     process.exitCode = 1;
