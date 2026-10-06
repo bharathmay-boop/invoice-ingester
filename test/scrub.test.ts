@@ -48,3 +48,20 @@ test("an outgoing event carries no query strings and no exception text", () => {
 test("a dropped event stays dropped", () => {
   assert.equal(scrubEvent(null), null);
 });
+
+test("session replay records layout and clicks, not what the page says", async () => {
+  const { replayOptions } = await import("../lib/analytics/scrub.ts");
+  assert.equal(replayOptions.maskTextSelector, "*");
+  assert.equal(replayOptions.maskAllInputs, true);
+  assert.equal(replayOptions.recordHeaders, false);
+  assert.equal(replayOptions.recordBody, false);
+
+  const captured = replayOptions.maskCapturedNetworkRequestFn({
+    name: "https://app.example/items?q=acme",
+    requestBody: '{"url":"x"}',
+    responseBody: '{"vendor":"Acme Supplies"}',
+  });
+  assert.equal(captured?.name, "https://app.example/items");
+  assert.equal(captured?.requestBody, undefined);
+  assert.equal(captured?.responseBody, undefined);
+});

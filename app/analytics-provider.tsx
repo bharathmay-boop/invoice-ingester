@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import posthog from "posthog-js";
 import { PostHogProvider } from "posthog-js/react";
-import { scrubEvent } from "@/lib/analytics/scrub.ts";
+import { replayOptions, scrubEvent } from "@/lib/analytics/scrub.ts";
 
 const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
 
@@ -21,6 +21,7 @@ if (typeof window !== "undefined" && key && !posthog.__loaded) {
     mask_all_text: true,
     mask_all_element_attributes: true,
     before_send: scrubEvent,
+    session_recording: replayOptions,
   });
 }
 
