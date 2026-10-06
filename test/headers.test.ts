@@ -37,7 +37,9 @@ test("a stored original is sandboxed, and still only framed by this site", () =>
   // The bytes come from whoever wrote the document. Checked in Chromium and
   // Firefox: a sandboxed PDF still renders in an object, an iframe and its own tab.
   const original = headersFor("/api/original");
-  assert.match(original["content-security-policy"] ?? "", /\bsandbox\b/);
+  // A bare sandbox, with no allow-* tokens: allow-scripts with allow-same-origin
+  // would let a stored document run as the app again.
+  assert.match(original["content-security-policy"] ?? "", /(?:^|;)\s*sandbox\s*(?:;|$)/);
   assert.match(original["content-security-policy"] ?? "", /frame-ancestors 'self'/);
   assert.doesNotMatch(headersFor("/items")["content-security-policy"] ?? "", /sandbox/);
 });
