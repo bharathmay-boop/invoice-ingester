@@ -29,6 +29,22 @@ export const MAX_CONTRACTS_PER_BATCH = 20;
 
 export type Refusal = { reason: string };
 
+/**
+ * Checked by the worker before the model is paid to read the file. The browser
+ * only knows the size; the page count needs the bytes, and the worker is the
+ * first place that has them. Past the limit the page parse that follows the
+ * read is also unbounded, so this is what keeps a filing cabinet from costing
+ * two paid reads and a killed worker.
+ */
+export function refuseBeforeReading(facts: { pages: number; encrypted: boolean } | null): string | null {
+  if (!facts) return "This file could not be opened as a PDF.";
+  if (facts.encrypted) return "This PDF is locked with a password. Save an unlocked copy and upload that.";
+  if (facts.pages > MAX_CONTRACT_PAGES) {
+    return `This PDF has ${facts.pages} pages, over the ${MAX_CONTRACT_PAGES} page limit for a contract.`;
+  }
+  return null;
+}
+
 export function rejectContract(file: {
   name: string;
   type: string;
