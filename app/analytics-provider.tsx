@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import posthog from "posthog-js";
 import { PostHogProvider } from "posthog-js/react";
+import { scrubEvent } from "@/lib/analytics/scrub.ts";
 
 const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
 
@@ -15,20 +16,26 @@ if (typeof window !== "undefined" && key && !posthog.__loaded) {
     capture_pageview: false,
     capture_exceptions: true,
     persistence: "localStorage+cookie",
+    // Clicks are still counted, but the text and attributes of what was clicked
+    // are vendor names, item names and invoice numbers. See lib/analytics/scrub.ts.
+    mask_all_text: true,
+    mask_all_element_attributes: true,
+    before_send: scrubEvent,
   });
 }
 
-/** Page views, sent on every navigation rather than only on first load. */
+/**
+ * Page views, sent on every navigation rather than only on first load. The
+ * search params are a dependency so a new search still counts as a view, but
+ * the query itself is never sent: it is whatever was typed into a search box.
+ */
 function PageViews() {
   const pathname = usePathname();
   const params = useSearchParams();
 
   useEffect(() => {
     if (!key) return;
-    const search = params.toString();
-    posthog.capture("$pageview", {
-      $current_url: `${window.location.origin}${pathname}${search ? `?${search}` : ""}`,
-    });
+    posthog.capture("$pageview", { $current_url: `${window.location.origin}${pathname}` });
   }, [pathname, params]);
 
   return null;
