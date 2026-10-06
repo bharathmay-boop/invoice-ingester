@@ -29,7 +29,7 @@ npm run lint
 npx next build
 ```
 
-Tests cover the places a mistake would not announce itself: normalisation, match thresholds against real Postgres trigram scores, unit conversion, the arithmetic checks, which contract rate was in force on a date, the variance tags written from it, the refusal to compare a rate and a price in different currencies, key sealing, access rules, and what a save actually writes. The database backed ones build a throwaway schema and drop it, so a test run cannot touch real invoices or a saved API key. They skip themselves without a `DATABASE_URL`, so `npm test` still runs on a clean checkout.
+Tests cover the places a mistake would not announce itself: normalisation, match thresholds against real Postgres trigram scores, unit conversion, the arithmetic checks, which contract rate was in force on a date, the variance tags written from it, the refusal to compare a rate and a price in different currencies, key sealing, access rules, and what a save actually writes. The demo's own contracts are generated as PDFs and read back through the same extractor, so every quote stored against a rate is checked to be on the page it claims. The database backed ones build a throwaway schema and drop it, so a test run cannot touch real invoices or a saved API key. They skip themselves without a `DATABASE_URL`, so `npm test` still runs on a clean checkout.
 
 A change to matching or money gets a test that fails without it. A wrong spend figure looks exactly like a right one, which is the whole reason those tests exist.
 

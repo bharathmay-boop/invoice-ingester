@@ -2,10 +2,21 @@
 // rows it previously seeded, so this is also the "reset demo data" action from
 // settings and it cannot take a real invoice with it.
 //
+// Contracts come with it, and with a document each. `contract.blob_url` is NOT
+// NULL and the review screen opens the page a rate was read from, so a demo
+// contract without a PDF would be an empty viewer beside rates claiming to
+// come from it. The PDFs are generated here and written to blob storage at a
+// path derived from their own digest, so a reseed replaces them rather than
+// leaving the last run's behind.
+//
 // Run: npm run seed
+import { createHash } from "node:crypto";
 import pg from "pg";
+import { del, put } from "@vercel/blob";
 
 const { asExtraction, invoices, items, vendors } = await import("../lib/demo/dataset.ts");
+const { contracts } = await import("../lib/demo/contracts.ts");
+const { contractPdf } = await import("../lib/demo/contract-pdf.ts");
 const { validateArithmetic } = await import("../lib/extract/validate.ts");
 const { normalizeAddress, normalizeTaxId } = await import("../lib/vendors/normalize.ts");
 
@@ -31,6 +42,11 @@ for (const invoice of invoices) {
 const client = new pg.Client({ connectionString: url });
 await client.connect();
 
+// Blob writes are not in the transaction and cannot be rolled back, so a
+// failure after one has to take it away by hand. Otherwise a failed seed
+// leaves a document nothing points at.
+const uploaded = [];
+
 try {
   await client.query("BEGIN");
 
@@ -41,6 +57,9 @@ try {
   // vendors go next, but only where nothing real still points at them: a real
   // invoice may well have matched a catalogue item the demo created.
   await client.query("DELETE FROM invoice WHERE is_demo");
+  // Rates cascade from the contract. Before the items, since a rate points at
+  // one and the item delete below checks that nothing still does.
+  await client.query("DELETE FROM contract WHERE is_demo");
   await client.query(`
     DELETE FROM item
     WHERE is_demo
@@ -165,6 +184,83 @@ try {
     }
   }
 
+  // Contracts last: a rate points at an item and a contract at a vendor, so
+  // both have to be in place first.
+  let rateCount = 0;
+  for (const contract of contracts) {
+    const pdf = contractPdf(contract.pages);
+    const digest = createHash("sha256").update(pdf).digest("hex");
+    const blob = await put(`contracts/demo/${digest.slice(0, 12)}.pdf`, pdf, {
+      access: "private",
+      contentType: "application/pdf",
+      addRandomSuffix: false,
+      allowOverwrite: true,
+    });
+    uploaded.push(blob.url);
+
+    const { rows } = await client.query(
+      `INSERT INTO contract
+         (vendor_id, title, blob_url, content_type, pages, status, digest,
+          other_terms, extraction, extraction_meta, reviewed_at, is_demo)
+       VALUES ($1,$2,$3,'application/pdf',$4,'reviewed',$5,$6,$7,$8,now(),true)
+       RETURNING id`,
+      [
+        vendorIds.get(contract.gstin),
+        contract.title,
+        blob.url,
+        contract.pages.length,
+        digest,
+        JSON.stringify(contract.otherTerms),
+        // The shape a read leaves behind, so the contract screen has the same
+        // thing to show as it would for a real document.
+        JSON.stringify({
+          vendor_name: vendors.find((v) => v.gstin === contract.gstin)?.name ?? null,
+          vendor_address: null,
+          tax_id: contract.gstin,
+          tax_id_kind: "gstin",
+          currency: "INR",
+          effective_from: contract.effectiveFrom,
+          effective_to: contract.effectiveTo,
+          rates: contract.rates.map((rate) => ({
+            printed_name: rate.printedName,
+            unit: rate.unit,
+            rate: rate.rate,
+            effective_from: rate.effectiveFrom,
+            effective_to: rate.effectiveTo,
+            page: rate.page,
+            quote: rate.quote,
+          })),
+          other_terms: contract.otherTerms,
+        }),
+        // Labelled as a demo row, the same as the invoices. Nothing here came
+        // from a model and a screen that said otherwise would be lying.
+        JSON.stringify({ source: "demo-seed" }),
+      ],
+    );
+
+    for (const rate of contract.rates) {
+      await client.query(
+        `INSERT INTO contract_rate
+           (contract_id, vendor_id, item_id, printed_name, unit, rate, currency,
+            effective_from, effective_to, source_page, source_quote, reviewed)
+         VALUES ($1,$2,$3,$4,$5,$6,'INR',$7,$8,$9,$10,true)`,
+        [
+          rows[0].id,
+          vendorIds.get(contract.gstin),
+          rate.item ? itemIds.get(rate.item) : null,
+          rate.printedName,
+          rate.unit,
+          rate.rate,
+          rate.effectiveFrom,
+          rate.effectiveTo,
+          rate.page,
+          rate.quote,
+        ],
+      );
+      rateCount += 1;
+    }
+  }
+
   await client.query("COMMIT");
 
   const spend = invoices
@@ -173,14 +269,34 @@ try {
 
   console.log(
     `seeded ${vendors.length} vendors, ${items.length} items, ` +
-      `${invoices.length} invoices, ${lineCount} line items`,
+      `${invoices.length} invoices, ${lineCount} line items, ` +
+      `${contracts.length} contracts, ${rateCount} rates`,
   );
   console.log(
     `confirmed spend Rs${spend.toFixed(2)}, ` +
       `${invoices.filter((i) => i.status === "needs_review").length} needing review`,
   );
+
+  // The tags a visitor sees are written by the function that writes the real
+  // ones. A demo whose findings were typed in would agree with itself and
+  // prove nothing about the check.
+  const { recomputeVariance } = await import("../lib/contracts/recompute.ts");
+  let checked = 0;
+  for (const gstin of new Set(contracts.map((c) => c.gstin))) {
+    checked += await recomputeVariance(vendorIds.get(gstin));
+  }
+
+  const { pool } = await import("../lib/db.ts");
+  const tags = await pool.query(
+    `SELECT variance_tag, count(*)::int AS n FROM line_item
+     WHERE variance_tag IS NOT NULL GROUP BY variance_tag ORDER BY n DESC`,
+  );
+  await pool.end();
+  console.log(`checked ${checked} lines against those contracts:`);
+  for (const row of tags.rows) console.log(`  ${row.variance_tag}: ${row.n}`);
 } catch (error) {
   await client.query("ROLLBACK");
+  for (const url of uploaded) await del(url).catch(() => {});
   console.error("seed failed, nothing was written:", error.message);
   process.exitCode = 1;
 } finally {
