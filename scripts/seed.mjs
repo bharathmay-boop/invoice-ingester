@@ -12,7 +12,7 @@
 // Run: npm run seed
 import { createHash } from "node:crypto";
 import pg from "pg";
-import { del, put } from "@vercel/blob";
+import { del, list, put } from "@vercel/blob";
 
 const { asExtraction, invoices, items, vendors } = await import("../lib/demo/dataset.ts");
 const { contracts } = await import("../lib/demo/contracts.ts");
@@ -25,6 +25,13 @@ if (!url) {
   console.error("DATABASE_URL is not set. Run `vercel env pull` first.");
   process.exit(1);
 }
+
+// Everything in this script has to be the same database. The client below
+// prefers the unpooled url, and `lib/db.ts`, which `recomputeVariance` uses,
+// reads DATABASE_URL and nothing else. With only the unpooled one set, the
+// inserts would commit here and the variance pass would run somewhere else, or
+// fail, leaving demo invoices with no findings against contracts that exist.
+process.env.DATABASE_URL = url;
 
 // Every invoice goes through the same checks a real extraction would, so the
 // demo data cannot quietly contradict the validator it is meant to demonstrate.
@@ -46,6 +53,8 @@ await client.connect();
 // failure after one has to take it away by hand. Otherwise a failed seed
 // leaves a document nothing points at.
 const uploaded = [];
+let committed = false;
+let contractVendorIds = [];
 
 try {
   await client.query("BEGIN");
@@ -262,6 +271,7 @@ try {
   }
 
   await client.query("COMMIT");
+  committed = true;
 
   const spend = invoices
     .filter((i) => i.status === "confirmed")
@@ -277,28 +287,68 @@ try {
       `${invoices.filter((i) => i.status === "needs_review").length} needing review`,
   );
 
-  // The tags a visitor sees are written by the function that writes the real
-  // ones. A demo whose findings were typed in would agree with itself and
-  // prove nothing about the check.
-  const { recomputeVariance } = await import("../lib/contracts/recompute.ts");
-  let checked = 0;
-  for (const gstin of new Set(contracts.map((c) => c.gstin))) {
-    checked += await recomputeVariance(vendorIds.get(gstin));
-  }
-
-  const { pool } = await import("../lib/db.ts");
-  const tags = await pool.query(
-    `SELECT variance_tag, count(*)::int AS n FROM line_item
-     WHERE variance_tag IS NOT NULL GROUP BY variance_tag ORDER BY n DESC`,
+  contractVendorIds = [...new Set(contracts.map((c) => c.gstin))].map((gstin) =>
+    vendorIds.get(gstin),
   );
-  await pool.end();
-  console.log(`checked ${checked} lines against those contracts:`);
-  for (const row of tags.rows) console.log(`  ${row.variance_tag}: ${row.n}`);
 } catch (error) {
   await client.query("ROLLBACK");
-  for (const url of uploaded) await del(url).catch(() => {});
+
+  // A demo document's path comes from its own digest and is written with
+  // overwrite, so a reseed of an unchanged contract writes the same bytes to
+  // the same place. After the rollback the previous row is back and still
+  // points there, so deleting it would leave a committed contract with no
+  // document. Only remove what nothing points at.
+  for (const uploadedUrl of uploaded) {
+    const { rowCount } = await client.query("SELECT 1 FROM contract WHERE blob_url = $1", [
+      uploadedUrl,
+    ]);
+    if (!rowCount) await del(uploadedUrl).catch(() => {});
+  }
+
   console.error("seed failed, nothing was written:", error.message);
   process.exitCode = 1;
 } finally {
   await client.end();
+}
+
+// Past this point the data is committed. Anything that fails here is worth
+// reporting and is not worth deleting a document over, which is why it is
+// outside the block that cleans blobs up.
+if (committed) {
+  const { pool } = await import("../lib/db.ts");
+  try {
+    // The tags a visitor sees are written by the function that writes the real
+    // ones. A demo whose findings were typed in would agree with itself and
+    // prove nothing about the check.
+    const { recomputeVariance } = await import("../lib/contracts/recompute.ts");
+    let checked = 0;
+    for (const vendorId of contractVendorIds) checked += await recomputeVariance(vendorId);
+
+    const tags = await pool.query(
+      `SELECT variance_tag, count(*)::int AS n FROM line_item
+       WHERE variance_tag IS NOT NULL GROUP BY variance_tag ORDER BY n DESC`,
+    );
+    console.log(`checked ${checked} lines against those contracts:`);
+    for (const row of tags.rows) console.log(`  ${row.variance_tag}: ${row.n}`);
+
+    // Editing a demo contract changes its text, so its digest and its path
+    // change with it, and the document the last run wrote is left behind with
+    // nothing pointing at it. Sweep those rather than paying to store them.
+    const live = new Set(
+      (await pool.query("SELECT blob_url FROM contract")).rows.map((row) => row.blob_url),
+    );
+    const { blobs } = await list({ prefix: "contracts/demo/", limit: 1000 });
+    let swept = 0;
+    for (const blob of blobs) {
+      if (live.has(blob.url)) continue;
+      await del(blob.url).catch(() => {});
+      swept += 1;
+    }
+    if (swept) console.log(`removed ${swept} demo contract document(s) nothing points at`);
+  } catch (error) {
+    console.error("the data is in, but the variance pass did not finish:", error.message);
+    process.exitCode = 1;
+  } finally {
+    await pool.end();
+  }
 }
