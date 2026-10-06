@@ -20,6 +20,19 @@ const SWEEP_CHANCE = 0.1;
 const LABEL = "invoice-ingester/login-source/v1";
 
 /**
+ * The address attempts are counted against. Only trusted where the platform
+ * writes it: Vercel overwrites X-Forwarded-For at its edge and does not forward
+ * a value the client sent (vercel.com/docs/headers/request-headers). Anywhere
+ * else nothing is known to strip it, and a header the caller writes would buy a
+ * fresh allowance per request, so every attempt shares one bucket instead.
+ */
+export function clientAddress(request: Request): string {
+  if (!process.env.VERCEL) return "unverified";
+  const forwarded = request.headers.get("x-forwarded-for") ?? "";
+  return forwarded.split(",")[0]?.trim() || "unknown";
+}
+
+/**
  * Keyed, not a bare digest.
  *
  * An unkeyed SHA-256 of an IP is not a privacy boundary: IPv4 is 2^32 values,
@@ -32,8 +45,7 @@ function fingerprint(request: Request): string {
   const master = process.env.SETTINGS_MASTER_KEY;
   if (!master) throw new Error("SETTINGS_MASTER_KEY is not set");
 
-  const forwarded = request.headers.get("x-forwarded-for") ?? "";
-  const ip = forwarded.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
+  const ip = clientAddress(request);
 
   return createHmac("sha256", Buffer.from(master, "base64"))
     .update(`${LABEL}:${ip}`)

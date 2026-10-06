@@ -21,6 +21,10 @@ const SCHEMA = `test_rl_${Math.random().toString(36).slice(2, 10)}`;
 // Neon's pooler refuses search_path in the startup packet, so tests use the
 // direct connection, the same one migrations use and for the same reason.
 process.env.DATABASE_SCHEMA = SCHEMA;
+
+// These tests tell sources apart by X-Forwarded-For, which is only trusted on
+// Vercel. Off Vercel every attempt shares one bucket (test/client-address.test.ts).
+process.env.VERCEL = "1";
 process.env.DATABASE_URL = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
 
 const db = configured ? await import("../lib/db.ts") : null;
