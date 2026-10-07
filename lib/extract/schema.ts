@@ -2,7 +2,7 @@
 // are built against this rather than the other way round.
 import { z } from "zod";
 
-import type { Currency } from "@/lib/format.ts";
+import { currencySchema } from "../money/schema.ts";
 
 // Bounds match the database columns, so an absurd figure fails here with a
 // readable error instead of at save time, or worse, sailing through the
@@ -14,11 +14,7 @@ const MAX_QUANTITY = 999_999_999.999; // numeric(12,3)
 
 const amount = z.number().finite().nonnegative().max(MAX_AMOUNT);
 
-const currency = z
-  .string()
-  .trim()
-  .toUpperCase()
-  .pipe(z.enum(["INR", "USD", "EUR"] satisfies [Currency, ...Currency[]]));
+const currency = currencySchema;
 
 /**
  * A rate as printed, which is not always a number. An invoice that writes

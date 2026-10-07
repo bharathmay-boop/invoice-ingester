@@ -1,7 +1,11 @@
 // One place for money, dates and status wording. Getting Indian digit grouping
 // right in four screens by hand means getting it wrong in a fifth.
 
-export type Currency = "INR" | "USD" | "EUR";
+import type { Currency } from "./money/currencies.ts";
+
+// Re-exported because thirty-odd files already import it from here, and the
+// set itself now lives in one module rather than four.
+export type { Currency };
 
 const moneyFormatters = new Map<Currency, Intl.NumberFormat>();
 const wholeFormatters = new Map<Currency, Intl.NumberFormat>();

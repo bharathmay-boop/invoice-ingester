@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { CURRENCIES } from "../money/currencies.ts";
+
 import { describeUnusable, type Failure } from "../extract/failure.ts";
 
 /**
@@ -69,7 +71,7 @@ export const contractSchema = z.object({
   vendor_address: z.string().min(1).nullable(),
   tax_id: z.string().min(1).nullable(),
   tax_id_kind: z.enum(["gstin", "vat", "ein"]).nullable(),
-  currency: z.enum(["INR", "USD", "EUR"]),
+  currency: z.enum(CURRENCIES),
   /** The contract's own period, which a rate with no dates of its own inherits. */
   effective_from: date.nullable(),
   effective_to: date.nullable(),

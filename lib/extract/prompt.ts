@@ -2,6 +2,8 @@
 // copies it replaced had to be edited in lockstep, and a prompt that differs by
 // provider is a result that differs by provider.
 
+import { CURRENCY_LIST } from "../money/currencies.ts";
+
 export const INSTRUCTIONS = `You are reading a file someone uploaded as one or more invoices.
 
 First decide whether it holds any. An invoice, bill or receipt shows all four
@@ -43,7 +45,7 @@ a plausible number is the worst thing you can do here.
   exactly one of "gstin", "vat", or "ein". It must be set when tax_id is set
   and null when tax_id is null. Do not infer it from the country, currency, or
   tax labels when the document does not identify the registration.
-- currency is INR, USD or EUR, read from the invoice itself: the symbol on the
+- currency is ${CURRENCY_LIST}, read from the invoice itself: the symbol on the
   amounts, a currency code beside them, or the country the vendor bills from.
   Do not assume rupees because other invoices were Indian. If the document is
   in a currency this does not list, or you cannot tell which it is, say so in
