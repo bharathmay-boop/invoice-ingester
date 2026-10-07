@@ -1,180 +1,137 @@
 # Invoice Ingester
 
-Drop in an invoice, get the particulars extracted and stored, then search what you paid for a given thing and what you paid a given vendor in total. Drop in the contracts behind those invoices and it checks what you were billed against what you agreed.
+Drop in the invoices you have already paid and the contracts behind them. It reads both, matches the line items to a catalogue, and tells you where you were billed something other than what you agreed.
 
-Reads invoices in rupees, dollars and euros, and takes whatever tax the document actually printed rather than assuming a country: CGST and SGST, IGST, VAT, sales tax, cess.
+**Live:** [invoice-ingester.vercel.app](https://invoice-ingester.vercel.app). The home page is open. The app is behind a password, because it holds real invoices.
 
-**Live:** [invoice-ingester.vercel.app](https://invoice-ingester.vercel.app). The home page shows what it does; the app itself is behind a password, because it holds real invoices.
+![The home page: invoices you have already paid, turned into answers](docs/screenshots/home.png)
 
-**Status:** working end to end. Upload, extraction, review, save, item matching, price history, vendor spend, contract ingestion and variance checking all work. Progress is tracked on the [board](https://github.com/users/bharathmay-boop/projects/1), and [`docs/spec.md`](docs/spec.md) says what is being built and why.
+## The two questions
 
-## The problem
+Invoices arrive as PDFs and photos, get filed somewhere, and the information in them is never used again. Two questions get hard once there are more than a handful:
 
-Invoices arrive as PDFs and photos, get filed somewhere, and the information in them is never used again. Two questions are hard to answer once you have more than a handful:
+1. How much have I paid this vendor in total, and what have I been paying for this item over time?
+2. Does any of it disagree with the contract I signed?
 
-1. How much have I paid this vendor in total?
-2. What have I been paying for this item over time, and does another vendor sell it cheaper?
+Both are answerable from documents you already have. They need the line items extracted, the vendors resolved, the same product recognised across different spellings, and the contract read into dated rates.
 
-Both are answerable from invoices you already have. They just need the line items extracted, the vendors resolved, and the same product recognised across different spellings.
+## What it looks like
 
-## How it works
+Upload a PDF or a photo. One file can hold several invoices, and a five page PDF of three invoices comes back as three.
 
-Upload a PDF or an image. A vision model reads it and returns structured fields against a fixed schema. Two arithmetic checks run before anything saves: line items must sum to the subtotal, and subtotal plus taxes must equal the total. If either fails the invoice is held for review with the disagreeing figures highlighted, rather than saved as if it were fine.
+![The upload screen, with a file being read](docs/screenshots/upload.png)
 
-Vendors are resolved by whatever tax registration the invoice carries, a GSTIN or a VAT number or an EIN, normalised so one registration printed two ways is one supplier. Where there is none, name and address must both agree, because a false merge blends two businesses into one price history and nothing says so. Line items are normalised and matched against a catalogue using Postgres trigram similarity. Strong matches link on their own, borderline ones wait in a queue to be accepted or rejected, and weak ones become new catalogue entries.
+An item, with what it has cost over time, the cheapest vendor, and the names a person has taught the matcher.
 
-One file can hold several invoices. A five page PDF of three invoices comes back as three, each with the pages it came from, each reviewed and saved on its own.
+![An item screen: total paid, current price, cheapest vendor, and a price line](docs/screenshots/price-history.png)
+
+A contract after review. Every rate carries the page and the words it came from, so a figure can be pointed at rather than taken on trust.
+
+![A contract read into dated rates, each with the quoted line and page it came from](docs/screenshots/contract-review.png)
+
+And the point of all of it. One finding, with what was billed, what was agreed, the difference over the quantity on the line, and the sentence in the contract that set the rate.
+
+![A finding: billed 279 per ream against a contracted 265, with the contract quote underneath](docs/screenshots/finding.png)
+
+The rest of the screens: the catalogue, who you buy from, the contracts you have read, and the matches waiting on a person.
+
+| | |
+| --- | --- |
+| ![The items catalogue](docs/screenshots/items.png) | ![Vendors and what each has been paid](docs/screenshots/vendors.png) |
+| ![Contracts that have been read](docs/screenshots/contracts.png) | ![Suggested item matches waiting for a decision](docs/screenshots/suggestions.png) |
+
+Every screenshot here is produced by `npm run screenshots` against the seeded demo. None is captured by hand, because a hand captured image goes stale silently: the screen changes, the picture does not, and the front page starts describing a product that no longer exists.
 
 ## What it will not do
 
-Worth knowing before you clone it:
+Worth knowing before you clone it.
 
-- **It will not tell you two prices are comparable when they are not.** Kilograms and grams are converted; a ream against a sheet is refused with the reason, because a ream is 500 sheets of one particular paper rather than 500 of anything. Product specific pack sizes are not recorded yet.
+- **It will not tell you two prices are comparable when they are not.** Kilograms and grams are converted. A ream against a sheet is refused with the reason, because a ream is 500 sheets of one particular paper rather than 500 of anything.
 - **It will not merge two products on a guess.** Descriptions that are close but not clearly the same wait for a person. Measured on real invoices, two different cartridges scored higher than two spellings of one stapler, so no threshold separates them on its own.
 - **It will not save an invoice whose own figures disagree** without marking it. It is held for checking rather than folded into a spend total.
 - **It will not read a file that is not an invoice.** A photo or a bank statement is declined with a reason rather than turned into a draft of invented fields.
-- **It is one user with one password.** No accounts, no roles, no tenancy.
-- **It will not compare prices in two currencies.** No exchange rate exists anywhere in the codebase, deliberately. A live rate means a price history that changes shape when the euro moves; a stored one means a provider, a key and a new class of wrong answer. Rupees and euros are reported separately and said to be incomparable.
-- **It will not check a contract term it cannot verify.** Volume slabs, rebates, revenue share and minimum guarantees are read out of the contract, shown with the page and the words they came from, and explicitly not checked. None can be verified against a single invoice, so checking them would mean guessing.
+- **It will not compare prices in two currencies.** No exchange rate exists anywhere in the codebase, deliberately. A live rate means a price history that changes shape when the euro moves, and a stored one means a provider, a key and a new class of wrong answer. Rupees and euros are reported separately and said to be incomparable.
+- **It will not check a contract term it cannot verify.** Volume slabs, rebates, revenue share and minimum guarantees are read out of the contract, shown with the page and the words they came from, and explicitly not checked. None can be verified against a single invoice.
 - **It will not act on a contract nobody has read.** Every rate is inert until a person has confirmed it with the document open beside them. That is what makes reading a two hundred page PDF with a cheap model safe.
+- **It is one user with one password.** No accounts, no roles, no tenancy. That was the right call for a first version and it is the first decision to be reversed.
 
-## Extraction providers
+## How it works
 
-Extraction runs through either of two providers, selected on the settings page:
+**Reading.** A vision model returns structured fields against a fixed schema, through either the Claude API directly or OpenRouter. Both return the same object and both pass through the same validation, so nothing downstream knows which one ran. The OpenRouter model list is built at runtime from the models endpoint, filtered to models that accept images and support structured output, because a hardcoded list of model IDs goes stale and a retired ID does not fail when you pick it, it fails later when you upload.
 
-- **Claude API** direct, using `claude-opus-5` with a strict tool schema.
-- **OpenRouter**, using any vision model that supports structured output.
+**Checking the arithmetic.** Line items must sum to the subtotal, and subtotal plus taxes must equal the total. If either fails, the invoice is held for review with the disagreeing figures highlighted rather than saved as though it were fine. Whatever tax the document actually printed is taken, rather than a country being assumed: CGST and SGST, IGST, VAT, sales tax, cess.
 
-Both return the same object and both pass through the same validation, so nothing downstream knows or cares which one ran.
+**Resolving vendors.** By whatever tax registration the invoice carries, a GSTIN or a VAT number or an EIN, normalised so one registration printed two ways is one supplier. Where there is none, name and address must both agree, because a false merge blends two businesses into one price history and nothing says so.
 
-The OpenRouter model list is built at runtime from the OpenRouter models endpoint, filtered to models that accept image input and support structured output, and cached for a day. A hardcoded list of model IDs goes stale quickly, and a retired ID does not fail when you select it, it fails later when you upload.
+**Matching items.** Descriptions are normalised and matched against a catalogue using Postgres trigram similarity. Strong matches link on their own, borderline ones wait in a queue, and weak ones become new catalogue entries.
 
-API keys are entered in settings and encrypted at rest. They are never sent back to the browser after saving, and the masked display shows only the last four characters.
+**Reading contracts.** A supply contract becomes dated rates: an item, a unit, a figure, and the period it applies for. An escalation is written out at read time rather than interpreted later, so a rate rising five percent each April becomes three rate rows with three date ranges, and "what was agreed on this date" stays a date lookup.
 
-## Stack
+Reading a two hundred page agreement takes longer than a request stays open, so files go from the browser straight to storage and a queue reads them one at a time. The queue drains itself: each worker hands on to the next before it returns, and a daily sweep hands back anything a function died holding.
 
-Next.js App Router on Vercel, Postgres on Neon, Vercel Blob for the original files, and the `pg_trgm` extension for item matching.
+On the review screen, clicking a rate moves the document to the page that rate came from. That page is found by searching the document's own text for the quoted line, not taken from the model's word for it. A quote that cannot be found says so, which is a better reason to look closely than any confidence score.
 
-## Running it locally
+**Then every invoice from that supplier is checked**, including ones saved months earlier. Seven answers, and four of them are right even when a rate was read badly, because they turn on dates, item identity and units rather than on a number.
 
-```
-npm install
-npm run dev
-```
-
-The database is Neon, provisioned through the Vercel Marketplace. Pull the connection strings, then apply the schema:
-
-```
-vercel env pull
-npm run migrate
-```
-
-Migrations use `DATABASE_URL_UNPOOLED`, since DDL in a transaction does not sit well behind the pooler.
-
-Signing in needs `ADMIN_PASSWORD`, which `vercel env pull` also brings down. Everything except the home page is behind it.
-
-`vercel env pull` also brings down `SETTINGS_MASTER_KEY`, the AES-256-GCM key that API keys are sealed with. It is held in the environment rather than the database, so a database dump on its own does not open anything. Losing it means re-entering the API keys, not losing invoice data.
-
-Migrations are plain SQL files in `db/migrations`, applied in filename order and recorded in a `_migration` table, so re-running is safe.
-
-Load the demo data, which is what the screens show:
-
-```
-npm run seed
-```
-
-It removes only the rows it seeded, marked with `is_demo`, and reloads them. Safe to re-run, and it doubles as the reset action without touching real invoices in the same tables.
-
-Tests run on the Node test runner, no framework:
-
-```
-npm test
-```
-
-They cover the places a mistake would not announce itself: description normalisation, the match thresholds against real Postgres trigram scores, unit conversion, the arithmetic checks, key sealing, the access rules, and what a decision or a merge actually writes.
-
-The store tests need a database and skip themselves without one, so `npm test` still runs on a clean checkout. Run `vercel env pull` first to include them. They build a throwaway schema from the migration file and drop it afterwards, so running the suite cannot touch a saved API key.
-
-## Screenshots
-
-The review screen. The original on the left, what was read out of it on the right, every field editable and nothing stored until you save.
-
-![The review screen: an Indian e-invoice beside the fields extracted from it](docs/screenshots/review.png)
-
-An item's price history, with the three figures worth having above it and the names a person has taught the matcher below.
-
-![An item screen: total paid, current price, cheapest vendor, and a price line over six months](docs/screenshots/price-history.png)
-
-Both are taken by `npm run screenshots` against the running app, not captured by hand. A hand captured image goes stale silently: the screen changes, the picture does not, and the front page starts describing a product that no longer exists.
-
-## Using it
-
-1. Sign in with the password in `ADMIN_PASSWORD`.
-2. Settings, Extraction: paste a Claude API key and save it. Test connection tells you whether it works.
-3. On OpenRouter, pick a model. Only models that accept an image and support structured output are listed, cheapest first, with a rough per invoice cost. They differ by more than twenty times for the same job.
-4. Upload: drop in a PDF or a photo of an invoice.
-5. Review: the original sits beside the extracted fields, everything editable. The arithmetic is rechecked as you type.
-6. Confirm and save. The invoice, its vendor and its line items are written in one transaction, and a duplicate is refused by the database rather than by a check someone remembered to write.
-
-To try a provider without saving its key, put it in `.env.local` as `OPENROUTER_API_KEY` or `ANTHROPIC_API_KEY`. Those are read only when `VERCEL` is unset, so they never apply on a deployment, and a key entered through Settings always wins over them. Settings shows where a key came from. `.env.example` lists every variable name and no values.
-
-Note that `vercel env pull` rewrites `.env.local`, so a key added by hand there has to be added again afterwards.
-
-Originals are stored in a private blob store and served back through an authenticated route, so an uploaded invoice is not sitting on a public URL.
-
-## Keys and the password
-
-API keys are sealed with AES-256-GCM before they are stored. The master key lives in an environment variable rather than the database, so a database dump on its own opens nothing, and the setting name is bound in as additional authenticated data so a ciphertext cannot be moved between settings. A saved key is never sent back to the browser: the page shows the last four characters and the only action is Replace.
-
-The password gate records failed attempts and refuses a source after eight wrong passwords in fifteen minutes. Addresses are hashed before storage, since knowing a source is guessing does not require keeping a list of who visited.
-
-## Design system
-
-The interface is built on [shadcn/ui](https://ui.shadcn.com), with components added by the CLI into `components/ui` rather than installed as a dependency. Theme tokens, type scale, radius and dark mode are defined once in `app/globals.css` and consumed everywhere else, so screens never define their own colours.
-
-```
-npx shadcn@latest add <component>
-```
-
-Dark mode follows the system setting through `next-themes`, which puts the class shadcn's tokens key off.
-
-## Documentation
-
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) is how the work is done: stacked pull requests, the checks that run before one, migrations, and where secrets live.
-- [`docs/spec.md`](docs/spec.md) is the specification: scope, data model, architecture, and what is deliberately left out.
-- [The plan](https://bharathmay-boop.github.io/invoice-ingester/plan.html) is the same thing with wireframes and flow diagrams. Served through GitHub Pages, since GitHub shows HTML files in the repo as source.
-- [The board](https://github.com/users/bharathmay-boop/projects/1) holds the 33 issues, grouped into epics by label.
-
-Work is tracked on the board, not in these documents. The documents say what is being built and why, and change rarely. The board says what state each piece is in, and changes daily.
-
-## What it costs to run
-
-Reading an invoice costs about a quarter of a cent with Gemini 2.5 Flash through OpenRouter, or a few cents with Claude directly. The upload screen says what a batch will cost before it starts, and what it actually cost afterwards, from the token counts each call reported. Every call is recorded, so settings can show spend for today and this month.
-
-## Contracts
-
-Drop a supply contract in and it is read into dated rates: an item, a unit, a figure, and the period it applies for. An escalation is written out when the contract is read rather than interpreted later, so a rate rising five percent each April becomes three rate rows with three date ranges, and "what was agreed on this date" stays a date lookup.
-
-Reading a two hundred page agreement takes longer than a request stays open, so the files go from the browser straight to storage and a queue reads them one at a time. The queue drains itself: each worker hands on to the next before it returns, and a daily sweep hands back anything a function died holding.
-
-The review screen puts the contract on the left and what was read on the right. Clicking a rate moves the document to the page that rate came from, and that page is found by searching the document's own text for the quoted line, not taken from the model's word for it. A quote that cannot be found says so, which is a better reason to look closely than any confidence score.
-
-Then every invoice from that supplier is checked, including ones saved months earlier. Six answers, and three of them are right even when a rate was read badly, because they turn on dates, item identity and units rather than on a number:
-
-| | |
-|---|---|
+| Answer | What it means |
+| --- | --- |
 | `matches contract` | billed what was agreed, within a tolerance you set |
 | `billed above contract` | and by how much, over the quantity on the line |
 | `billed below contract` | said separately, because it is not leakage and should not read like an accusation |
 | `outside contract period` | this supplier has contracts, none covering this invoice date |
 | `not in contract` | a contract covers the date and never prices this item |
 | `units differ` | agreed by the kilogram, billed by the pack, and no honest way to convert |
+| `currency differs` | agreed in one currency and billed in another, which would need an exchange rate for the invoice date |
 
 Findings are sorted by money, never by count. Seventeen lines billed above contract is not something anyone can act on, and a hundred lines two rupees out would otherwise outrank one line forty thousand out.
 
-## Scope
+## Running it
 
-Not built, and listed so the gap is visible rather than implied: volume slabs, retrospective rebates, revenue share and minimum guarantees are read out of a contract and shown, and never checked. Each needs either a running total across invoices or a figure no invoice carries, so checking one against a single invoice would mean guessing.
+```
+npm install
+vercel env pull
+npm run migrate
+npm run seed
+npm run dev
+```
+
+`vercel env pull` brings down the Neon connection strings, `ADMIN_PASSWORD`, and `SETTINGS_MASTER_KEY`, the AES-256-GCM key that API keys are sealed with. That key lives in the environment rather than the database, so a database dump on its own opens nothing.
+
+`npm run seed` loads the demo: 4 vendors, 8 items, 13 invoices, 28 line items, and 3 contracts whose PDFs the repository generates itself. Running the real variance check over them produces six of the seven answers above, which is the fastest way to see what the product does. It removes only the rows it seeded, marked with `is_demo`, so it is safe to re-run and doubles as a reset.
+
+```
+npm test
+```
+
+The Node test runner, no framework. The tests cover the places a mistake would not announce itself: description normalisation, the match thresholds against real Postgres trigram scores, unit conversion, the arithmetic checks, key sealing, the access rules, and what a decision or a merge actually writes. The database backed ones build a throwaway schema from the migration files and drop it afterwards, and skip themselves when there is no database, so the suite still runs on a clean checkout.
+
+[`CONTRIBUTING.md`](CONTRIBUTING.md) has the rest: stacked pull requests, the checks that run before one, migrations, and where secrets live.
+
+## Stack
+
+Next.js App Router on Vercel, Postgres on Neon, Vercel Blob for the original files, and the `pg_trgm` extension for item matching. Originals sit in a private blob store and are served back through an authenticated route, so an uploaded invoice is never on a public URL.
+
+The interface is [shadcn/ui](https://ui.shadcn.com), with components added by the CLI into `components/ui`. Theme tokens, type scale, radius and dark mode are defined once in `app/globals.css`, so screens never define their own colours.
+
+## What it costs to run
+
+Reading an invoice costs about a quarter of a cent with Gemini 2.5 Flash through OpenRouter, or a few cents with Claude directly. The upload screen says what a batch will cost before it starts and what it actually cost afterwards, from the token counts each call reported. Every call is recorded, so settings can show spend for today and this month.
+
+## Where this is
+
+Working end to end: upload, extraction, review, save, item matching, price history, vendor spend, contract ingestion and variance checking. One user, one password, not yet something anyone else can sign up for.
+
+Three documents say what that would take, and each is a decision rather than a task list:
+
+- [`docs/compliance.md`](docs/compliance.md): the two legal roles this product plays, what the DPDP Act and GDPR each require, the subprocessor chain nothing currently discloses, and a retention schedule.
+- [`docs/payments.md`](docs/payments.md): who the legal seller is, and everything that follows from the answer. Tax, recurring payment rules, cancellation law, PCI scope.
+- [`docs/currency.md`](docs/currency.md): what widening past three currencies touches, and the two bugs found while mapping it.
+
+- [`docs/spec.md`](docs/spec.md) is the specification: scope, data model, architecture, and what is deliberately left out.
+- [The plan](https://bharathmay-boop.github.io/invoice-ingester/plan.html) is the same thing with wireframes and flow diagrams, served through GitHub Pages because GitHub shows HTML files in a repository as source.
+- [The board](https://github.com/users/bharathmay-boop/projects/1) holds the open issues, grouped into epics by label, including everything above. Counts are left off this page on purpose. The previous version of this README claimed 33 issues and six variance answers, and both had been wrong for months.
+
+Work is tracked on the board, not in these documents. The documents say what is being built and why, and change rarely. The board says what state each piece is in.
 
 ## Licence
 

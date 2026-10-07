@@ -55,15 +55,33 @@ const [item] = await query(
    ORDER BY count(*) DESC LIMIT 1`,
 );
 
-if (!draft || !item) {
-  console.error(
-    "No draft waiting for review, or no item with a repeat purchase.\n" +
-      "Upload a file to leave a draft, and run `npm run seed` for the rest:\n" +
-      "a screenshot of an empty screen is worse than none.",
-  );
-  await pool.end();
-  process.exit(1);
-}
+// The largest finding, which is the one the list puts at the top. Findings are
+// sorted by money, so this is also the screen worth photographing.
+const [finding] = await query(
+  `SELECT li.id FROM line_item li
+   WHERE li.variance_tag = 'billed_above_contract' AND li.variance_impact IS NOT NULL
+   ORDER BY li.variance_impact DESC LIMIT 1`,
+);
+
+// A contract with rates on it. Same reasoning as the item: chosen by query so a
+// reseed cannot quietly produce a photograph of an empty review screen.
+const [contract] = await query(
+  `SELECT c.id, count(r.id)::int AS rates
+   FROM contract c JOIN contract_rate r ON r.contract_id = c.id
+   WHERE c.status IN ('ready_for_review', 'reviewed')
+   GROUP BY c.id ORDER BY count(r.id) DESC LIMIT 1`,
+);
+
+// A screen with no data to show is skipped rather than photographed, and
+// rather than failing the whole run. `npm run seed` leaves no draft behind, so
+// aborting here meant the review screenshot blocked all nine of the others on a
+// clean checkout. What is missing is said out loud at the end: a quietly
+// skipped screenshot is how a README ends up with a picture nobody regenerated.
+const skipped = [];
+if (!draft) skipped.push("review.png: no draft waiting, upload a file to leave one (#206)");
+if (!item) skipped.push("price-history.png: no item with a repeat purchase, run `npm run seed`");
+if (!contract) skipped.push("contract-review.png: no contract with rates, run `npm run seed`");
+if (!finding) skipped.push("finding.png: nothing billed above contract, run `npm run seed`");
 
 const browser = await chromium.launch();
 const context = await browser.newContext({
@@ -94,6 +112,10 @@ async function shoot(path, file, settle) {
   if (await page.getByText("This page could not be found").count()) {
     throw new Error(`${path} rendered the not found page`);
   }
+  // The dev server paints its own indicator over the bottom left corner. It is
+  // not part of the product and it is the first thing the eye lands on in a
+  // README, so it goes before the shutter rather than being cropped after.
+  await page.addStyleTag({ content: "nextjs-portal, [data-next-badge-root] { display: none !important }" });
   if (settle) await settle(page);
   // fileURLToPath, not pathname: on Windows a pathname keeps its drive
   // letter behind a slash and its spaces percent encoded, so the file lands
@@ -102,19 +124,23 @@ async function shoot(path, file, settle) {
   console.log(`  ${file}`);
 }
 
+// A document rendered in an iframe, or a chart drawn with a CSS animation,
+// is blank or half drawn the moment the network goes quiet. Both need a beat.
+const settle = (ms) => (p) => p.waitForTimeout(ms);
+
 console.log("writing docs/screenshots/");
-await shoot(`/review/${draft.id}`, "review.png", async (p) => {
-  // The original renders in an iframe; without this the shot catches a blank
-  // panel where the invoice should be, which is the half of the screen worth
-  // showing.
-  await p.waitForTimeout(1500);
-});
-await shoot(`/items/${item.id}`, "price-history.png", async (p) => {
-  // The chart draws itself with a CSS animation. Caught mid sweep it looks
-  // like a broken line rather than a rising price.
-  await p.waitForTimeout(1500);
-});
+await shoot("/", "home.png", settle(1200));
+await shoot("/upload", "upload.png");
+if (draft) await shoot(`/review/${draft.id}`, "review.png", settle(1500));
+await shoot("/items", "items.png");
+if (item) await shoot(`/items/${item.id}`, "price-history.png", settle(1500));
+await shoot("/vendors", "vendors.png");
+await shoot("/contracts", "contracts.png");
+if (contract) await shoot(`/contracts/${contract.id}`, "contract-review.png", settle(1500));
+if (finding) await shoot(`/findings/${finding.id}`, "finding.png");
+await shoot("/suggestions", "suggestions.png");
 
 await browser.close();
 await pool.end();
 console.log(`done, ${WIDTH}x${HEIGHT} at 2x`);
+for (const line of skipped) console.log(`  skipped ${line}`);
