@@ -4,6 +4,14 @@ Agreed 17 September 2026. This document is the stable half of the project. It sa
 
 A visual version of this with wireframes and flow diagrams is in [`plan.html`](plan.html).
 
+Three companion documents cover what launching to outside customers requires, researched 7 October 2026:
+
+- [`compliance.md`](compliance.md), the legal and data protection work, and the accounts and tenancy that have to precede it
+- [`payments.md`](payments.md), the payments layer and the tax and consumer rules attached to it
+- [`currency.md`](currency.md), currency beyond the three this version reads
+
+The single user decision in section 2 below is a version one decision and the first of them to be reversed.
+
 ## 1. Scope
 
 Version one does six things:
