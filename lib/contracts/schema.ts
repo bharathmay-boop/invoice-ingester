@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { CURRENCIES } from "../money/currencies.ts";
+import { currencySchema } from "../money/schema.ts";
 
 import { describeUnusable, type Failure } from "../extract/failure.ts";
 
@@ -71,7 +71,13 @@ export const contractSchema = z.object({
   vendor_address: z.string().min(1).nullable(),
   tax_id: z.string().min(1).nullable(),
   tax_id_kind: z.enum(["gstin", "vat", "ein"]).nullable(),
-  currency: z.enum(CURRENCIES),
+  /**
+   * The same schema the invoice reader uses, so `inr` means the same thing
+   * on both documents. It did not: the invoice side trimmed and uppercased
+   * and this side did not, so a lowercase code read correctly off a
+   * contract failed the whole read and left it in `could_not_read`.
+   */
+  currency: currencySchema,
   /** The contract's own period, which a rate with no dates of its own inherits. */
   effective_from: date.nullable(),
   effective_to: date.nullable(),

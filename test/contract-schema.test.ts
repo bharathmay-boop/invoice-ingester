@@ -120,6 +120,16 @@ test("a yes with nothing attached is a failure", () => {
   assert.equal(result.ok === false && result.notContract, undefined);
 });
 
+test("a lowercase currency is canonicalized rather than failing the whole read", () => {
+  // The mirror of "currency is stored as an uppercase canonical code" in
+  // logic.test.ts. The invoice side had that test and this side did not, which
+  // is why the asymmetry survived: the same model output passed on an invoice
+  // and failed a contract that had been read perfectly.
+  const result = parseContractResponse(reply({ currency: " eur " }));
+  assert.equal(result.ok, true);
+  assert.equal(result.ok && result.contract.currency, "EUR");
+});
+
 test("a malformed reply fails with something readable rather than throwing", () => {
   const result = parseContractResponse(reply({ currency: "GBP" }));
   assert.equal(result.ok, false);
