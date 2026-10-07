@@ -17,6 +17,17 @@ import { mintSession, sessionCookie } from "../lib/auth.ts";
 import { pool, query } from "../lib/db.ts";
 
 const BASE = process.env.SCREENSHOT_URL ?? "http://localhost:3000";
+// The demo-only check below runs against the database this script connects to,
+// but the pictures come from whatever is serving BASE. Point SCREENSHOT_URL at a
+// deployment and the check passes on a local scratch database while the camera
+// is pointed at production. So BASE has to be local.
+if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(BASE)) {
+  console.error(`SCREENSHOT_URL is ${new URL(BASE).origin}, which is not this machine.`);
+  console.error("These are pictures of authenticated screens going into a public");
+  console.error("repository, so they are only taken from a local dev server reading the");
+  console.error("same demo-only database this script checks.");
+  process.exit(1);
+}
 const OUT = new URL("../docs/screenshots/", import.meta.url);
 const WIDTH = 1280;
 const HEIGHT = 800;
