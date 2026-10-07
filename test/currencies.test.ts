@@ -72,23 +72,51 @@ test("the tests are isolated from real data", { skip }, async () => {
   assert.equal(rows[0].schema, SCHEMA, "tests must not run against the live schema");
 });
 
-test("the database constraint and CURRENCIES are the same set", { skip }, async () => {
-  const rows = await db!.query<{ def: string }>(
-    `SELECT pg_get_constraintdef(c.oid) AS def
-     FROM pg_constraint c
-     JOIN pg_class t ON t.oid = c.conrelid
-     JOIN pg_namespace n ON n.oid = t.relnamespace
-     WHERE n.nspname = current_schema() AND c.conname = 'invoice_currency_check'`,
+// Both tables that hold a currency. contract_rate was the one without a
+// constraint, which is #191.
+for (const name of ["invoice_currency_check", "contract_rate_currency_check"]) {
+  test(`${name} and CURRENCIES are the same set`, { skip }, async () => {
+    const rows = await db!.query<{ def: string }>(
+      `SELECT pg_get_constraintdef(c.oid) AS def
+       FROM pg_constraint c
+       JOIN pg_class t ON t.oid = c.conrelid
+       JOIN pg_namespace n ON n.oid = t.relnamespace
+       WHERE n.nspname = current_schema() AND c.conname = $1`,
+      [name],
+    );
+
+    assert.equal(rows.length, 1, `${name} does not exist`);
+
+    // Postgres renders the check as `= ANY (ARRAY['INR'::text, ...])`, so the
+    // quoted literals are the accepted set whichever way the migration spelled it.
+    const accepted = [...rows[0].def.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+    assert.deepEqual(
+      [...accepted].sort(),
+      [...CURRENCIES].sort(),
+      "the database accepts a different set of currencies from the code",
+    );
+  });
+}
+
+test("a rate cannot be stored in a case the comparison would refuse", { skip }, async () => {
+  // The bug this closes: assess() compares a rate and an invoice line by string
+  // equality, so 'inr' against 'INR' reported a currency mismatch between two
+  // rupee amounts and the line silently stopped being checked. The comparison
+  // is right to be strict. The fix is that the database can no longer hold the
+  // value that made it wrong.
+  const [contract] = await db!.query<{ id: string }>(
+    `INSERT INTO contract (title, blob_url, content_type, digest)
+     VALUES ('case test', 'blob://none', 'application/pdf', repeat('a', 64)) RETURNING id`,
   );
 
-  assert.equal(rows.length, 1, "invoice.currency has no named CHECK constraint");
+  const insert = (currency: string) =>
+    db!.query(
+      `INSERT INTO contract_rate (contract_id, printed_name, rate, currency, effective_from)
+       VALUES ($1, 'A4 paper', 265, $2, '2026-01-01')`,
+      [contract.id, currency],
+    );
 
-  // Postgres renders the check as `= ANY (ARRAY['INR'::text, ...])`, so the
-  // quoted literals are the accepted set whichever way the migration spelled it.
-  const accepted = [...rows[0].def.matchAll(/'([^']+)'/g)].map((m) => m[1]);
-  assert.deepEqual(
-    [...accepted].sort(),
-    [...CURRENCIES].sort(),
-    "the database accepts a different set of currencies from the code",
-  );
+  await insert("INR");
+  await assert.rejects(insert("inr"), /contract_rate_currency_check/);
+  await assert.rejects(insert("JPY"), /contract_rate_currency_check/);
 });
