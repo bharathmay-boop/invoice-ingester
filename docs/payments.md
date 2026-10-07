@@ -60,6 +60,12 @@ Two rules on this model worth stating because both are easy to get wrong.
 
 **`payment_event` is written before it is acted on, keyed on the provider's event id with a unique constraint.** Webhooks arrive twice, out of order, and after a replay. Idempotency is not an optimisation here; a double-charge or a double-grant is the failure mode.
 
+The unique constraint alone is not enough, for two reasons worth writing down because both produce silent wrong state rather than an error.
+
+**Recording an event is not the same as having applied it.** If the process stops between the insert and the subscription update, the retry finds the event already recorded and skips it, so a payment that was taken never reaches the account. Either the insert and the state change happen in **one transaction**, or `payment_event` carries a `processed_at` that starts null and the retry path looks for unprocessed rows. The transaction is simpler and is the default choice; the column is needed only if applying an event involves a call that cannot sit inside a transaction.
+
+**A unique id stops duplicates, not reordering.** Two different events can arrive in reverse order and the older one will overwrite newer state, downgrading or cancelling an account that is current. So an update is applied only if it is not stale: compare the provider's event timestamp or sequence against what the subscription row was last updated from, and discard anything older. Where the provider offers it, re-fetching current subscription state and writing that is more robust than trusting the event payload, because it cannot be stale by construction.
+
 ### Entitlement
 
 One function that answers "what may this account do right now", reading from subscription state, with a single grace period for a failed payment. Everything else calls it. The temptation is to check `subscription.status` at each call site, which produces five answers to one question.

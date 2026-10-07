@@ -162,7 +162,7 @@ The product already has the right instinct here, since `tax_id_kind` is a separa
 
 1. `lib/money/currencies.ts`, with the five. Derive `Currency` from it.
 2. Fix the normalisation asymmetry: both schemas trim and uppercase.
-3. Migration: add the CHECK to `contract_rate.currency`, widen the CHECK on `invoice.currency`. Both are widening or adding, so safe in either deploy order.
+3. Migration: add the CHECK to `contract_rate.currency`, widen the CHECK on `invoice.currency`. **The migration runs before the code that accepts the new codes**, not after. Widening is only safe in one direction: old code writing a subset of a wider constraint is fine, but new code accepting `GBP` against the old three-value constraint fails every save. This is the expand side of expand and contract, and it has the same ordering rule as migration 017.
 4. The test that asserts the database constraints match `CURRENCIES`.
 5. Locale per currency in `lib/format.ts`, and the symbol-versus-code decision.
 6. Generate the currency list in both prompts from `CURRENCIES`.
