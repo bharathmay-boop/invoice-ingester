@@ -40,7 +40,7 @@ The rest of the screens: the catalogue, who you buy from, the contracts you have
 | ![The items catalogue](docs/screenshots/items.png) | ![Vendors and what each has been paid](docs/screenshots/vendors.png) |
 | ![Contracts that have been read](docs/screenshots/contracts.png) | ![Suggested item matches waiting for a decision](docs/screenshots/suggestions.png) |
 
-Every screenshot here is produced by `npm run screenshots` against the seeded demo. None is captured by hand, because a hand captured image goes stale silently: the screen changes, the picture does not, and the front page starts describing a product that no longer exists.
+Every screenshot here is produced by `npm run screenshots` against the seeded demo. None is captured by hand, because a hand captured image goes stale silently: the screen changes, the picture does not, and the front page starts describing a product that no longer exists. The script refuses to run against a database holding anything other than demo rows, since these are pictures of authenticated screens going into a public repository.
 
 ## What it will not do
 
@@ -96,6 +96,8 @@ npm run dev
 ```
 
 `vercel env pull` brings down the Neon connection strings, `ADMIN_PASSWORD`, and `SETTINGS_MASTER_KEY`, the AES-256-GCM key that API keys are sealed with. That key lives in the environment rather than the database, so a database dump on its own opens nothing.
+
+Then open Settings and save a provider key, either an Anthropic one or an OpenRouter one. Nothing can be read out of a document until there is one. Keys are sealed with `SETTINGS_MASTER_KEY` and stored in the database, so they are entered once in the browser rather than kept in a file. For local work there is `ANTHROPIC_API_KEY` and `OPENROUTER_API_KEY` in `.env.local` instead. A saved key always wins over those, and the fallback switches itself off whenever `VERCEL` is set, so a key on your machine can never be spent by the deployment.
 
 `npm run seed` loads the demo: 4 vendors, 8 items, 13 invoices, 28 line items, and 3 contracts whose PDFs the repository generates itself. Running the real variance check over them produces six of the seven answers above, which is the fastest way to see what the product does. It removes only the rows it seeded, marked with `is_demo`, so it is safe to re-run and doubles as a reset.
 
