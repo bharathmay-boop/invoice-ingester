@@ -1,5 +1,5 @@
 import "server-only";
-import { createHmac } from "node:crypto";
+import { createHmac, hkdfSync } from "node:crypto";
 import { pool, query } from "./db.ts";
 
 /**
@@ -33,22 +33,34 @@ export function clientAddress(request: Request): string {
 }
 
 /**
+ * Derived from the master key rather than being it.
+ *
+ * The master key is the AES-256-GCM key that seals provider API keys. Using the
+ * same bytes as an HMAC key is what lets a weakness in one primitive become a
+ * weakness in the other, so HKDF binds a subkey to a purpose instead. `LABEL`
+ * carries a version, so rotating this key is a label change and nothing else.
+ *
+ * Still one secret to manage, which is the point.
+ */
+export function fingerprintKey(): Buffer {
+  const master = process.env.SETTINGS_MASTER_KEY;
+  if (!master) throw new Error("SETTINGS_MASTER_KEY is not set");
+  return Buffer.from(
+    hkdfSync("sha256", Buffer.from(master, "base64"), "", LABEL, 32),
+  );
+}
+
+/**
  * Keyed, not a bare digest.
  *
  * An unkeyed SHA-256 of an IP is not a privacy boundary: IPv4 is 2^32 values,
  * so anyone holding the table can hash every address and read straight back
  * which ones tried to log in. Keying it with a secret they do not have is what
- * makes the pseudonym one, and it is derived from the master key so there is no
- * second secret to manage.
+ * makes the pseudonym one.
  */
-function fingerprint(request: Request): string {
-  const master = process.env.SETTINGS_MASTER_KEY;
-  if (!master) throw new Error("SETTINGS_MASTER_KEY is not set");
-
-  const ip = clientAddress(request);
-
-  return createHmac("sha256", Buffer.from(master, "base64"))
-    .update(`${LABEL}:${ip}`)
+export function fingerprint(request: Request): string {
+  return createHmac("sha256", fingerprintKey())
+    .update(`${LABEL}:${clientAddress(request)}`)
     .digest("base64url")
     .slice(0, 32);
 }
