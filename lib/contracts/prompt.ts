@@ -1,6 +1,8 @@
 // What a contract is read for. One prompt, same reason the invoice one is one:
 // a prompt that differs by provider is a result that differs by provider.
 
+import { CURRENCY_LIST } from "../money/currencies.ts";
+
 export const CONTRACT_INSTRUCTIONS = `You are reading a supply or rate contract between a buyer and a seller.
 
 First decide whether it is one. A contract sets out terms agreed between two
@@ -16,7 +18,7 @@ invoices. Everything about the vendor means the seller, never the buyer.
 
 - effective_from and effective_to are the period the contract itself covers,
   as printed. Null where the document does not say.
-- currency is INR, USD or EUR, read from the rates themselves.
+- currency is ${CURRENCY_LIST}, read from the rates themselves.
 - tax_id is the seller's tax registration number and tax_id_kind is "gstin",
   "vat" or "ein". Both null when the seller's number is not printed. A number
   printed only for the buyer is not the seller's.
