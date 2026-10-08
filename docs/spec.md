@@ -212,6 +212,8 @@ Product specific pack sizes, "this vendor's ream is 500 of this paper's sheets",
 
 GSTIN exact match resolves to an existing vendor. Where no GSTIN is printed, a normalised name comparison is used instead, and the result is flagged on the review screen for confirmation rather than accepted silently. New vendors are created from the review screen.
 
+A contract has no GSTIN to match on, so its review screen opens the supplier field on an existing vendor only when the normalised name is the same, and otherwise on the new supplier the contract names. The match is exact once case and punctuation are off, with no partial or suffix stripping: attaching a contract to the wrong supplier flags invoices from someone who never signed it while every rate on screen still reads correctly, so nothing downstream would catch it.
+
 ### Items
 
 Normalise the description, then score it against `item.normalized_name` using trigram similarity:

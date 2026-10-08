@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { originalSrc } from "@/lib/original.ts";
 import { money } from "@/lib/format.ts";
+import { defaultVendorId } from "@/lib/vendors/normalize.ts";
 import { amendRate, confirmContract, type ReviewOutcome } from "./review-actions.ts";
 
 type Rate = {
@@ -103,7 +104,7 @@ export function ContractReview({
               <select
                 id="vendorId"
                 name="vendorId"
-                defaultValue={vendors[0]?.id ?? "new"}
+                defaultValue={defaultVendorId(vendors, suggested.name)}
                 className="border-input bg-background h-9 rounded-md border px-3 text-sm"
               >
                 {vendors.map((vendor) => (
