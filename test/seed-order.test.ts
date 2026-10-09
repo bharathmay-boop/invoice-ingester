@@ -31,3 +31,9 @@ test("every import that reaches the database comes after DATABASE_URL is set", (
     assert.ok(at > assignment, `${path} is imported before DATABASE_URL is set`);
   }
 });
+
+test("the seed locks every item name before it saves any line (#229)", () => {
+  const lock = source.indexOf("await lockItemNames(client");
+  const save = source.indexOf("await saveLine(");
+  assert.ok(lock > 0 && lock < save, "lockItemNames must come before the first saveLine");
+});
