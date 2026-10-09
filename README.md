@@ -83,6 +83,8 @@ On the review screen, clicking a rate moves the document to the page that rate c
 | `units differ` | agreed by the kilogram, billed by the pack, and no honest way to convert |
 | `currency differs` | agreed in one currency and billed in another, which would need an exchange rate for the invoice date |
 
+Four of the seven have no figure, because there is no agreed rate to compare against or no honest way to compare: outside the period, not in the contract, units differ and currency differs. They are listed apart under "Cannot be valued" rather than shown as zero, which would sort them to the bottom as if they were worthless.
+
 Findings are sorted by money, never by count. Seventeen lines billed above contract is not something anyone can act on, and a hundred lines two rupees out would otherwise outrank one line forty thousand out.
 
 ## Running it
