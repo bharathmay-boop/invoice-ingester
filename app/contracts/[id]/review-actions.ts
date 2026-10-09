@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { pool, query } from "@/lib/db.ts";
+import { applyReview } from "@/lib/contracts/confirm.ts";
 import { resolveNewContractVendor } from "@/lib/vendors/resolve.ts";
 import { track } from "@/lib/analytics/server.ts";
 import { recomputeVariance } from "@/lib/contracts/recompute.ts";
@@ -101,21 +102,7 @@ export async function confirmContract(
     // Every rate inherits the vendor and the confirmed period, then becomes
     // live. A rate the reviewer left unmatched to an item stays unmatched and
     // is simply never looked up, the same as an unmatched invoice line.
-    await client.query(
-      `UPDATE contract_rate
-       SET vendor_id = $2,
-           effective_from = COALESCE(effective_from, $3::date),
-           effective_to = COALESCE(effective_to, NULLIF($4, '')::date),
-           reviewed = true
-       WHERE contract_id = $1`,
-      [contractId, vendorId, from, to],
-    );
-
-    await client.query(
-      `UPDATE contract SET vendor_id = $2, status = 'reviewed', reviewed_at = now()
-       WHERE id = $1`,
-      [contractId, vendorId],
-    );
+    await applyReview(client, { contractId, vendorId, from, to });
 
     await client.query("COMMIT");
     confirmedVendorId = vendorId;

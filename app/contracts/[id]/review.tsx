@@ -15,7 +15,7 @@ type Rate = {
   unit: string | null;
   rate: number;
   currency: "INR" | "USD" | "EUR";
-  effective_from: string;
+  effective_from: string | null;
   effective_to: string | null;
   source_page: number | null;
   source_quote: string | null;
@@ -67,6 +67,7 @@ export function ContractReview({
   // factor of ten looks wrong sitting next to its neighbours, and forty modals
   // produce the appearance of review and none of the substance.
   const unmatched = rates.filter((rate) => !rate.item_id).length;
+  const undated = rates.filter((rate) => !rate.effective_from).length;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,28rem)]">
@@ -170,8 +171,16 @@ export function ContractReview({
           <div className="border-border rounded-lg border p-4">
             <p className="text-sm">
               {rates.length} {rates.length === 1 ? "rate" : "rates"}
-              {unmatched > 0 && `, ${unmatched} not yet matched to an item`}.
+              {unmatched > 0 && `, ${unmatched} not yet matched to an item`}
+              {undated > 0 && `, ${undated} with no date of their own`}.
             </p>
+            {undated > 0 && (
+              <p className="text-muted-foreground mt-1 text-xs">
+                {undated === 1 ? "That rate takes" : "Those rates take"} the period
+                above when you confirm, so check it is right. Without a start date
+                nothing is saved.
+              </p>
+            )}
             <p className="text-muted-foreground mt-1 text-xs">
               An unmatched rate is kept and simply never looked up, the same as
               an unmatched invoice line. Nothing here counts until you confirm.

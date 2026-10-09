@@ -70,6 +70,18 @@ export default async function Contract({ params }: { params: Promise<{ id: strin
       title={contract.title}
       lead={`${contract.vendor_name ?? "Vendor not confirmed yet"}, added ${formatDate(contract.created_at)}`}
     >
+      {contract.effective_from && (
+        <section>
+          <h2 className="text-sm font-medium">Period covered</h2>
+          <p className="text-muted-foreground mt-2 max-w-prose text-sm">
+            {formatDate(contract.effective_from)}
+            {contract.effective_to ? ` to ${formatDate(contract.effective_to)}` : " onwards"}
+            . Invoices dated in this period are checked against it, even for an
+            item the rates below do not price.
+          </p>
+        </section>
+      )}
+
       <section>
         <h2 className="text-sm font-medium">Agreed rates</h2>
         {contract.rates.length === 0 ? (
@@ -90,7 +102,7 @@ export default async function Contract({ params }: { params: Promise<{ id: strin
                   </span>
                 </div>
                 <div className="text-muted-foreground mt-1 text-xs">
-                  {formatDate(rate.effective_from)}
+                  {rate.effective_from ? formatDate(rate.effective_from) : "No start date"}
                   {rate.effective_to ? ` to ${formatDate(rate.effective_to)}` : " onwards"}
                   {rate.item_name
                     ? `, matched to ${rate.item_name}`

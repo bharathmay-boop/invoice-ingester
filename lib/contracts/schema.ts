@@ -92,7 +92,7 @@ export const contractResponseSchema = z.object({
 });
 
 type WireRate = z.infer<typeof contractRateSchema>;
-export type ContractRate = Omit<WireRate, "effective_from"> & { effective_from: string };
+export type ContractRate = Omit<WireRate, "effective_from"> & { effective_from: string | null };
 export type OtherTerm = z.infer<typeof otherTermSchema>;
 type WireContract = z.infer<typeof contractSchema>;
 export type ExtractedContract = Omit<WireContract, "rates"> & { rates: ContractRate[] };
@@ -123,14 +123,17 @@ export function parseContractResponse(raw: unknown): ContractParseResult {
     return { ok: false, failure: describeUnusable("nothing") };
   }
 
-  // A rate with no date of its own takes the contract's. A rate with neither
-  // cannot answer "what was in force on this date", so it is dropped rather
-  // than stored as a rate that matches everything or nothing.
-  const dated: ContractRate[] = contract.rates.flatMap((rate) => {
-    const from = rate.effective_from ?? contract.effective_from;
-    if (!from) return [];
-    return [{ ...rate, effective_from: from, effective_to: rate.effective_to ?? contract.effective_to }];
-  });
+  // A rate with no date of its own takes the contract's. One with neither is
+  // kept, undated, and takes the period the reviewer confirms: dropping it
+  // meant a rate the document really contained vanished before anyone saw it,
+  // with no count and nothing on screen. It cannot answer "what was in force on
+  // this date" until it has a start, so it is inert until review, like every
+  // rate (#118).
+  const dated: ContractRate[] = contract.rates.map((rate) => ({
+    ...rate,
+    effective_from: rate.effective_from ?? contract.effective_from,
+    effective_to: rate.effective_to ?? contract.effective_to,
+  }));
 
   return { ok: true, reason, contract: { ...contract, rates: dated } };
 }

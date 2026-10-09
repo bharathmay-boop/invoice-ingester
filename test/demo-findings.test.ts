@@ -80,6 +80,17 @@ before(async () => {
       effective_to date,
       reviewed boolean NOT NULL DEFAULT false
     )`);
+  // Coverage reads a reviewed contract's own period as well as its rates, so the
+  // table has to exist here; without it the lookup would fall through to the
+  // real one on the search path.
+  await db.query(`
+    CREATE TABLE contract (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      vendor_id uuid REFERENCES vendor (id),
+      status text NOT NULL,
+      effective_from date,
+      effective_to date
+    )`);
   await db.query(`CREATE TABLE setting (
     key text PRIMARY KEY, value jsonb NOT NULL,
     updated_at timestamptz NOT NULL DEFAULT now())`);
@@ -131,6 +142,11 @@ before(async () => {
   }
 
   for (const contract of contracts) {
+    await db.query(
+      `INSERT INTO contract (vendor_id, status, effective_from, effective_to)
+       VALUES ($1,'reviewed',$2,$3)`,
+      [vendorIds.get(contract.gstin), contract.effectiveFrom, contract.effectiveTo],
+    );
     for (const rate of contract.rates) {
       await db.query(
         `INSERT INTO contract_rate
