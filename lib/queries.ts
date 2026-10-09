@@ -335,11 +335,12 @@ export async function getContract(id: string) {
     source_quote: string | null;
     item_id: string | null;
     item_name: string | null;
+    new_item_name: string | null;
     reviewed: boolean;
   }>(
     `SELECT r.id, r.printed_name, r.unit, r.rate::float, r.currency,
             r.effective_from, r.effective_to, r.source_page, r.source_quote,
-            r.item_id, i.canonical_name AS item_name, r.reviewed
+            r.item_id, i.canonical_name AS item_name, r.new_item_name, r.reviewed
      FROM contract_rate r LEFT JOIN item i ON i.id = r.item_id
      WHERE r.contract_id = $1
      ORDER BY r.printed_name, r.effective_from`,

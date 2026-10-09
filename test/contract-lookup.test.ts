@@ -96,6 +96,7 @@ before(async () => {
       source_page integer,
       source_quote text,
       reviewed boolean NOT NULL DEFAULT false,
+      new_item_name text,
       CONSTRAINT contract_rate_reviewed_has_start CHECK (NOT reviewed OR effective_from IS NOT NULL)
     )`);
   await db.query(`CREATE TABLE setting (
