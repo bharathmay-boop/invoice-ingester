@@ -4,8 +4,7 @@
 //
 // See docs/spec.md section 5.
 import type { ExtractedInvoice } from "./schema.ts";
-import { normalize } from "../items/normalize.ts";
-import { normalizeAddress, normalizeTaxId } from "../vendors/normalize.ts";
+import { normalizeAddress, normalizeName, normalizeTaxId } from "../vendors/normalize.ts";
 
 export type CheckName =
   | "line_items_sum"
@@ -188,7 +187,7 @@ export function findRepeats(invoices: ExtractedInvoice[]): Set<number> {
   invoices.forEach((invoice, i) => {
     const supplier = invoice.tax_id
       ? `${invoice.tax_id_kind}:${normalizeTaxId(invoice.tax_id)}`
-      : `name:${normalize(invoice.vendor_name)}|${normalizeAddress(invoice.vendor_address ?? "")}`;
+      : `name:${normalizeName(invoice.vendor_name)}|${normalizeAddress(invoice.vendor_address ?? "")}`;
     const key = JSON.stringify([supplier, invoice.invoice_number.trim().toUpperCase()]);
     if (seen.has(key)) repeats.add(i);
     seen.add(key);

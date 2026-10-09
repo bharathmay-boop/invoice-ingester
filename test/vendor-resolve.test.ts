@@ -1,11 +1,11 @@
 // Where a contract can end up on the wrong supplier, against real Postgres.
 //
 // The unique index is the behaviour being tested, so it is created here as the
-// migrations create it. `vendor.normalized_name` is built with the item
+// migrations create it. `vendor.normalized_name` used to be built with the item
 // normaliser, which drops words like "quality" and sorts the rest, so two
-// suppliers a person would never confuse share one key. What the resolver does
-// with that conflict is the whole point: reuse when the printed names agree,
-// refuse and name the existing supplier when they do not.
+// suppliers a person would never confuse shared one key and a save silently
+// landed on the wrong one (#217). Now two rows share a key only when the
+// printed names are the same words.
 import assert from "node:assert/strict";
 import type pg from "pg";
 import { after, before, beforeEach, test } from "node:test";
@@ -68,73 +68,80 @@ async function withClient<T>(run: (client: pg.PoolClient) => Promise<T>) {
   }
 }
 
+const save = (i: ReturnType<typeof input>) =>
+  withClient((c) => resolve!.resolveNewContractVendor(c, i));
+
 async function named(id: string) {
   const rows = await db!.query<{ name: string }>("SELECT name FROM vendor WHERE id = $1", [id]);
   return rows[0].name;
 }
 
-test("a genuinely new supplier is created", { skip }, async () => {
-  const got = await withClient((c) => resolve!.resolveNewContractVendor(c, input("Oakridge Paper Co")));
-  assert.equal(got.ok, true);
-  assert.equal(await named((got as { id: string }).id), "Oakridge Paper Co");
+test("a filler word makes a different supplier, not the same one", { skip }, async () => {
+  const first = await save(input("Jain Traders"));
+  const second = await save(input("Jain Quality Traders"));
+  assert.notEqual(second, first);
+  assert.equal(await named(first), "Jain Traders");
 });
 
-test("a filler word is not enough to reuse an existing supplier", { skip }, async () => {
-  const first = await withClient((c) => resolve!.resolveNewContractVendor(c, input("Jain Traders")));
-  assert.equal(first.ok, true);
+test("word order alone makes a different supplier", { skip }, async () => {
+  assert.notEqual(await save(input("Traders Jain")), await save(input("Jain Traders")));
+});
 
-  const second = await withClient((c) =>
-    resolve!.resolveNewContractVendor(c, input("Jain Quality Traders")),
-  );
-  assert.equal(second.ok, false);
-  const message = (second as { message: string }).message;
-  assert.match(message, /Jain Traders/);
-  assert.match(message, /Jain Quality Traders/);
-
-  // The refusal leaves the existing supplier exactly as it was.
-  assert.equal(await named((first as { id: string }).id), "Jain Traders");
-  const all = await db!.query<{ n: string }>("SELECT count(*)::int::text AS n FROM vendor");
-  assert.equal(all[0].n, "1");
+test("two companies written in kanji are two suppliers", { skip }, async () => {
+  assert.notEqual(await save(input("三井 Ltd")), await save(input("三菱 Ltd")));
 });
 
 test("the same supplier spelled differently is reused and takes the new spelling", { skip }, async () => {
-  const first = await withClient((c) =>
-    resolve!.resolveNewContractVendor(c, input("acme traders pvt ltd")),
-  );
-  const second = await withClient((c) =>
-    resolve!.resolveNewContractVendor(c, input("Acme Traders Pvt. Ltd.")),
-  );
-  assert.equal(second.ok, true);
-  assert.equal((second as { id: string }).id, (first as { id: string }).id);
-  assert.equal(await named((first as { id: string }).id), "Acme Traders Pvt. Ltd.");
-});
-
-test("word order alone does not make two suppliers one", { skip }, async () => {
-  await withClient((c) => resolve!.resolveNewContractVendor(c, input("Traders Jain")));
-  const second = await withClient((c) => resolve!.resolveNewContractVendor(c, input("Jain Traders")));
-  assert.equal(second.ok, false);
+  const first = await save(input("acme traders pvt ltd"));
+  const second = await save(input("Acme Traders Pvt. Ltd."));
+  assert.equal(second, first);
+  assert.equal(await named(first), "Acme Traders Pvt. Ltd.");
 });
 
 test("a different address keeps two suppliers apart", { skip }, async () => {
-  const first = await withClient((c) =>
-    resolve!.resolveNewContractVendor(c, input("Jain Traders", { address: "12 MG Road" })),
-  );
-  const second = await withClient((c) =>
-    resolve!.resolveNewContractVendor(c, input("Jain Quality Traders", { address: "9 Linking Road" })),
-  );
-  assert.equal(first.ok, true);
-  assert.equal(second.ok, true);
-  assert.notEqual((second as { id: string }).id, (first as { id: string }).id);
+  const a = await save(input("Jain Traders", { address: "12 MG Road" }));
+  const b = await save(input("Jain Traders", { address: "9 Linking Road" }));
+  assert.notEqual(a, b);
+});
+
+test("addresses in another script do not all collapse to one", { skip }, async () => {
+  const a = await save(input("Mitsui", { address: "東京都千代田区" }));
+  const b = await save(input("Mitsui", { address: "大阪府大阪市" }));
+  assert.notEqual(a, b);
 });
 
 test("a tax registration is identity, so a conflict on it is the same supplier", { skip }, async () => {
-  const first = await withClient((c) =>
-    resolve!.resolveNewContractVendor(c, input("Jain Traders", { taxId: "29ABCDE1234F1Z5", taxIdKind: "gstin" })),
+  const first = await save(input("Jain Traders", { taxId: "29ABCDE1234F1Z5", taxIdKind: "gstin" }));
+  const second = await save(
+    input("Jain Quality Traders", { taxId: "29 abcde 1234 f1z5", taxIdKind: "gstin" }),
   );
-  const second = await withClient((c) =>
-    resolve!.resolveNewContractVendor(c, input("Jain Quality Traders", { taxId: "29 abcde 1234 f1z5", taxIdKind: "gstin" })),
+  assert.equal(second, first);
+  assert.equal(await named(first), "Jain Quality Traders");
+});
+
+// The backfill: rows saved under the old key are brought onto the new one, so
+// the next invoice from that supplier finds the row instead of making a second.
+test("old-style keys are rewritten, and a second run changes nothing", { skip }, async () => {
+  const rekey = await import("../lib/vendors/rekey.ts");
+  await db!.query(
+    `INSERT INTO vendor (name, normalized_name, address, normalized_address) VALUES
+       ('Jain Quality Traders', 'jain traders', NULL, ''),
+       ('Traders Jain', 'jain traders x', NULL, ''),
+       ('\u4e09\u4e95 Ltd', 'ltd', '\u6771\u4eac\u90fd', '')`,
   );
-  assert.equal(second.ok, true);
-  assert.equal((second as { id: string }).id, (first as { id: string }).id);
-  assert.equal(await named((first as { id: string }).id), "Jain Quality Traders");
+  const inTransaction = (c: pg.PoolClient) =>
+    c.query("BEGIN").then(() => rekey.rekeyVendors(c)).then(async (r) => (await c.query("COMMIT"), r));
+  const first = await withClient(inTransaction);
+  assert.equal(first.updated, 3);
+  assert.deepEqual(first.collisions, []);
+  const keys = await db!.query<{ normalized_name: string; normalized_address: string }>(
+    "SELECT normalized_name, normalized_address FROM vendor ORDER BY name",
+  );
+  assert.deepEqual(
+    keys.map((k) => k.normalized_name).sort(),
+    ["jain quality traders", "traders jain", "\u4e09\u4e95 ltd"].sort(),
+  );
+  assert.ok(keys.some((k) => k.normalized_address === "\u6771\u4eac\u90fd"));
+  const second = await withClient(inTransaction);
+  assert.equal(second.updated, 0);
 });

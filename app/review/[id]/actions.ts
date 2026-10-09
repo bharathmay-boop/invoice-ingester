@@ -8,8 +8,7 @@ import { pool, query } from "@/lib/db.ts";
 import { parseExtraction } from "@/lib/extract/schema.ts";
 import { validateArithmetic, DEFAULT_TOLERANCE_RUPEES } from "@/lib/extract/validate.ts";
 import { getSetting } from "@/lib/settings/store.ts";
-import { normalize } from "@/lib/items/normalize.ts";
-import { normalizeAddress, normalizeTaxId } from "@/lib/vendors/normalize.ts";
+import { normalizeAddress, normalizeName, normalizeTaxId } from "@/lib/vendors/normalize.ts";
 import { getThresholds } from "@/lib/items/match.ts";
 import { saveLine } from "@/lib/items/save-line.ts";
 import { releaseDraft } from "@/lib/blob.ts";
@@ -52,7 +51,7 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
     return { ok: false, message: parsed.error };
   }
   const invoice = parsed.data;
-  const normalizedName = normalize(invoice.vendor_name);
+  const normalizedName = normalizeName(invoice.vendor_name);
   const normalizedAddress = normalizeAddress(invoice.vendor_address ?? "");
   const normalizedTaxId = invoice.tax_id ? normalizeTaxId(invoice.tax_id) : null;
 
