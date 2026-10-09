@@ -4,8 +4,7 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { pool, query } from "@/lib/db.ts";
-import { normalize } from "@/lib/items/normalize.ts";
-import { normalizeAddress, normalizeTaxId } from "@/lib/vendors/normalize.ts";
+import { resolveNewContractVendor } from "@/lib/vendors/resolve.ts";
 import { track } from "@/lib/analytics/server.ts";
 import { recomputeVariance } from "@/lib/contracts/recompute.ts";
 
@@ -79,39 +78,24 @@ export async function confirmContract(
       // of the same supplier is one too many, and the whole point of a
       // contract is to be found by the invoices that arrive against it.
       //
-      // The name is taken from what was typed, where the invoice path keeps
-      // whatever it had. The difference is who is speaking: the invoice path
-      // is resolving a name a model read off a document, and the first
-      // spelling is as good as the fifth. Here a person has just looked at the
-      // contract and typed one, and silently keeping the old spelling throws
-      // away a correction they made on purpose. A conflict only fires when the
-      // normalised names already match, so this changes casing, punctuation
-      // and word order and never which supplier the row is.
-      const rows = taxId
-        ? await client.query<{ id: string }>(
-            `INSERT INTO vendor (tax_id, tax_id_kind, normalized_tax_id, name,
-                                 normalized_name, address, normalized_address)
-             VALUES ($1,$2,$3,$4,$5,$6,$7)
-             ON CONFLICT (tax_id_kind, normalized_tax_id) WHERE tax_id IS NOT NULL
-             DO UPDATE SET name = EXCLUDED.name RETURNING id`,
-            [
-              taxId,
-              taxIdKind,
-              normalizeTaxId(taxId),
-              vendorName,
-              normalize(vendorName),
-              vendorAddress || null,
-              normalizeAddress(vendorAddress),
-            ],
-          )
-        : await client.query<{ id: string }>(
-            `INSERT INTO vendor (name, normalized_name, address, normalized_address)
-             VALUES ($1,$2,$3,$4)
-             ON CONFLICT (normalized_name, normalized_address) WHERE tax_id IS NULL
-             DO UPDATE SET name = EXCLUDED.name RETURNING id`,
-            [vendorName, normalize(vendorName), vendorAddress || null, normalizeAddress(vendorAddress)],
-          );
-      vendorId = rows.rows[0].id;
+      // What it will not do is decide that for you. The normalised name a
+      // conflict fires on is a loose key, so a conflict is only taken as the
+      // same supplier when the printed names agree too. Anything else comes
+      // back as a message naming the supplier already saved, because a
+      // contract on the wrong supplier flags invoices from someone who never
+      // signed it and every rate still reads correctly. See
+      // lib/vendors/resolve.ts.
+      const resolved = await resolveNewContractVendor(client, {
+        name: vendorName,
+        address: vendorAddress,
+        taxId,
+        taxIdKind,
+      });
+      if (!resolved.ok) {
+        await client.query("ROLLBACK");
+        return resolved;
+      }
+      vendorId = resolved.id;
     }
 
     // Every rate inherits the vendor and the confirmed period, then becomes
