@@ -512,3 +512,68 @@ test("a legacy contract with a gap between its rates still leaves the gap uncove
   assert.deepEqual(await lookup!.coverageFor(v, pens, "2026-04-15"), { kind: "outside_period" });
   assert.deepEqual(await lookup!.coverageFor(v, pens, "2026-08-15"), { kind: "not_priced" });
 });
+
+// #112: a tag is a stored copy of a comparison against a rate. Amending the rate
+// of a live contract without redoing the comparison left every tag computed from
+// the old figure in place, with nothing saying so.
+test("correcting a live rate re-checks the invoices it was compared against", { skip }, async () => {
+  const amend = await import("../lib/contracts/amend.ts");
+  const v = await vendor("Gupta Traders");
+  const i = await item("a4 paper");
+  const inv = await invoice(v, "INV-1", "2026-05-01");
+  const l = await line(inv, i, 312, 10);
+  const c = await contract(v);
+  const r = await rate(c, v, i, 285, "2026-04-01", "2027-03-31");
+
+  await recompute!.recomputeVariance(v);
+  assert.equal((await tagOf(l)).variance_tag, "billed_above_contract");
+
+  const done = await amend.amendRateRow({ rateId: r, contractId: c, itemId: i, rate: 312, unit: "ream" });
+  assert.deepEqual(done, { found: true, rechecked: true });
+  const after = await tagOf(l);
+  assert.equal(after.variance_tag, "matches_contract");
+  assert.equal(after.variance_impact === null || Number(after.variance_impact) === 0, true);
+});
+
+test("moving a live rate to another item re-checks both items", { skip }, async () => {
+  const amend = await import("../lib/contracts/amend.ts");
+  const v = await vendor("Gupta Traders");
+  const paper = await item("a4 paper");
+  const pens = await item("blue pen");
+  const inv = await invoice(v, "INV-1", "2026-05-01");
+  const paperLine = await line(inv, paper, 312, 10);
+  const penLine = await line(inv, pens, 312, 10);
+  const c = await contract(v);
+  const r = await rate(c, v, paper, 285, "2026-04-01", "2027-03-31");
+
+  await recompute!.recomputeVariance(v);
+  assert.equal((await tagOf(paperLine)).variance_tag, "billed_above_contract");
+  assert.equal((await tagOf(penLine)).variance_tag, "not_in_contract");
+
+  await amend.amendRateRow({ rateId: r, contractId: c, itemId: pens, rate: 285, unit: "ream" });
+  assert.equal((await tagOf(paperLine)).variance_tag, "not_in_contract");
+  assert.equal((await tagOf(penLine)).variance_tag, "billed_above_contract");
+});
+
+test("correcting a rate nobody has reviewed yet recomputes nothing", { skip }, async () => {
+  const amend = await import("../lib/contracts/amend.ts");
+  const v = await vendor("Gupta Traders");
+  const i = await item("a4 paper");
+  const c = await contract(v);
+  const r = await rate(c, v, i, 285, "2026-04-01", "2027-03-31", { reviewed: false });
+  const done = await amend.amendRateRow({ rateId: r, contractId: c, itemId: i, rate: 290, unit: "ream" });
+  assert.deepEqual(done, { found: true, rechecked: false });
+});
+
+test("amending a rate that is not on that contract changes nothing", { skip }, async () => {
+  const amend = await import("../lib/contracts/amend.ts");
+  const v = await vendor("Gupta Traders");
+  const i = await item("a4 paper");
+  const c = await contract(v);
+  const other = await contract(v, "Other");
+  const r = await rate(c, v, i, 285, "2026-04-01", "2027-03-31");
+  const done = await amend.amendRateRow({ rateId: r, contractId: other, itemId: i, rate: 999, unit: "ream" });
+  assert.deepEqual(done, { found: false, rechecked: false });
+  const [row] = await db!.query<{ rate: string }>("SELECT rate::text FROM contract_rate WHERE id = $1", [r]);
+  assert.equal(Number(row.rate), 285);
+});
