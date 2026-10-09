@@ -17,8 +17,6 @@ import { del, put } from "@vercel/blob";
 const { asExtraction, invoices, items, vendors } = await import("../lib/demo/dataset.ts");
 const { contracts } = await import("../lib/demo/contracts.ts");
 const { ALIASES, matcherInvoice, normalizedAlias } = await import("../lib/demo/matcher-cases.ts");
-const { saveLine } = await import("../lib/items/save-line.ts");
-const { DEFAULT_LINK, DEFAULT_SUGGEST } = await import("../lib/items/match.ts");
 const { contractPdf } = await import("../lib/demo/contract-pdf.ts");
 const { validateArithmetic } = await import("../lib/extract/validate.ts");
 const { normalizeAddress, normalizeName, normalizeTaxId } = await import("../lib/vendors/normalize.ts");
@@ -35,6 +33,12 @@ if (!url) {
 // inserts would commit here and the variance pass would run somewhere else, or
 // fail, leaving demo invoices with no findings against contracts that exist.
 process.env.DATABASE_URL = url;
+
+// After the assignment above, not with the other imports: save-line reaches
+// lib/db.ts through match.ts and the settings store, and db.ts builds its pool
+// the moment it is first imported, from whatever DATABASE_URL is then.
+const { saveLine } = await import("../lib/items/save-line.ts");
+const { DEFAULT_LINK, DEFAULT_SUGGEST } = await import("../lib/items/match.ts");
 
 // Every invoice goes through the same checks a real extraction would, so the
 // demo data cannot quietly contradict the validator it is meant to demonstrate.
@@ -340,21 +344,28 @@ try {
     }
   }
 
+  // Counted from the database while the transaction is open, since the matcher
+  // can create items the dataset does not list.
+  const { rows: [{ n: itemCount }] } = await client.query(
+    "SELECT count(*)::int AS n FROM item WHERE is_demo",
+  );
+
   await client.query("COMMIT");
   committed = true;
 
-  const spend = invoices
+  const seeded = [...invoices, matcherInvoice];
+  const spend = seeded
     .filter((i) => i.status === "confirmed")
     .reduce((sum, i) => sum + i.total, 0);
 
   console.log(
-    `seeded ${vendors.length} vendors, ${items.length} items, ` +
-      `${invoices.length + 1} invoices, ${lineCount} line items, ` +
+    `seeded ${vendors.length} vendors, ${itemCount} items, ` +
+      `${seeded.length} invoices, ${lineCount} line items, ` +
       `${contracts.length} contracts, ${rateCount} rates`,
   );
   console.log(
     `confirmed spend Rs${spend.toFixed(2)}, ` +
-      `${invoices.filter((i) => i.status === "needs_review").length} needing review`,
+      `${seeded.filter((i) => i.status === "needs_review").length} needing review`,
   );
 
   contractVendorIds = [...new Set(contracts.map((c) => c.gstin))].map((gstin) =>
