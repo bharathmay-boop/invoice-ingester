@@ -5,6 +5,8 @@ import { cookies } from "next/headers";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { pool } from "@/lib/db.ts";
 import { amendRateRow } from "@/lib/contracts/amend.ts";
+import { getThresholds } from "@/lib/items/match.ts";
+import { resolveRateItems } from "@/lib/contracts/items.ts";
 import { applyReview } from "@/lib/contracts/confirm.ts";
 import { resolveNewContractVendor } from "@/lib/vendors/resolve.ts";
 import { track } from "@/lib/analytics/server.ts";
@@ -70,6 +72,8 @@ export async function confirmContract(
   if (to && to < from) return { ok: false, message: "The end date is before the start date." };
 
   let confirmedVendorId = "";
+  // Read before a connection is held; see recomputeVariance.
+  const { suggest } = await getThresholds();
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -92,9 +96,15 @@ export async function confirmContract(
       vendorId = resolved.id;
     }
 
-    // Every rate inherits the vendor and the confirmed period, then becomes
-    // live. A rate the reviewer left unmatched to an item stays unmatched and
-    // is simply never looked up, the same as an unmatched invoice line.
+    // Every rate gets an item first: one the reviewer picked, or a new one made
+    // from the printed name, unless the catalogue already has something close
+    // and they have not said which (#149). Then every rate inherits the vendor
+    // and the confirmed period, and becomes live.
+    const items = await resolveRateItems(client, contractId, suggest);
+    if (!items.ok) {
+      await client.query("ROLLBACK");
+      return { ok: false, message: items.message };
+    }
     await applyReview(client, { contractId, vendorId, from, to });
 
     await client.query("COMMIT");
@@ -142,20 +152,28 @@ export async function amendRate(
   }
 
   const itemId = String(form.get("itemId") ?? "");
+  const newItemName = String(form.get("newItemName") ?? "").trim();
   const rate = Number(String(form.get("rate") ?? ""));
   const unit = String(form.get("unit") ?? "").trim();
 
   if (!Number.isFinite(rate) || rate < 0) {
     return { ok: false, message: "A rate has to be a number, and not a negative one." };
   }
-  if (itemId && itemId !== "none" && !UUID.test(itemId)) {
+  if (itemId && itemId !== "new" && !UUID.test(itemId)) {
     return { ok: false, message: "That item is not an item." };
+  }
+  if (itemId === "new" && !newItemName) {
+    return { ok: false, message: "A new item needs a name." };
+  }
+  if (newItemName.length > 200) {
+    return { ok: false, message: "That item name is too long." };
   }
 
   const { rechecked } = await amendRateRow({
     rateId,
     contractId,
-    itemId: itemId && itemId !== "none" ? itemId : null,
+    itemId: UUID.test(itemId) ? itemId : null,
+    newItemName: itemId === "new" ? newItemName : null,
     rate,
     unit,
   });

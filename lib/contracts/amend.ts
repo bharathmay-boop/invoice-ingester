@@ -21,6 +21,8 @@ export async function amendRateRow(input: {
   rateId: string;
   contractId: string;
   itemId: string | null;
+  // Set when the reviewer chose a new item; only meaningful with no itemId.
+  newItemName?: string | null;
   rate: number;
   unit: string;
 }): Promise<{ found: boolean; rechecked: boolean }> {
@@ -35,10 +37,10 @@ export async function amendRateRow(input: {
     await client.query("BEGIN");
     const { rows } = await client.query<{ reviewed: boolean; vendor_id: string | null }>(
       `UPDATE contract_rate
-       SET item_id = $3, rate = $4, unit = NULLIF($5, '')
+       SET item_id = $3, rate = $4, unit = NULLIF($5, ''), new_item_name = $6
        WHERE id = $1 AND contract_id = $2
        RETURNING reviewed, vendor_id`,
-      [input.rateId, input.contractId, input.itemId, input.rate, input.unit],
+      [input.rateId, input.contractId, input.itemId, input.rate, input.unit, input.itemId ? null : (input.newItemName ?? null)],
     );
     const row = rows[0];
     if (!row) {

@@ -6,6 +6,9 @@ import { formatDate, money } from "@/lib/format.ts";
 import { Empty, Page } from "../../ui.tsx";
 import { ContractReview } from "./review.tsx";
 import { listVendorChoices, listItemChoices } from "@/lib/queries.ts";
+import { pool } from "@/lib/db.ts";
+import { getThresholds } from "@/lib/items/match.ts";
+import { nearMisses } from "@/lib/items/near.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +35,17 @@ export default async function Contract({ params }: { params: Promise<{ id: strin
   // for something already agreed invites it to be agreed again by accident.
   if (contract.status === "ready_for_review") {
     const [vendors, items] = await Promise.all([listVendorChoices(), listItemChoices()]);
+    // Offered before a new item is made: the matcher leaves a rate unmatched
+    // when it scores below the link threshold, which is not the same as the
+    // catalogue lacking the thing (#149).
+    const { suggest } = await getThresholds();
+    const near = Object.fromEntries(
+      await Promise.all(
+        contract.rates
+          .filter((rate) => !rate.item_id)
+          .map(async (rate) => [rate.id, await nearMisses(pool, rate.printed_name, suggest)] as const),
+      ),
+    );
     const read = (contract.extraction ?? {}) as {
       vendor_name?: string;
       vendor_address?: string | null;
@@ -60,6 +74,7 @@ export default async function Contract({ params }: { params: Promise<{ id: strin
           period={{ from: read.effective_from ?? null, to: read.effective_to ?? null }}
           rates={contract.rates}
           items={items}
+          near={near}
         />
       </Page>
     );

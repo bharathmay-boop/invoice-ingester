@@ -4,6 +4,13 @@ import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { originalSrc } from "@/lib/original.ts";
 import { money } from "@/lib/format.ts";
 import { defaultVendorId } from "@/lib/vendors/normalize.ts";
@@ -21,7 +28,10 @@ type Rate = {
   source_quote: string | null;
   item_id: string | null;
   item_name: string | null;
+  new_item_name: string | null;
 };
+
+type NearMiss = { itemId: string; name: string; score: number };
 
 type Props = {
   contractId: string;
@@ -32,6 +42,8 @@ type Props = {
   period: { from: string | null; to: string | null };
   rates: Rate[];
   items: { id: string; name: string }[];
+  /** Catalogue items an unmatched rate might already be, by rate id. */
+  near: Record<string, NearMiss[]>;
 };
 
 /**
@@ -55,6 +67,7 @@ export function ContractReview({
   period,
   rates,
   items,
+  near,
 }: Props) {
   const [page, setPage] = useState<number | null>(null);
   const [confirmed, confirm, confirming] = useActionState<ReviewOutcome, FormData>(
@@ -171,7 +184,7 @@ export function ContractReview({
           <div className="border-border rounded-lg border p-4">
             <p className="text-sm">
               {rates.length} {rates.length === 1 ? "rate" : "rates"}
-              {unmatched > 0 && `, ${unmatched} not yet matched to an item`}
+              {unmatched > 0 && `, ${unmatched} will become new items`}
               {undated > 0 && `, ${undated} with no date of their own`}.
             </p>
             {undated > 0 && (
@@ -182,8 +195,8 @@ export function ContractReview({
               </p>
             )}
             <p className="text-muted-foreground mt-1 text-xs">
-              An unmatched rate is kept and simply never looked up, the same as
-              an unmatched invoice line. Nothing here counts until you confirm.
+              A rate with no item becomes a new item when you confirm, so it is
+              checked like any other. Nothing here counts until you confirm.
             </p>
             <Button type="submit" className="mt-3" disabled={confirming}>
               {confirming ? "Confirming…" : "Confirm this contract"}
@@ -205,6 +218,7 @@ export function ContractReview({
                 contractId={contractId}
                 rate={rate}
                 items={items}
+                near={near[rate.id] ?? []}
                 onJump={() => rate.source_page && setPage(rate.source_page)}
               />
             ))}
@@ -219,14 +233,20 @@ function RateRow({
   contractId,
   rate,
   items,
+  near,
   onJump,
 }: {
   contractId: string;
   rate: Rate;
   items: { id: string; name: string }[];
+  near: NearMiss[];
   onJump: () => void;
 }) {
   const [problem, amend, saving] = useActionState<ReviewOutcome, FormData>(amendRate, null);
+  // An unmatched rate is a new item, not a dead end. The name it would get is
+  // editable because a printed name is often longer than a catalogue name wants to be.
+  const [choice, setChoice] = useState(rate.item_id ?? "new");
+  const [newName, setNewName] = useState(rate.new_item_name ?? rate.printed_name);
 
   return (
     <li className="py-3">
@@ -285,29 +305,66 @@ function RateRow({
             <Label htmlFor={`item-${rate.id}`} className="text-xs font-normal">
               Is this
             </Label>
-            <select
-              id={`item-${rate.id}`}
-              name="itemId"
-              defaultValue={rate.item_id ?? "none"}
-              className="border-input bg-background h-9 w-56 rounded-md border px-2 text-sm"
-            >
-              <option value="none">Not matched</option>
-              {items.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
+            <Select name="itemId" value={choice} onValueChange={setChoice}>
+              <SelectTrigger id={`item-${rate.id}`} className="w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="new">New item: {rate.printed_name}</SelectItem>
+                {items.map((item) => (
+                  <SelectItem key={item.id} value={item.id}>
+                    {item.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <Button type="submit" variant="outline" size="sm" disabled={saving}>
             {saving ? "Saving…" : "Save"}
           </Button>
         </div>
 
+        {choice === "new" && near.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-muted-foreground">Might already be:</span>
+            {near.map((miss) => (
+              <Button
+                key={miss.itemId}
+                type="button"
+                variant="outline"
+                size="xs"
+                onClick={() => setChoice(miss.itemId)}
+              >
+                {miss.name} ({Math.round(miss.score * 100)}%)
+              </Button>
+            ))}
+          </div>
+        )}
+
+        {choice === "new" && (
+          <div className="flex flex-col gap-1">
+            <Label htmlFor={`new-${rate.id}`} className="text-xs font-normal">
+              Name for the new item
+            </Label>
+            <Input
+              id={`new-${rate.id}`}
+              name="newItemName"
+              value={newName}
+              onChange={(event) => setNewName(event.target.value)}
+              className="w-full max-w-md"
+            />
+            <p className="text-muted-foreground text-xs">
+              A new item called &ldquo;{newName.trim() || rate.printed_name}&rdquo; will be
+              created when you confirm this contract, and this rate will be linked to it.
+              {near.length > 0 && " Check the close matches above first, so the catalogue does not end up with two of the same thing."}
+            </p>
+          </div>
+        )}
+
         <p className="text-muted-foreground text-xs">
           Currently {money(rate.rate, rate.currency)}
           {rate.unit && ` per ${rate.unit}`}
-          {rate.item_name ? `, matched to ${rate.item_name}` : ", not matched to an item"}
+          {rate.item_name ? `, matched to ${rate.item_name}` : ", will become a new item when confirmed"}
         </p>
 
         {problem && (

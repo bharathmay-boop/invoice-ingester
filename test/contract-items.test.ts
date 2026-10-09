@@ -1,0 +1,230 @@
+// What confirming a contract does with a rate the catalogue does not have (#149).
+//
+// An unmatched rate used to be kept and never looked up, so a contract full of
+// them was confirmed, looked live, and checked nothing. It is a new item now,
+// unless the catalogue already has something close, in which case the reviewer
+// has to say which. Real Postgres, because the trigram scoring and the alias
+// constraint are the behaviour.
+import assert from "node:assert/strict";
+import { after, before, beforeEach, test } from "node:test";
+
+const configured = Boolean(process.env.DATABASE_URL);
+const skip = configured ? false : "no DATABASE_URL, run `vercel env pull`";
+
+const SCHEMA = `test_${Math.random().toString(36).slice(2, 10)}`;
+process.env.DATABASE_SCHEMA = SCHEMA;
+process.env.DATABASE_URL = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
+process.env.SETTINGS_MASTER_KEY ??= Buffer.alloc(32, 9).toString("base64");
+
+const db = configured ? await import("../lib/db.ts") : null;
+const items = configured ? await import("../lib/contracts/items.ts") : null;
+const near = configured ? await import("../lib/items/near.ts") : null;
+const { normalize } = await import("../lib/items/normalize.ts");
+
+// The lowest score worth hearing about. Passed in, as the code does.
+const SUGGEST = 0.5;
+
+before(async () => {
+  if (!db) return;
+  await db.query(`CREATE SCHEMA IF NOT EXISTS ${SCHEMA}`);
+  await db.query(`
+    CREATE TABLE item (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      canonical_name text NOT NULL,
+      normalized_name text NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )`);
+  await db.query(`
+    CREATE TABLE item_alias (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      item_id uuid NOT NULL REFERENCES item (id) ON DELETE CASCADE,
+      alias text NOT NULL,
+      normalized_name text NOT NULL UNIQUE
+    )`);
+  await db.query(`
+    CREATE TABLE contract (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      title text NOT NULL DEFAULT 'c'
+    )`);
+  await db.query(`
+    CREATE TABLE contract_rate (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      contract_id uuid NOT NULL REFERENCES contract (id) ON DELETE CASCADE,
+      item_id uuid REFERENCES item (id),
+      printed_name text NOT NULL,
+      new_item_name text,
+      CONSTRAINT contract_rate_new_item_unlinked CHECK (new_item_name IS NULL OR item_id IS NULL)
+    )`);
+});
+
+beforeEach(async () => {
+  if (!db) return;
+  await db.query("DELETE FROM contract_rate");
+  await db.query("DELETE FROM contract");
+  await db.query("DELETE FROM item_alias");
+  await db.query("DELETE FROM item");
+});
+
+after(async () => {
+  if (db) {
+    await db.query(`DROP SCHEMA IF EXISTS ${SCHEMA} CASCADE`);
+    await db.pool.end();
+  }
+});
+
+async function item(name: string) {
+  const [row] = await db!.query<{ id: string }>(
+    "INSERT INTO item (canonical_name, normalized_name) VALUES ($1,$2) RETURNING id",
+    [name, normalize(name)],
+  );
+  return row.id;
+}
+
+async function contractWith(rates: { printed: string; itemId?: string; newName?: string }[]) {
+  const [c] = await db!.query<{ id: string }>("INSERT INTO contract DEFAULT VALUES RETURNING id");
+  const ids: string[] = [];
+  for (const r of rates) {
+    const [row] = await db!.query<{ id: string }>(
+      `INSERT INTO contract_rate (contract_id, item_id, printed_name, new_item_name)
+       VALUES ($1,$2,$3,$4) RETURNING id`,
+      [c.id, r.itemId ?? null, r.printed, r.newName ?? null],
+    );
+    ids.push(row.id);
+  }
+  return { contractId: c.id, rateIds: ids };
+}
+
+async function resolve(contractId: string) {
+  const client = await db!.pool.connect();
+  try {
+    await client.query("BEGIN");
+    const out = await items!.resolveRateItems(client, contractId, SUGGEST);
+    await client.query(out.ok ? "COMMIT" : "ROLLBACK");
+    return out;
+  } finally {
+    client.release();
+  }
+}
+
+async function rateRow(id: string) {
+  const rows = await db!.query<{ item_id: string | null; new_item_name: string | null }>(
+    "SELECT item_id, new_item_name FROM contract_rate WHERE id = $1",
+    [id],
+  );
+  return rows[0];
+}
+
+async function names() {
+  const rows = await db!.query<{ canonical_name: string }>(
+    "SELECT canonical_name FROM item ORDER BY canonical_name",
+  );
+  return rows.map((r) => r.canonical_name);
+}
+
+test("a rate nothing in the catalogue resembles becomes a new item and is linked to it", { skip }, async () => {
+  await item("Whiteboard Marker Black");
+  const { contractId, rateIds } = await contractWith([{ printed: "Hydraulic Floor Jack 2 Tonne" }]);
+
+  assert.deepEqual(await resolve(contractId), { ok: true });
+
+  const rate = await rateRow(rateIds[0]);
+  assert.ok(rate.item_id, "the rate is linked, not left null");
+  assert.deepEqual(await names(), ["Hydraulic Floor Jack 2 Tonne", "Whiteboard Marker Black"]);
+});
+
+test("the name the reviewer chose is used, and the printed name is kept as an alias", { skip }, async () => {
+  const printed = "Hydraulic Floor Jack 2 Tonne Capacity Trolley Type";
+  const { contractId, rateIds } = await contractWith([{ printed, newName: "Floor Jack 2T" }]);
+  assert.deepEqual(await resolve(contractId), { ok: true });
+
+  const rate = await rateRow(rateIds[0]);
+  const made = await db!.query<{ canonical_name: string }>(
+    "SELECT canonical_name FROM item WHERE id = $1",
+    [rate.item_id],
+  );
+  assert.equal(made[0].canonical_name, "Floor Jack 2T");
+  const aliases = await db!.query<{ alias: string }>(
+    "SELECT alias FROM item_alias WHERE item_id = $1",
+    [rate.item_id],
+  );
+  assert.deepEqual(aliases.map((a) => a.alias), [printed]);
+  assert.equal(rate.new_item_name, null);
+});
+
+test("a rate with close matches and no decision stops the confirm, naming them", { skip }, async () => {
+  await item("Ballpoint Pen Blue Fine Tip");
+  const { contractId, rateIds } = await contractWith([{ printed: "Blue Ballpoint Pen" }]);
+
+  const out = await resolve(contractId);
+  assert.equal(out.ok, false);
+  const message = (out as { message: string }).message;
+  assert.match(message, /Blue Ballpoint Pen/);
+  assert.match(message, /Ballpoint Pen Blue Fine Tip/);
+  assert.match(message, /\d+%/);
+
+  assert.deepEqual(await names(), ["Ballpoint Pen Blue Fine Tip"], "nothing was created");
+  assert.equal((await rateRow(rateIds[0])).item_id, null);
+});
+
+test("choosing a new item anyway is a decision and goes through", { skip }, async () => {
+  await item("Ballpoint Pen Blue Fine Tip");
+  const { contractId, rateIds } = await contractWith([
+    { printed: "Blue Ballpoint Pen", newName: "Blue Ballpoint Pen" },
+  ]);
+  assert.deepEqual(await resolve(contractId), { ok: true });
+  assert.ok((await rateRow(rateIds[0])).item_id);
+  assert.equal((await names()).length, 2);
+});
+
+test("an item already called exactly that is reused, not duplicated", { skip }, async () => {
+  const existing = await item("A4 Paper 80 GSM White");
+  const { contractId, rateIds } = await contractWith([
+    { printed: "a4 paper 80 gsm white", newName: "A4 Paper 80 GSM White" },
+  ]);
+  assert.deepEqual(await resolve(contractId), { ok: true });
+  assert.equal((await rateRow(rateIds[0])).item_id, existing);
+  assert.equal((await names()).length, 1);
+});
+
+test("a rate linked to an existing item teaches the matcher its printed name", { skip }, async () => {
+  const pen = await item("Ballpoint Pen Blue Fine Tip");
+  const { contractId } = await contractWith([{ printed: "Reynolds Trimax Blue", itemId: pen }]);
+  assert.deepEqual(await resolve(contractId), { ok: true });
+  const aliases = await db!.query<{ alias: string }>(
+    "SELECT alias FROM item_alias WHERE item_id = $1",
+    [pen],
+  );
+  assert.deepEqual(aliases.map((a) => a.alias), ["Reynolds Trimax Blue"]);
+});
+
+test("an alias that belongs to another item is skipped, and the confirm still goes through", { skip }, async () => {
+  const pen = await item("Ballpoint Pen Blue Fine Tip");
+  const marker = await item("Whiteboard Marker Black");
+  await db!.query(
+    "INSERT INTO item_alias (item_id, alias, normalized_name) VALUES ($1,$2,$3)",
+    [marker, "Reynolds Trimax Blue", normalize("Reynolds Trimax Blue")],
+  );
+  const { contractId } = await contractWith([{ printed: "Reynolds Trimax Blue", itemId: pen }]);
+  assert.deepEqual(await resolve(contractId), { ok: true });
+  const aliases = await db!.query<{ item_id: string }>("SELECT item_id FROM item_alias");
+  assert.deepEqual(aliases.map((a) => a.item_id), [marker], "it did not move to the other item");
+});
+
+test("near misses come best first with their scores, and only above the threshold", { skip }, async () => {
+  await item("Ballpoint Pen Blue Fine Tip");
+  await item("Whiteboard Marker Black");
+  const got = await near!.nearMisses(db!.pool, "Blue Ballpoint Pen", SUGGEST);
+  assert.equal(got.length, 1);
+  assert.equal(got[0].name, "Ballpoint Pen Blue Fine Tip");
+  assert.ok(got[0].score >= SUGGEST && got[0].score < 1);
+});
+
+test("an alias counts when looking for near misses", { skip }, async () => {
+  const photocopy = await item("Photocopying Service");
+  await db!.query(
+    "INSERT INTO item_alias (item_id, alias, normalized_name) VALUES ($1,$2,$3)",
+    [photocopy, "Xerox Copy Charge", normalize("Xerox Copy Charge")],
+  );
+  const got = await near!.nearMisses(db!.pool, "Xerox Copy Charges", SUGGEST);
+  assert.equal(got[0]?.itemId, photocopy);
+});
