@@ -213,7 +213,7 @@ test("an alias that belongs to another item is skipped, and the confirm still go
 test("near misses come best first with their scores, and only above the threshold", { skip }, async () => {
   await item("Ballpoint Pen Blue Fine Tip");
   await item("Whiteboard Marker Black");
-  const got = await near!.nearMisses(db!.pool, "Blue Ballpoint Pen", SUGGEST);
+  const got = (await near!.nearMissesFor(db!.pool, ["Blue Ballpoint Pen"], SUGGEST)).get("Blue Ballpoint Pen")!;
   assert.equal(got.length, 1);
   assert.equal(got[0].name, "Ballpoint Pen Blue Fine Tip");
   assert.ok(got[0].score >= SUGGEST && got[0].score < 1);
@@ -225,6 +225,148 @@ test("an alias counts when looking for near misses", { skip }, async () => {
     "INSERT INTO item_alias (item_id, alias, normalized_name) VALUES ($1,$2,$3)",
     [photocopy, "Xerox Copy Charge", normalize("Xerox Copy Charge")],
   );
-  const got = await near!.nearMisses(db!.pool, "Xerox Copy Charges", SUGGEST);
-  assert.equal(got[0]?.itemId, photocopy);
+  const found = await near!.nearMissesFor(db!.pool, ["Xerox Copy Charges"], SUGGEST);
+  assert.equal(found.get("Xerox Copy Charges")?.[0]?.itemId, photocopy);
+});
+
+// Greptile on #222. Each row saves on its own button, so what the screen shows
+// and what is stored can differ at the moment Confirm is pressed.
+async function decide(contractId: string, decisions: object[]) {
+  const client = await db!.pool.connect();
+  try {
+    await client.query("BEGIN");
+    const applied = await items!.applyDecisions(client, contractId, decisions.map((d) => JSON.stringify(d)));
+    const out = applied.ok ? await items!.resolveRateItems(client, contractId, SUGGEST) : applied;
+    await client.query(out.ok ? "COMMIT" : "ROLLBACK");
+    return out;
+  } finally {
+    client.release();
+  }
+}
+
+test("a rename that was never saved is still the name the item gets", { skip }, async () => {
+  const { contractId, rateIds } = await contractWith([{ printed: "Hydraulic Floor Jack 2 Tonne Capacity" }]);
+  const out = await decide(contractId, [{ rateId: rateIds[0], choice: "new", name: "Floor Jack 2T" }]);
+  assert.deepEqual(out, { ok: true });
+  assert.deepEqual(await names(), ["Floor Jack 2T"]);
+});
+
+test("a close match clicked but never saved is honoured, not rejected as undecided", { skip }, async () => {
+  const pen = await item("Ballpoint Pen Blue Fine Tip");
+  const { contractId, rateIds } = await contractWith([{ printed: "Blue Ballpoint Pen" }]);
+  assert.equal((await resolve(contractId)).ok, false, "undecided on the stored rows alone");
+
+  const out = await decide(contractId, [{ rateId: rateIds[0], choice: pen, name: "Blue Ballpoint Pen" }]);
+  assert.deepEqual(out, { ok: true });
+  assert.equal((await rateRow(rateIds[0])).item_id, pen);
+  assert.equal((await names()).length, 1, "no second item was made");
+});
+
+test("choices that cannot be read, or name an item that is gone, are refused", { skip }, async () => {
+  const { contractId, rateIds } = await contractWith([{ printed: "Hydraulic Floor Jack" }]);
+  const gone = "00000000-0000-4000-8000-000000000000";
+  for (const bad of [
+    { rateId: "nope", choice: "new", name: "x" },
+    { rateId: rateIds[0], choice: "new", name: "   " },
+    { rateId: rateIds[0], choice: "not-an-id", name: "x" },
+    { rateId: rateIds[0], choice: gone, name: "x" },
+  ]) {
+    assert.equal((await decide(contractId, [bad])).ok, false, JSON.stringify(bad));
+  }
+  assert.deepEqual(await names(), []);
+});
+
+test("a decision cannot reach a rate on another contract", { skip }, async () => {
+  const mine = await contractWith([{ printed: "Hydraulic Floor Jack" }]);
+  const theirs = await contractWith([{ printed: "Whiteboard Marker" }]);
+  await decide(mine.contractId, [{ rateId: theirs.rateIds[0], choice: "new", name: "Hijacked" }]);
+  assert.equal((await rateRow(theirs.rateIds[0])).new_item_name, null);
+});
+
+// Also #222. A name somebody taught the matcher already belongs to an item.
+test("a new item named like an existing alias links to that item, not a second one", { skip }, async () => {
+  const photocopy = await item("Photocopying Service");
+  await db!.query(
+    "INSERT INTO item_alias (item_id, alias, normalized_name) VALUES ($1,$2,$3)",
+    [photocopy, "Xerox Copy Charge", normalize("Xerox Copy Charge")],
+  );
+  const { contractId, rateIds } = await contractWith([
+    { printed: "Xerox Copy Charge", newName: "Xerox Copy Charge" },
+  ]);
+  assert.deepEqual(await resolve(contractId), { ok: true });
+  assert.equal((await rateRow(rateIds[0])).item_id, photocopy);
+  assert.deepEqual(await names(), ["Photocopying Service"]);
+});
+
+// Also #222. item.normalized_name is not unique, so two confirms of the same
+// new name at once used to be able to make two items.
+test("two contracts confirmed together do not make the same item twice", { skip }, async () => {
+  const a = await contractWith([{ printed: "Hydraulic Floor Jack 2 Tonne" }]);
+  const b = await contractWith([{ printed: "Hydraulic Floor Jack 2 Tonne" }]);
+  const [ra, rb] = await Promise.all([resolve(a.contractId), resolve(b.contractId)]);
+  assert.deepEqual([ra, rb], [{ ok: true }, { ok: true }]);
+  assert.deepEqual(await names(), ["Hydraulic Floor Jack 2 Tonne"]);
+  assert.equal((await rateRow(a.rateIds[0])).item_id, (await rateRow(b.rateIds[0])).item_id);
+});
+
+// Also #222. A correction saved while a confirm is running must wait for it,
+// not be overwritten by what the confirm read a moment earlier.
+test("a correction saved during a confirm waits for it", { skip }, async () => {
+  const pen = await item("Ballpoint Pen Blue Fine Tip");
+  const { contractId, rateIds } = await contractWith([{ printed: "Hydraulic Floor Jack 2 Tonne" }]);
+
+  const confirming = await db!.pool.connect();
+  try {
+    await confirming.query("BEGIN");
+    assert.deepEqual(await items!.resolveRateItems(confirming, contractId, SUGGEST), { ok: true });
+
+    let saved = false;
+    const correction = db!
+      .query("UPDATE contract_rate SET item_id = $2 WHERE id = $1", [rateIds[0], pen])
+      .then(() => { saved = true; });
+    await new Promise((r) => setTimeout(r, 1500));
+    assert.equal(saved, false, "the correction must not land while the confirm holds the rate");
+
+    await confirming.query("COMMIT");
+    await correction;
+    assert.equal((await rateRow(rateIds[0])).item_id, pen, "the later correction wins, as it should");
+  } finally {
+    confirming.release();
+  }
+});
+
+// The confirm reads the rates, then waits on the name lock, then writes. A
+// correction saved in that gap must not be overwritten by what was read before
+// it. Holding the name lock from another connection pauses the confirm there.
+test("a correction saved between the confirm reading a rate and writing it is not overwritten", { skip }, async () => {
+  const pen = await item("Ballpoint Pen Blue Fine Tip");
+  const printed = "Hydraulic Floor Jack 2 Tonne";
+  const { contractId, rateIds } = await contractWith([{ printed }]);
+
+  const holder = await db!.pool.connect();
+  const confirming = await db!.pool.connect();
+  try {
+    await holder.query("BEGIN");
+    await holder.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [`item:${normalize(printed)}`]);
+
+    await confirming.query("BEGIN");
+    const finished = items!.resolveRateItems(confirming, contractId, SUGGEST);
+    await new Promise((r) => setTimeout(r, 1500)); // read done, now waiting on the name
+
+    let saved = false;
+    const correction = db!
+      .query("UPDATE contract_rate SET item_id = $2 WHERE id = $1", [rateIds[0], pen])
+      .then(() => { saved = true; });
+    await new Promise((r) => setTimeout(r, 1500));
+    assert.equal(saved, false, "the correction must wait for the confirm, not slip in beside it");
+
+    await holder.query("COMMIT");
+    assert.deepEqual(await finished, { ok: true });
+    await confirming.query("COMMIT");
+    await correction;
+    assert.equal((await rateRow(rateIds[0])).item_id, pen, "the later correction is the one that stands");
+  } finally {
+    holder.release();
+    confirming.release();
+  }
 });

@@ -6,7 +6,7 @@ import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { pool } from "@/lib/db.ts";
 import { amendRateRow } from "@/lib/contracts/amend.ts";
 import { getThresholds } from "@/lib/items/match.ts";
-import { resolveRateItems } from "@/lib/contracts/items.ts";
+import { applyDecisions, resolveRateItems } from "@/lib/contracts/items.ts";
 import { applyReview } from "@/lib/contracts/confirm.ts";
 import { resolveNewContractVendor } from "@/lib/vendors/resolve.ts";
 import { track } from "@/lib/analytics/server.ts";
@@ -100,6 +100,13 @@ export async function confirmContract(
     // from the printed name, unless the catalogue already has something close
     // and they have not said which (#149). Then every rate inherits the vendor
     // and the confirmed period, and becomes live.
+    // What the screen showed, written before anything is resolved from what
+    // was stored.
+    const decided = await applyDecisions(client, contractId, form.getAll("decision").map(String));
+    if (!decided.ok) {
+      await client.query("ROLLBACK");
+      return { ok: false, message: decided.message };
+    }
     const items = await resolveRateItems(client, contractId, suggest);
     if (!items.ok) {
       await client.query("ROLLBACK");

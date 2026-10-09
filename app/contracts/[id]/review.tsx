@@ -100,7 +100,7 @@ export function ContractReview({
       </div>
 
       <div>
-        <form action={confirm} className="flex flex-col gap-4">
+        <form id="confirm-form" action={confirm} className="flex flex-col gap-4">
           <input type="hidden" name="contractId" value={contractId} />
 
           <fieldset className="flex flex-col gap-3">
@@ -250,6 +250,15 @@ function RateRow({
 
   return (
     <li className="py-3">
+      {/* What this row shows right now, sent with Confirm. Save is a separate
+          button, and a rename or a clicked close match is only state in the
+          browser until then, so Confirm cannot rely on what was stored. */}
+      <input
+        type="hidden"
+        name="decision"
+        form="confirm-form"
+        value={JSON.stringify({ rateId: rate.id, choice, name: newName })}
+      />
       <form action={amend} className="flex flex-col gap-2">
         <input type="hidden" name="contractId" value={contractId} />
         <input type="hidden" name="rateId" value={rate.id} />
