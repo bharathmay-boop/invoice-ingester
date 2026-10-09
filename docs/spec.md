@@ -214,6 +214,8 @@ GSTIN exact match resolves to an existing vendor. Where no GSTIN is printed, a n
 
 A contract has no GSTIN to match on, so its review screen opens the supplier field on an existing vendor only when the normalised name is the same, and otherwise on the new supplier the contract names. The match is exact once case and punctuation are off, with no partial or suffix stripping: attaching a contract to the wrong supplier flags invoices from someone who never signed it while every rate on screen still reads correctly, so nothing downstream would catch it.
 
+Confirming a new supplier on that screen will not quietly land on an existing one either. The unique index fires on `normalized_name`, which is a looser key than the picker's comparison, so a conflict is only accepted as the same supplier when the printed names also match. Anything else comes back as a message naming the supplier already saved, and asks for the existing one to be picked from the list or for an address that tells them apart. Guessing there is the same wrong answer arrived at from the other direction. The key itself is wrong and is tracked separately in #217.
+
 ### Items
 
 Normalise the description, then score it against `item.normalized_name` using trigram similarity:

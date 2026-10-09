@@ -9,19 +9,25 @@ export function normalizeTaxId(taxId: string): string {
 
 /** Make address spelling and spacing irrelevant while preserving its words. */
 export function normalizeAddress(address: string): string {
-  return collapse(address);
-}
-
-/** Make supplier name punctuation, case and spacing irrelevant. */
-export function normalizeName(name: string): string {
-  return collapse(name);
-}
-
-function collapse(value: string): string {
-  return value
+  return address
     .normalize("NFKC")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/**
+ * Make supplier name punctuation, case and spacing irrelevant, and nothing else.
+ *
+ * Every letter and digit survives, in any script. Stripping to ASCII the way
+ * the address rule does would turn "三井 Ltd" and "三菱 Ltd" both into "ltd",
+ * which is not a spelling difference, it is two different companies.
+ */
+export function normalizeName(name: string): string {
+  return name
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
 }
 
