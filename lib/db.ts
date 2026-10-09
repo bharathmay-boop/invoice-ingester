@@ -1,4 +1,5 @@
 import pg from "pg";
+import { verifyFull } from "./db-url.ts";
 
 // ponytail: one pool, the pooled Neon URL, no ORM. Queries in this app are
 // hand written SQL because the interesting one is a trigram match, which an
@@ -8,7 +9,7 @@ const globalForPool = globalThis as unknown as { pool?: pg.Pool };
 export const pool =
   globalForPool.pool ??
   new pg.Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: verifyFull(process.env.DATABASE_URL),
     max: 3,
     // Set at connection setup rather than by a query afterwards. Tests use this
     // to work in a throwaway schema, and doing it with a `SET` on the pool's

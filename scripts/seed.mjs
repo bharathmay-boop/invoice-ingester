@@ -12,6 +12,7 @@
 // Run: npm run seed
 import { createHash } from "node:crypto";
 import pg from "pg";
+import { verifyFull } from "../lib/db-url.ts";
 import { del, put } from "@vercel/blob";
 
 const { asExtraction, invoices, items, vendors } = await import("../lib/demo/dataset.ts");
@@ -55,7 +56,7 @@ for (const invoice of invoices) {
   }
 }
 
-const client = new pg.Client({ connectionString: url });
+const client = new pg.Client({ connectionString: verifyFull(url) });
 await client.connect();
 
 // Blob writes are not in the transaction and cannot be rolled back, so a

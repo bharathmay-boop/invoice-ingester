@@ -4,6 +4,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
+import { verifyFull } from "../lib/db-url.ts";
 
 const dir = fileURLToPath(new URL("../db/migrations/", import.meta.url));
 // Unpooled by preference: DDL in a transaction does not sit well behind
@@ -14,7 +15,7 @@ if (!url) {
   process.exit(1);
 }
 
-const client = new pg.Client({ connectionString: url });
+const client = new pg.Client({ connectionString: verifyFull(url) });
 await client.connect();
 await client.query(
   `CREATE TABLE IF NOT EXISTS _migration (

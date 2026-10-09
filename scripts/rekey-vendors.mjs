@@ -3,11 +3,12 @@
 // until then, an invoice from a supplier saved before the fix misses the
 // stored key and creates a second row for the same supplier.
 import pg from "pg";
+import { verifyFull } from "../lib/db-url.ts";
 
 const { rekeyVendors } = await import("../lib/vendors/rekey.ts");
 
 const client = new pg.Client({
-  connectionString: process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL,
+  connectionString: verifyFull(process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL),
 });
 await client.connect();
 try {
