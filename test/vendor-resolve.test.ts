@@ -68,8 +68,14 @@ async function withClient<T>(run: (client: pg.PoolClient) => Promise<T>) {
   }
 }
 
-const save = (i: ReturnType<typeof input>) =>
+const attempt = (i: ReturnType<typeof input>) =>
   withClient((c) => resolve!.resolveNewContractVendor(c, i));
+
+async function save(i: ReturnType<typeof input>) {
+  const got = await attempt(i);
+  assert.equal(got.ok, true);
+  return (got as { id: string }).id;
+}
 
 async function named(id: string) {
   const rows = await db!.query<{ name: string }>("SELECT name FROM vendor WHERE id = $1", [id]);
@@ -144,4 +150,41 @@ test("old-style keys are rewritten, and a second run changes nothing", { skip },
   assert.ok(keys.some((k) => k.normalized_address === "\u6771\u4eac\u90fd"));
   const second = await withClient(inTransaction);
   assert.equal(second.updated, 0);
+});
+
+// Greptile on #218. Until the backfill has run, a row saved before the fix keeps
+// its old key, and the old key for "Jain Quality Traders" is "jain traders".
+test("a row on a stale key is refused, not renamed", { skip }, async () => {
+  await db!.query(
+    `INSERT INTO vendor (name, normalized_name, normalized_address)
+     VALUES ('Jain Quality Traders', 'jain traders', '')`,
+  );
+  const got = await attempt(input("Jain Traders"));
+  assert.equal(got.ok, false);
+  assert.match((got as { message: string }).message, /Jain Quality Traders/);
+  const rows = await db!.query<{ name: string }>("SELECT name FROM vendor");
+  assert.deepEqual(rows.map((r) => r.name), ["Jain Quality Traders"]);
+});
+
+// Also from #218. "Acme" wants the key "Acme Quality" still holds, so it is
+// blocked until that row has moved. Rows are visited by name, so "Acme" goes first.
+test("a row blocked only until another moves is fixed on a later pass", { skip }, async () => {
+  const rekey = await import("../lib/vendors/rekey.ts");
+  await db!.query(
+    `INSERT INTO vendor (name, normalized_name, normalized_address) VALUES
+       ('Acme', '', ''),
+       ('Acme Quality', 'acme', '')`,
+  );
+  const run = await withClient(async (c) => {
+    await c.query("BEGIN");
+    const r = await rekey.rekeyVendors(c);
+    await c.query("COMMIT");
+    return r;
+  });
+  assert.equal(run.updated, 2);
+  assert.deepEqual(run.collisions, []);
+  const keys = await db!.query<{ normalized_name: string }>(
+    "SELECT normalized_name FROM vendor ORDER BY normalized_name",
+  );
+  assert.deepEqual(keys.map((k) => k.normalized_name), ["acme", "acme quality"]);
 });

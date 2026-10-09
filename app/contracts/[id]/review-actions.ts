@@ -77,12 +77,17 @@ export async function confirmContract(
       // Same identity rules as the invoice path, on purpose. Two definitions
       // of the same supplier is one too many, and the whole point of a
       // contract is to be found by the invoices that arrive against it.
-      vendorId = await resolveNewContractVendor(client, {
+      const resolved = await resolveNewContractVendor(client, {
         name: vendorName,
         address: vendorAddress,
         taxId,
         taxIdKind,
       });
+      if (!resolved.ok) {
+        await client.query("ROLLBACK");
+        return resolved;
+      }
+      vendorId = resolved.id;
     }
 
     // Every rate inherits the vendor and the confirmed period, then becomes
