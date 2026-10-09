@@ -75,16 +75,16 @@ try {
   // Invoices first, taking their line items with them by cascade. Items and
   // vendors go next, but only where nothing real still points at them: a real
   // invoice may well have matched a catalogue item the demo created.
+  previous = (
+    await client.query(
+      "SELECT blob_url FROM contract WHERE is_demo UNION SELECT blob_url FROM draft WHERE is_demo UNION SELECT blob_url FROM invoice WHERE is_demo AND blob_url IS NOT NULL",
+    )
+  ).rows.map((row) => row.blob_url);
   await client.query("DELETE FROM invoice WHERE is_demo");
   // Noted before the delete, so a document this database wrote on an earlier
   // run can be cleaned up afterwards. Only these are ever deleted: the blob
   // store is shared across environments, so sweeping a whole path would take
   // another database's documents with it.
-  previous = (
-    await client.query(
-      "SELECT blob_url FROM contract WHERE is_demo UNION SELECT blob_url FROM draft WHERE is_demo",
-    )
-  ).rows.map((row) => row.blob_url);
   await client.query("DELETE FROM draft WHERE is_demo");
   // Rates cascade from the contract. Before the items, since a rate points at
   // one and the item delete below checks that nothing still does.
@@ -353,12 +353,13 @@ try {
   // Its document is a PNG the demo wrote, since the screenshot browser cannot
   // show a PDF inline.
   const png = invoicePng(draftText());
-  const pngDigest = createHash("sha256").update(png).digest("hex");
-  const pngBlob = await put(`drafts/demo/${pngDigest.slice(0, 12)}.png`, png, {
+  // A random suffix, unlike the contracts: the image bytes never change, so a
+  // path from the digest would be shared by every database using this blob
+  // store, and discarding the draft in one would delete the other's image.
+  const pngBlob = await put("drafts/demo/invoice.png", png, {
     access: "private",
     contentType: "image/png",
-    addRandomSuffix: false,
-    allowOverwrite: true,
+    addRandomSuffix: true,
   });
   uploaded.push(pngBlob.url);
   const waiting = demoDraft();
@@ -413,7 +414,7 @@ try {
   // document. Only remove what nothing points at.
   for (const uploadedUrl of uploaded) {
     const { rowCount } = await client.query(
-      "SELECT 1 FROM contract WHERE blob_url = $1 UNION SELECT 1 FROM draft WHERE blob_url = $1",
+      "SELECT 1 FROM contract WHERE blob_url = $1 UNION SELECT 1 FROM draft WHERE blob_url = $1 UNION SELECT 1 FROM invoice WHERE blob_url = $1",
       [uploadedUrl],
     );
     if (!rowCount) await del(uploadedUrl).catch(() => {});
@@ -441,7 +442,7 @@ if (committed) {
     // considered, and only where nothing points at them now.
     const live = new Set(
       (
-        await pool.query("SELECT blob_url FROM contract UNION SELECT blob_url FROM draft")
+        await pool.query("SELECT blob_url FROM contract UNION SELECT blob_url FROM draft UNION SELECT blob_url FROM invoice WHERE blob_url IS NOT NULL")
       ).rows.map((row) => row.blob_url),
     );
     let swept = 0;

@@ -47,3 +47,13 @@ test("the seed owns its draft and the screenshots refuse anyone else's", () => {
   assert.ok(shots.includes("FROM draft    WHERE NOT is_demo"));
   assert.ok(shots.includes("WHERE is_demo AND content_type LIKE 'image/%'"));
 });
+
+test("saving the demo draft keeps it demo data, and the seed never shares its image", () => {
+  const save = readFileSync("app/review/[id]/actions.ts", "utf8");
+  const seed = readFileSync("scripts/seed.mjs", "utf8");
+  assert.ok(save.includes("first_page, is_demo FROM draft"));
+  assert.ok(save.includes("draft.is_demo,"));
+  assert.ok(save.includes("{ demo: draft.is_demo }"));
+  assert.match(seed, /drafts\/demo\/invoice\.png[\s\S]{0,120}addRandomSuffix: true/);
+  assert.ok(seed.includes("UNION SELECT blob_url FROM invoice"));
+});

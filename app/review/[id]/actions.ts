@@ -96,8 +96,9 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
       extraction_meta: unknown;
       content_type: string;
       first_page: number | null;
+      is_demo: boolean;
     }>(
-      "SELECT blob_url, extraction_meta, content_type, first_page FROM draft WHERE id = $1 FOR UPDATE",
+      "SELECT blob_url, extraction_meta, content_type, first_page, is_demo FROM draft WHERE id = $1 FOR UPDATE",
       [draftId],
     );
     if (!claimed.rows.length) {
@@ -141,8 +142,8 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
     const saved = await client.query<{ id: string }>(
       `INSERT INTO invoice (vendor_id, invoice_number, invoice_date, currency,
                             subtotal, taxes, adjustments, total, blob_url,
-                            status, extraction_meta, content_type, first_page)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+                            status, extraction_meta, content_type, first_page, is_demo)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
       [
         vendorId,
         invoice.invoice_number,
@@ -159,12 +160,14 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
         // screens: how to render it, and which page this invoice starts on.
         draft.content_type,
         draft.first_page,
+        // The demo draft stays demo data once saved, so a reseed can remove it.
+        draft.is_demo,
       ],
     );
     savedId = saved.rows[0].id;
 
     for (const line of invoice.line_items) {
-      await saveLine(client, savedId, line, thresholds);
+      await saveLine(client, savedId, line, thresholds, { demo: draft.is_demo });
     }
 
     await client.query("DELETE FROM draft WHERE id = $1", [draftId]);
