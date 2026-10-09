@@ -593,8 +593,15 @@ test("more re-checks than the pool has connections still finish", { skip }, asyn
     vendors.push(v);
   }
   const finished = Promise.all(vendors.map((v) => recompute!.recomputeVariance(v)));
-  const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("deadlocked")), 30_000));
-  assert.deepEqual(await Promise.race([finished, timeout]), [1, 1, 1, 1, 1, 1]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error("deadlocked")), 30_000);
+  });
+  try {
+    assert.deepEqual(await Promise.race([finished, timeout]), [1, 1, 1, 1, 1, 1]);
+  } finally {
+    clearTimeout(timer);
+  }
 });
 
 // Also from #221. Two corrections to the same supplier, overlapping. Whatever
