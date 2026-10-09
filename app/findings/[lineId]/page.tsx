@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeftIcon } from "lucide-react";
 import { getFinding } from "@/lib/queries.ts";
 import { formatDate, money, unitMoney } from "@/lib/format.ts";
-import { TAGS, TONE } from "@/lib/contracts/tags.tsx";
+import { TAGS, TONE } from "@/lib/contracts/tags.ts";
 import type { Tag } from "@/lib/contracts/variance.ts";
 
 export const dynamic = "force-dynamic";

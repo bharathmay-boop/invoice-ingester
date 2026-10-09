@@ -151,3 +151,30 @@ test("matching currencies compare exactly as before", () => {
   assert.equal(found?.tag, "billed_above_contract");
   assert.equal(found?.impact, 270);
 });
+
+// #110: not_in_contract was marked valued, so those lines sat in the valued
+// list under a currency total they add nothing to, and rendered no amount.
+// The flag has to agree with what assess actually returns for every tag.
+test("a tag is valued exactly when it carries a figure", async () => {
+  const { TAGS } = await import("../lib/contracts/tags.ts");
+  const cases = [
+    assess({ kind: "outside_period" }, line()),
+    assess({ kind: "not_priced" }, line()),
+    assess({ kind: "covered", rate: rate() }, line()),
+    assess({ kind: "covered", rate: rate() }, line({ unit_price: 312 })),
+    assess({ kind: "covered", rate: rate() }, line({ unit_price: 262 })),
+    assess({ kind: "covered", rate: rate({ rate: 45, unit: "kg" }) }, line()),
+    assess({ kind: "covered", rate: rate({ currency: "USD" }) }, line()),
+  ];
+  const seen = new Set<string>();
+  for (const found of cases) {
+    assert.ok(found);
+    seen.add(found.tag);
+    assert.equal(
+      TAGS[found.tag].valued,
+      found.impact !== null,
+      `${found.tag} is ${TAGS[found.tag].valued ? "" : "not "}valued but impact is ${found.impact}`,
+    );
+  }
+  assert.deepEqual([...seen].sort(), Object.keys(TAGS).sort(), "every tag was exercised");
+});

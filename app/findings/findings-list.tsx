@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { money } from "@/lib/format.ts";
-import { TAGS } from "@/lib/contracts/tags.tsx";
+import { TAGS } from "@/lib/contracts/tags.ts";
 import type { Tag } from "@/lib/contracts/variance.ts";
 import type { FindingRow } from "@/lib/queries.ts";
 

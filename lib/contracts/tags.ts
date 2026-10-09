@@ -5,14 +5,16 @@ import type { Tag } from "./variance.ts";
  *
  * The split matters more than the labels. Three of these have a figure and sort
  * by it; four cannot have one, because there is no agreed rate to compare
- * against, or no way to convert between the units, or the two sides are in
- * different currencies. Showing the second group as zero would sort them to the
+ * against (a date no contract covers, or an item the contract never prices), or
+ * no way to convert between the units, or the two sides are in different
+ * currencies. `valued` has to agree with whether `assess` returns an impact,
+ * and a test holds it to that. Showing the second group as zero would sort them to the
  * bottom pretending they were worthless.
  */
 export const TAGS: Record<Tag, { label: string; valued: boolean; tone: "bad" | "soft" | "good" }> = {
   billed_above_contract: { label: "Billed above contract", valued: true, tone: "bad" },
   billed_below_contract: { label: "Billed below contract", valued: true, tone: "soft" },
-  not_in_contract: { label: "Not in contract", valued: true, tone: "bad" },
+  not_in_contract: { label: "Not in contract", valued: false, tone: "bad" },
   outside_contract_period: { label: "Outside contract period", valued: false, tone: "soft" },
   units_differ: { label: "Units differ", valued: false, tone: "soft" },
   currency_differs: { label: "Currency differs", valued: false, tone: "soft" },
