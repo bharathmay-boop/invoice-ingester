@@ -577,3 +577,73 @@ test("amending a rate that is not on that contract changes nothing", { skip }, a
   const [row] = await db!.query<{ rate: string }>("SELECT rate::text FROM contract_rate WHERE id = $1", [r]);
   assert.equal(Number(row.rate), 285);
 });
+
+// Greptile on #221. The pool holds three connections. A re-check that kept one
+// and asked for a second for each lookup could deadlock the process once three
+// ran at the same time.
+test("more re-checks than the pool has connections still finish", { skip }, async () => {
+  const vendors = [];
+  for (let n = 0; n < 6; n++) {
+    const v = await vendor(`Supplier ${n}`);
+    const i = await item(`item ${n}`);
+    const inv = await invoice(v, `INV-${n}`, "2026-05-01");
+    await line(inv, i, 312, 10);
+    const c = await contract(v);
+    await rate(c, v, i, 285, "2026-04-01", "2027-03-31");
+    vendors.push(v);
+  }
+  const finished = Promise.all(vendors.map((v) => recompute!.recomputeVariance(v)));
+  const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("deadlocked")), 30_000));
+  assert.deepEqual(await Promise.race([finished, timeout]), [1, 1, 1, 1, 1, 1]);
+});
+
+// Also from #221. Two corrections to the same supplier, overlapping. Whatever
+// order they run in, the findings have to end up reflecting both.
+test("overlapping corrections leave findings that reflect the last rate", { skip }, async () => {
+  const amend = await import("../lib/contracts/amend.ts");
+  const v = await vendor("Gupta Traders");
+  const a = await item("a4 paper");
+  const b = await item("blue pen");
+  const inv = await invoice(v, "INV-1", "2026-05-01");
+  const la = await line(inv, a, 312, 10);
+  const lb = await line(inv, b, 50, 10);
+  const c = await contract(v);
+  const ra = await rate(c, v, a, 285, "2026-04-01", "2027-03-31");
+  const rb = await rate(c, v, b, 40, "2026-04-01", "2027-03-31");
+  await recompute!.recomputeVariance(v);
+
+  await Promise.all([
+    amend.amendRateRow({ rateId: ra, contractId: c, itemId: a, rate: 312, unit: "ream" }),
+    amend.amendRateRow({ rateId: rb, contractId: c, itemId: b, rate: 50, unit: "ream" }),
+  ]);
+  assert.equal((await tagOf(la)).variance_tag, "matches_contract");
+  assert.equal((await tagOf(lb)).variance_tag, "matches_contract");
+});
+
+// Also from #221. The correction and the re-check succeed or fail together.
+test("a failed re-check does not leave the corrected rate behind", { skip }, async () => {
+  const amend = await import("../lib/contracts/amend.ts");
+  const v = await vendor("Gupta Traders");
+  const i = await item("a4 paper");
+  const inv = await invoice(v, "INV-1", "2026-05-01");
+  await line(inv, i, 312, 10);
+  const c = await contract(v);
+  const r = await rate(c, v, i, 285, "2026-04-01", "2027-03-31");
+  await db!.query(`
+    CREATE FUNCTION refuse_update() RETURNS trigger LANGUAGE plpgsql AS
+    $$ BEGIN RAISE EXCEPTION 'the re-check failed'; END $$`);
+  await db!.query(
+    "CREATE TRIGGER refuse BEFORE UPDATE ON line_item FOR EACH ROW EXECUTE FUNCTION refuse_update()",
+  );
+  try {
+    await assert.rejects(
+      amend.amendRateRow({ rateId: r, contractId: c, itemId: i, rate: 999, unit: "ream" }),
+      /the re-check failed/,
+    );
+  } finally {
+    await db!.query("DROP TRIGGER refuse ON line_item");
+    await db!.query("DROP FUNCTION refuse_update()");
+  }
+  const [row] = await db!.query<{ rate: string }>("SELECT rate::text FROM contract_rate WHERE id = $1", [r]);
+  assert.equal(Number(row.rate), 285);
+});

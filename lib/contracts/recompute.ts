@@ -1,4 +1,5 @@
 import "server-only";
+import type { PoolClient } from "pg";
 import { pool } from "../db.ts";
 import { getSetting } from "../settings/store.ts";
 import { coverageFor } from "./lookup.ts";
@@ -19,52 +20,85 @@ import { assess, DEFAULT_TOLERANCE_PERCENT, TOLERANCE_SETTING } from "./variance
  * `assess` inline: the function is the same either way.
  */
 export async function recomputeVariance(vendorId: string): Promise<number> {
-  const tolerance = (await getSetting<number>(TOLERANCE_SETTING)) ?? DEFAULT_TOLERANCE_PERCENT;
-
+  // The setting is read before a connection is held. A caller that holds one
+  // while it waits for a second from a pool of three is how three overlapping
+  // re-checks wait on each other forever.
+  const tolerance = await loadTolerance();
   const client = await pool.connect();
   try {
-    const { rows } = await client.query<{
-      id: string;
-      item_id: string | null;
-      unit: string | null;
-      unit_price: number;
-      quantity: number;
-      currency: string;
-      invoice_date: string;
-    }>(
-      `SELECT li.id, li.item_id, li.unit, li.unit_price::float, li.quantity::float,
-              i.currency, i.invoice_date
-       FROM line_item li JOIN invoice i ON i.id = li.invoice_id
-       WHERE i.vendor_id = $1`,
-      [vendorId],
-    );
-
     await client.query("BEGIN");
-    for (const line of rows) {
-      const coverage = await coverageFor(vendorId, line.item_id, line.invoice_date);
-      const finding = assess(coverage, line, tolerance);
-      await client.query(
-        `UPDATE line_item
-         SET variance_tag = $2, variance_contracted = $3, variance_impact = $4,
-             variance_reason = $5
-         WHERE id = $1`,
-        [
-          line.id,
-          finding?.tag ?? null,
-          finding?.contracted ?? null,
-          finding?.impact ?? null,
-          finding?.reason ?? null,
-        ],
-      );
-    }
+    const count = await recomputeOn(client, vendorId, tolerance);
     await client.query("COMMIT");
-    return rows.length;
+    return count;
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
   } finally {
     client.release();
   }
+}
+
+export async function loadTolerance(): Promise<number> {
+  return (await getSetting<number>(TOLERANCE_SETTING)) ?? DEFAULT_TOLERANCE_PERCENT;
+}
+
+/**
+ * The comparison itself, on a transaction the caller already opened.
+ *
+ * Two properties are the point of the shape:
+ *
+ * - One supplier at a time. The advisory lock is taken before anything is read,
+ *   and held to the end of the transaction, so a re-check that started later
+ *   always reads rates the earlier one could not have seen, and the last to
+ *   finish is the one reflecting the latest rate. Without it, a slow re-check
+ *   could read an old rate, pause, and overwrite a newer result (#112).
+ * - One connection. Coverage is looked up on the same client, so a re-check
+ *   never asks the pool for a second connection while holding the first.
+ *
+ * The caller owns BEGIN, COMMIT and ROLLBACK, which lets a rate correction and
+ * the re-check it needs succeed or fail together.
+ */
+export async function recomputeOn(
+  client: PoolClient,
+  vendorId: string,
+  tolerance: number,
+): Promise<number> {
+  await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [`variance:${vendorId}`]);
+
+  const { rows } = await client.query<{
+    id: string;
+    item_id: string | null;
+    unit: string | null;
+    unit_price: number;
+    quantity: number;
+    currency: string;
+    invoice_date: string;
+  }>(
+    `SELECT li.id, li.item_id, li.unit, li.unit_price::float, li.quantity::float,
+            i.currency, i.invoice_date
+     FROM line_item li JOIN invoice i ON i.id = li.invoice_id
+     WHERE i.vendor_id = $1`,
+    [vendorId],
+  );
+
+  for (const line of rows) {
+    const coverage = await coverageFor(vendorId, line.item_id, line.invoice_date, client);
+    const finding = assess(coverage, line, tolerance);
+    await client.query(
+      `UPDATE line_item
+       SET variance_tag = $2, variance_contracted = $3, variance_impact = $4,
+           variance_reason = $5
+       WHERE id = $1`,
+      [
+        line.id,
+        finding?.tag ?? null,
+        finding?.contracted ?? null,
+        finding?.impact ?? null,
+        finding?.reason ?? null,
+      ],
+    );
+  }
+  return rows.length;
 }
 
 /**
