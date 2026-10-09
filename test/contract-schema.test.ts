@@ -53,15 +53,17 @@ test("a rate keeps its own dates over the contract's", () => {
   assert.equal(result.contract.rates[0].effective_to, "2026-03-31");
 });
 
-test("a rate that ends up with no date at all is dropped", () => {
-  // A rate in force either always or never cannot answer the only question
-  // this exists to answer, so it is better gone than stored.
+test("a rate that ends up with no date at all is kept, undated", () => {
+  // It used to be dropped, silently and uncounted, so a rate the document really
+  // contained vanished before anyone could see it (#118). It cannot answer "what
+  // was in force on this date" yet, and it takes the period the reviewer confirms.
   const result = parseContractResponse(
     reply({ effective_from: null, effective_to: null, rates: [rate] }),
   );
   assert.equal(result.ok, true);
   if (!result.ok) return;
-  assert.equal(result.contract.rates.length, 0);
+  assert.equal(result.contract.rates.length, 1);
+  assert.equal(result.contract.rates[0].effective_from, null);
 });
 
 test("an escalation written out as dated rates stays three rates", () => {

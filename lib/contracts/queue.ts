@@ -152,7 +152,7 @@ export async function recordRates(
     printed_name: string;
     unit: string | null;
     rate: number;
-    effective_from: string;
+    effective_from: string | null;
     effective_to: string | null;
     page: number | null;
     quote: string | null;

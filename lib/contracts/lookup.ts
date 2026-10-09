@@ -47,21 +47,35 @@ export async function coverageFor(
 
   // Nothing priced this item on this date. Which of the two remaining answers
   // it is depends on whether anything at all covered the date.
+  //
+  // "Anything" includes a reviewed contract's own period, not only its rates.
+  // A contract with no rate card is ordinary, and it still covers its dates:
+  // an item it never prices is `not_priced`, where reading rates alone made it
+  // indistinguishable from no contract at all (#118).
   const [{ n: inForce }] = await query<{ n: number }>(
-    `SELECT count(*)::int AS n FROM contract_rate
-     WHERE reviewed AND vendor_id = $1
-       AND effective_from <= $2::date
-       AND (effective_to IS NULL OR effective_to >= $2::date)`,
+    `SELECT (SELECT count(*) FROM contract_rate
+             WHERE reviewed AND vendor_id = $1
+               AND effective_from <= $2::date
+               AND (effective_to IS NULL OR effective_to >= $2::date))
+          + (SELECT count(*) FROM contract
+             WHERE status = 'reviewed' AND vendor_id = $1
+               AND effective_from <= $2::date
+               AND (effective_to IS NULL OR effective_to >= $2::date)) AS n`,
     [vendorId, invoiceDate],
   );
-  if (inForce > 0) return { kind: "not_priced" };
+  if (Number(inForce) > 0) return { kind: "not_priced" };
 
+  // A reviewed contract only counts once its period is known. One reviewed
+  // before the period was stored, with no rates, has none, and counting it
+  // would light up every invoice from that supplier as outside its period.
   const [{ n: ever }] = await query<{ n: number }>(
-    "SELECT count(*)::int AS n FROM contract_rate WHERE reviewed AND vendor_id = $1",
+    `SELECT (SELECT count(*) FROM contract_rate WHERE reviewed AND vendor_id = $1)
+          + (SELECT count(*) FROM contract
+             WHERE status = 'reviewed' AND vendor_id = $1 AND effective_from IS NOT NULL) AS n`,
     [vendorId],
   );
   // Contracts exist for this supplier, none covering this date. Billing after
   // one lapsed is a real finding. No contracts at all is silence, or every
   // invoice from every uncontracted supplier would light up.
-  return ever > 0 ? { kind: "outside_period" } : { kind: "no_contract" };
+  return Number(ever) > 0 ? { kind: "outside_period" } : { kind: "no_contract" };
 }

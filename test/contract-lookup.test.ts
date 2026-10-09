@@ -76,6 +76,9 @@ before(async () => {
       status text NOT NULL DEFAULT 'reviewed',
       digest text NOT NULL UNIQUE,
       other_terms jsonb NOT NULL DEFAULT '[]',
+      effective_from date,
+      effective_to date,
+      reviewed_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT now()
     )`);
   await db.query(`
@@ -88,11 +91,12 @@ before(async () => {
       unit text,
       rate numeric(14,4) NOT NULL,
       currency text NOT NULL DEFAULT 'INR',
-      effective_from date NOT NULL,
+      effective_from date,
       effective_to date,
       source_page integer,
       source_quote text,
-      reviewed boolean NOT NULL DEFAULT false
+      reviewed boolean NOT NULL DEFAULT false,
+      CONSTRAINT contract_rate_reviewed_has_start CHECK (NOT reviewed OR effective_from IS NOT NULL)
     )`);
   await db.query(`CREATE TABLE setting (
     key text PRIMARY KEY, value jsonb NOT NULL,
@@ -413,4 +417,84 @@ test("the same currency on both sides still compares", { skip }, async () => {
   const row = await tagOf(l);
   assert.equal(row.variance_tag, "billed_above_contract");
   assert.equal(row.variance_impact, "270.00");
+});
+
+// #118. The period a reviewer confirms is stored on the contract, so coverage no
+// longer depends on there being rate rows to infer it from.
+async function periodContract(vendorId: string, from: string | null, to: string | null) {
+  const id = await contract(vendorId);
+  await db!.query("UPDATE contract SET effective_from = $2, effective_to = $3 WHERE id = $1", [id, from, to]);
+  return id;
+}
+
+test("a reviewed contract with no rates still covers its dates", { skip }, async () => {
+  const v = await vendor("Acme");
+  const i = await item("A4 Paper");
+  await periodContract(v, "2026-04-01", "2027-03-31");
+  assert.deepEqual(await lookup!.coverageFor(v, i, "2026-09-01"), { kind: "not_priced" });
+});
+
+test("a reviewed contract with no rates is outside its period after it ends", { skip }, async () => {
+  const v = await vendor("Acme");
+  const i = await item("A4 Paper");
+  await periodContract(v, "2026-04-01", "2027-03-31");
+  assert.deepEqual(await lookup!.coverageFor(v, i, "2027-06-01"), { kind: "outside_period" });
+});
+
+test("a rateless contract reviewed before the period was stored stays silent", { skip }, async () => {
+  const v = await vendor("Acme");
+  const i = await item("A4 Paper");
+  await periodContract(v, null, null);
+  assert.deepEqual(await lookup!.coverageFor(v, i, "2026-09-01"), { kind: "no_contract" });
+});
+
+test("confirming stores the period and undated rates take it", { skip }, async () => {
+  const confirm = await import("../lib/contracts/confirm.ts");
+  const v = await vendor("Acme");
+  const i = await item("A4 Paper");
+  const c = await contract(v);
+  await db!.query("UPDATE contract SET status = 'ready_for_review' WHERE id = $1", [c]);
+  const own = await rate(c, v, i, 300, "2026-01-01", "2026-12-31", { reviewed: false });
+  await db!.query(
+    `INSERT INTO contract_rate (contract_id, item_id, printed_name, rate, currency, reviewed)
+     VALUES ($1,$2,'Undated',250,'INR',false)`,
+    [c, i],
+  );
+
+  const client = await db!.pool.connect();
+  try {
+    await confirm.applyReview(client, { contractId: c, vendorId: v, from: "2026-04-01", to: "2027-03-31" });
+  } finally {
+    client.release();
+  }
+
+  const [stored] = await db!.query<{ f: string; t: string; status: string }>(
+    "SELECT to_char(effective_from,'YYYY-MM-DD') f, to_char(effective_to,'YYYY-MM-DD') t, status FROM contract WHERE id = $1",
+    [c],
+  );
+  assert.deepEqual(stored, { f: "2026-04-01", t: "2027-03-31", status: "reviewed" });
+
+  const rows = await db!.query<{ printed_name: string; f: string; t: string }>(
+    "SELECT printed_name, to_char(effective_from,'YYYY-MM-DD') f, to_char(effective_to,'YYYY-MM-DD') t FROM contract_rate WHERE contract_id = $1 ORDER BY printed_name",
+    [c],
+  );
+  assert.deepEqual(rows, [
+    { printed_name: "A4 Paper 80 GSM", f: "2026-01-01", t: "2026-12-31" },
+    { printed_name: "Undated", f: "2026-04-01", t: "2027-03-31" },
+  ]);
+  assert.ok(own);
+});
+
+test("an undated rate cannot be reviewed without a start", { skip }, async () => {
+  const v = await vendor("Acme");
+  const i = await item("A4 Paper");
+  const c = await contract(v);
+  await assert.rejects(
+    db!.query(
+      `INSERT INTO contract_rate (contract_id, item_id, printed_name, rate, currency, reviewed)
+       VALUES ($1,$2,'Undated',250,'INR',true)`,
+      [c, i],
+    ),
+    /contract_rate_reviewed_has_start/,
+  );
 });

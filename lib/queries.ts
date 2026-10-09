@@ -323,7 +323,8 @@ export async function getContract(id: string) {
     unit: string | null;
     rate: number;
     currency: Currency;
-    effective_from: string;
+    // Null only before review: a reviewed rate always has a start.
+    effective_from: string | null;
     effective_to: string | null;
     source_page: number | null;
     source_quote: string | null;

@@ -218,8 +218,9 @@ try {
     const { rows } = await client.query(
       `INSERT INTO contract
          (vendor_id, title, blob_url, content_type, pages, status, digest,
-          other_terms, extraction, extraction_meta, reviewed_at, is_demo)
-       VALUES ($1,$2,$3,'application/pdf',$4,'reviewed',$5,$6,$7,$8,now(),true)
+          other_terms, extraction, extraction_meta, reviewed_at, is_demo,
+          effective_from, effective_to)
+       VALUES ($1,$2,$3,'application/pdf',$4,'reviewed',$5,$6,$7,$8,now(),true,$9,$10)
        RETURNING id`,
       [
         vendorIds.get(contract.gstin),
@@ -252,6 +253,8 @@ try {
         // Labelled as a demo row, the same as the invoices. Nothing here came
         // from a model and a screen that said otherwise would be lying.
         JSON.stringify({ source: "demo-seed" }),
+        contract.effectiveFrom,
+        contract.effectiveTo,
       ],
     );
 

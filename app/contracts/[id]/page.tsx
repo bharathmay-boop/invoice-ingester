@@ -90,7 +90,7 @@ export default async function Contract({ params }: { params: Promise<{ id: strin
                   </span>
                 </div>
                 <div className="text-muted-foreground mt-1 text-xs">
-                  {formatDate(rate.effective_from)}
+                  {rate.effective_from ? formatDate(rate.effective_from) : "No start date"}
                   {rate.effective_to ? ` to ${formatDate(rate.effective_to)}` : " onwards"}
                   {rate.item_name
                     ? `, matched to ${rate.item_name}`
