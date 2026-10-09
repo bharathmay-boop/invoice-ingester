@@ -10,7 +10,7 @@ import { validateArithmetic, DEFAULT_TOLERANCE_RUPEES } from "@/lib/extract/vali
 import { getSetting } from "@/lib/settings/store.ts";
 import { normalizeAddress, normalizeName, normalizeTaxId } from "@/lib/vendors/normalize.ts";
 import { getThresholds } from "@/lib/items/match.ts";
-import { saveLine } from "@/lib/items/save-line.ts";
+import { lockItemNames, saveLine } from "@/lib/items/save-line.ts";
 import { releaseDraft } from "@/lib/blob.ts";
 import { track } from "@/lib/analytics/server.ts";
 import { recomputeVariance } from "@/lib/contracts/recompute.ts";
@@ -166,6 +166,7 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
     );
     savedId = saved.rows[0].id;
 
+    await lockItemNames(client, invoice.line_items.map((l) => l.description));
     for (const line of invoice.line_items) {
       await saveLine(client, savedId, line, thresholds, { demo: draft.is_demo });
     }
