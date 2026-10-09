@@ -16,6 +16,7 @@ import { del, put } from "@vercel/blob";
 
 const { asExtraction, invoices, items, vendors } = await import("../lib/demo/dataset.ts");
 const { contracts } = await import("../lib/demo/contracts.ts");
+const { ALIASES, matcherInvoice, normalizedAlias } = await import("../lib/demo/matcher-cases.ts");
 const { contractPdf } = await import("../lib/demo/contract-pdf.ts");
 const { validateArithmetic } = await import("../lib/extract/validate.ts");
 const { normalizeAddress, normalizeName, normalizeTaxId } = await import("../lib/vendors/normalize.ts");
@@ -32,6 +33,12 @@ if (!url) {
 // inserts would commit here and the variance pass would run somewhere else, or
 // fail, leaving demo invoices with no findings against contracts that exist.
 process.env.DATABASE_URL = url;
+
+// After the assignment above, not with the other imports: save-line reaches
+// lib/db.ts through match.ts and the settings store, and db.ts builds its pool
+// the moment it is first imported, from whatever DATABASE_URL is then.
+const { saveLine } = await import("../lib/items/save-line.ts");
+const { DEFAULT_LINK, DEFAULT_SUGGEST } = await import("../lib/items/match.ts");
 
 // Every invoice goes through the same checks a real extraction would, so the
 // demo data cannot quietly contradict the validator it is meant to demonstrate.
@@ -201,6 +208,62 @@ try {
     }
   }
 
+  // The matcher cases (#157). Every line above is already matched, so the
+  // suggestion queue was empty and nothing showed the matcher deciding. These
+  // go through the real thing: Postgres trigram similarity against the catalogue
+  // just written, so the scores on screen are the matcher's and not typed here.
+  //
+  // Aliases first, since one of the lines only matches through its alias.
+  const byDisplayName = new Map(items.map((i) => [i.canonicalName, itemIds.get(i.normalizedName)]));
+  for (const { alias, item } of ALIASES) {
+    await client.query(
+      "INSERT INTO item_alias (item_id, alias, normalized_name) VALUES ($1,$2,$3) ON CONFLICT (normalized_name) DO NOTHING",
+      [byDisplayName.get(item), alias, normalizedAlias(alias)],
+    );
+  }
+
+  // The thresholds in force, as the app would read them, falling back to the
+  // defaults when nobody has changed them.
+  const saved = (await client.query("SELECT value FROM setting WHERE key = 'matching'")).rows[0]?.value;
+  const thresholds = {
+    link: saved?.link ?? DEFAULT_LINK,
+    suggest: saved?.suggest ?? DEFAULT_SUGGEST,
+  };
+
+  const { rows: [matcherRow] } = await client.query(
+    `INSERT INTO invoice
+       (vendor_id, invoice_number, invoice_date, subtotal, taxes, total, status,
+        extraction_meta, is_demo)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true) RETURNING id`,
+    [
+      vendorIds.get(matcherInvoice.gstin),
+      matcherInvoice.number,
+      matcherInvoice.date,
+      matcherInvoice.subtotal,
+      JSON.stringify(matcherInvoice.taxes),
+      matcherInvoice.total,
+      matcherInvoice.status,
+      JSON.stringify({ source: "demo-seed" }),
+    ],
+  );
+  for (const line of matcherInvoice.lines) {
+    await saveLine(
+      client,
+      matcherRow.id,
+      {
+        description: line.description,
+        item_code: line.itemCode,
+        quantity: line.quantity,
+        unit: line.unit,
+        unit_price: line.unitPrice,
+        amount: line.amount,
+      },
+      thresholds,
+      { demo: true },
+    );
+    lineCount += 1;
+  }
+
   // Contracts last: a rate points at an item and a contract at a vendor, so
   // both have to be in place first.
   let rateCount = 0;
@@ -281,21 +344,28 @@ try {
     }
   }
 
+  // Counted from the database while the transaction is open, since the matcher
+  // can create items the dataset does not list.
+  const { rows: [{ n: itemCount }] } = await client.query(
+    "SELECT count(*)::int AS n FROM item WHERE is_demo",
+  );
+
   await client.query("COMMIT");
   committed = true;
 
-  const spend = invoices
+  const seeded = [...invoices, matcherInvoice];
+  const spend = seeded
     .filter((i) => i.status === "confirmed")
     .reduce((sum, i) => sum + i.total, 0);
 
   console.log(
-    `seeded ${vendors.length} vendors, ${items.length} items, ` +
-      `${invoices.length} invoices, ${lineCount} line items, ` +
+    `seeded ${vendors.length} vendors, ${itemCount} items, ` +
+      `${seeded.length} invoices, ${lineCount} line items, ` +
       `${contracts.length} contracts, ${rateCount} rates`,
   );
   console.log(
     `confirmed spend Rs${spend.toFixed(2)}, ` +
-      `${invoices.filter((i) => i.status === "needs_review").length} needing review`,
+      `${seeded.filter((i) => i.status === "needs_review").length} needing review`,
   );
 
   contractVendorIds = [...new Set(contracts.map((c) => c.gstin))].map((gstin) =>

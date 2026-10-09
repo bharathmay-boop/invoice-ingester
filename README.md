@@ -103,7 +103,7 @@ npm run dev
 
 Then open Settings and save a provider key, either an Anthropic one or an OpenRouter one. Nothing can be read out of a document until there is one. Keys are sealed with `SETTINGS_MASTER_KEY` and stored in the database, so they are entered once in the browser rather than kept in a file. For local work there is `ANTHROPIC_API_KEY` and `OPENROUTER_API_KEY` in `.env.local` instead. A saved key always wins over those, and the fallback switches itself off whenever `VERCEL` is set, so a key on your machine can never be spent by the deployment.
 
-`npm run seed` loads the demo: 4 vendors, 8 items, 13 invoices, 28 line items, and 3 contracts whose PDFs the repository generates itself. Running the real variance check over them produces six of the seven answers above, which is the fastest way to see what the product does. It removes only the rows it seeded, marked with `is_demo`, so it is safe to re-run and doubles as a reset.
+`npm run seed` loads the demo: 4 vendors, 9 items, 14 invoices, 33 line items, and 3 contracts whose PDFs the repository generates itself. Five of those lines are left to the real matcher rather than seeded as decided: one that links on its own, two near misses that wait in the suggestion queue with the score Postgres gave them, one that becomes a new item, and one that links through an alias somebody taught the matcher, so the queue and the alias mechanism have something to show. Running the real variance check over them produces six of the seven answers above, which is the fastest way to see what the product does. It removes only the rows it seeded, marked with `is_demo`, so it is safe to re-run and doubles as a reset.
 
 ```
 npm test
