@@ -38,3 +38,10 @@ test("every place that opens a connection goes through it", () => {
     assert.match(readFileSync(file, "utf8"), /connectionString: verifyFull\(/, file);
   }
 });
+
+test("the node floor is one that runs TypeScript scripts unflagged", () => {
+  // The scripts import lib/*.ts directly. Node strips types without a flag from
+  // 22.18, and an older one fails with ERR_UNKNOWN_FILE_EXTENSION before connecting.
+  const { engines } = JSON.parse(readFileSync("package.json", "utf8"));
+  assert.equal(engines.node, ">=22.18");
+});

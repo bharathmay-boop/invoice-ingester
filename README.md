@@ -99,6 +99,8 @@ npm run seed
 npm run dev
 ```
 
+The scripts and tests run TypeScript directly, so Node 22.18 or newer is needed (`engines` in `package.json`).
+
 `vercel env pull` brings down the Neon connection strings, `ADMIN_PASSWORD`, and `SETTINGS_MASTER_KEY`, the AES-256-GCM key that API keys are sealed with. That key lives in the environment rather than the database, so a database dump on its own opens nothing.
 
 Then open Settings and save a provider key, either an Anthropic one or an OpenRouter one. Nothing can be read out of a document until there is one. Keys are sealed with `SETTINGS_MASTER_KEY` and stored in the database, so they are entered once in the browser rather than kept in a file. For local work there is `ANTHROPIC_API_KEY` and `OPENROUTER_API_KEY` in `.env.local` instead. A saved key always wins over those, and the fallback switches itself off whenever `VERCEL` is set, so a key on your machine can never be spent by the deployment.
