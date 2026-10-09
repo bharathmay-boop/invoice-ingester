@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
-import { pool, query } from "@/lib/db.ts";
+import { pool } from "@/lib/db.ts";
+import { amendRateRow } from "@/lib/contracts/amend.ts";
 import { applyReview } from "@/lib/contracts/confirm.ts";
 import { resolveNewContractVendor } from "@/lib/vendors/resolve.ts";
 import { track } from "@/lib/analytics/server.ts";
@@ -151,13 +152,20 @@ export async function amendRate(
     return { ok: false, message: "That item is not an item." };
   }
 
-  await query(
-    `UPDATE contract_rate
-     SET item_id = $3, rate = $4, unit = NULLIF($5, '')
-     WHERE id = $1 AND contract_id = $2`,
-    [rateId, contractId, itemId && itemId !== "none" ? itemId : null, rate, unit],
-  );
+  const { rechecked } = await amendRateRow({
+    rateId,
+    contractId,
+    itemId: itemId && itemId !== "none" ? itemId : null,
+    rate,
+    unit,
+  });
 
+  // A live contract's invoices were just re-checked, so the screens that show
+  // those findings are stale too.
+  if (rechecked) {
+    revalidatePath("/findings");
+    revalidatePath("/contracts");
+  }
   revalidatePath(`/contracts/${contractId}`);
   return null;
 }

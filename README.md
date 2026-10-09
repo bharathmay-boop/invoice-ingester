@@ -69,7 +69,7 @@ Worth knowing before you clone it.
 
 Reading a two hundred page agreement takes longer than a request stays open, so files go from the browser straight to storage and a queue reads them one at a time. The queue drains itself: each worker hands on to the next before it returns, and a daily sweep hands back anything a function died holding.
 
-The period you confirm on the review screen is stored on the contract. A rate the document gives no date for is kept and takes that period, where it used to be dropped without a word, and a contract with no rate card still covers its dates, so an item it never prices reads as "not in contract" rather than as no contract at all. Contracts reviewed before the period was stored keep being covered by their rate rows, gaps included.
+The period you confirm on the review screen is stored on the contract. A rate the document gives no date for is kept and takes that period, where it used to be dropped without a word, and a contract with no rate card still covers its dates, so an item it never prices reads as "not in contract" rather than as no contract at all. Contracts reviewed before the period was stored keep being covered by their rate rows, gaps included. Correcting a rate on a contract that is already live re-checks that supplier's invoices straight away, so a finding is never left standing on the old figure.
 
 On the review screen, clicking a rate moves the document to the page that rate came from. That page is found by searching the document's own text for the quoted line, not taken from the model's word for it. A quote that cannot be found says so, which is a better reason to look closely than any confidence score.
 
