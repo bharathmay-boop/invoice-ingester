@@ -67,12 +67,24 @@ export async function nearMissesFor(
   const found = new Map<string, NearMiss[]>();
   if (!printedNames.length) return found;
   const client = await pool.connect();
+  // A client released mid-transaction goes back to the pool still inside it,
+  // and the next request to borrow it fails with "current transaction is
+  // aborted". So failure rolls back, and a client that cannot be cleaned is
+  // discarded rather than returned.
+  let broken: Error | undefined;
   try {
     await client.query("BEGIN");
     for (const name of printedNames) found.set(name, await nearMisses(client, name, suggest));
     await client.query("ROLLBACK");
+  } catch (error) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (cleanup) {
+      broken = cleanup instanceof Error ? cleanup : new Error(String(cleanup));
+    }
+    throw error;
   } finally {
-    client.release();
+    client.release(broken);
   }
   return found;
 }

@@ -247,6 +247,14 @@ function RateRow({
   // editable because a printed name is often longer than a catalogue name wants to be.
   const [choice, setChoice] = useState(rate.item_id ?? "new");
   const [newName, setNewName] = useState(rate.new_item_name ?? rate.printed_name);
+  // An untouched unmatched row shows "New item" only because that is the
+  // default, which is not a decision. It becomes one when the reviewer changes
+  // something, says so with the button below, or had already saved a choice.
+  const [decided, setDecided] = useState(rate.item_id !== null || rate.new_item_name !== null);
+  const pick = (value: string) => {
+    setChoice(value);
+    setDecided(true);
+  };
 
   return (
     <li className="py-3">
@@ -257,7 +265,7 @@ function RateRow({
         type="hidden"
         name="decision"
         form="confirm-form"
-        value={JSON.stringify({ rateId: rate.id, choice, name: newName })}
+        value={JSON.stringify({ rateId: rate.id, choice, name: newName, explicit: decided })}
       />
       <form action={amend} className="flex flex-col gap-2">
         <input type="hidden" name="contractId" value={contractId} />
@@ -314,7 +322,7 @@ function RateRow({
             <Label htmlFor={`item-${rate.id}`} className="text-xs font-normal">
               Is this
             </Label>
-            <Select name="itemId" value={choice} onValueChange={setChoice}>
+            <Select name="itemId" value={choice} onValueChange={pick}>
               <SelectTrigger id={`item-${rate.id}`} className="w-56">
                 <SelectValue />
               </SelectTrigger>
@@ -342,11 +350,19 @@ function RateRow({
                 type="button"
                 variant="outline"
                 size="xs"
-                onClick={() => setChoice(miss.itemId)}
+                onClick={() => pick(miss.itemId)}
               >
                 {miss.name} ({Math.round(miss.score * 100)}%)
               </Button>
             ))}
+            <Button
+              type="button"
+              variant={decided ? "secondary" : "outline"}
+              size="xs"
+              onClick={() => setDecided(true)}
+            >
+              {decided ? "New item, confirmed" : "None of these: new item"}
+            </Button>
           </div>
         )}
 
@@ -359,7 +375,10 @@ function RateRow({
               id={`new-${rate.id}`}
               name="newItemName"
               value={newName}
-              onChange={(event) => setNewName(event.target.value)}
+              onChange={(event) => {
+                setNewName(event.target.value);
+                setDecided(true);
+              }}
               className="w-full max-w-md"
             />
             <p className="text-muted-foreground text-xs">

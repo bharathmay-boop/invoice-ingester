@@ -246,7 +246,7 @@ async function decide(contractId: string, decisions: object[]) {
 
 test("a rename that was never saved is still the name the item gets", { skip }, async () => {
   const { contractId, rateIds } = await contractWith([{ printed: "Hydraulic Floor Jack 2 Tonne Capacity" }]);
-  const out = await decide(contractId, [{ rateId: rateIds[0], choice: "new", name: "Floor Jack 2T" }]);
+  const out = await decide(contractId, [{ rateId: rateIds[0], choice: "new", name: "Floor Jack 2T", explicit: true }]);
   assert.deepEqual(out, { ok: true });
   assert.deepEqual(await names(), ["Floor Jack 2T"]);
 });
@@ -256,7 +256,7 @@ test("a close match clicked but never saved is honoured, not rejected as undecid
   const { contractId, rateIds } = await contractWith([{ printed: "Blue Ballpoint Pen" }]);
   assert.equal((await resolve(contractId)).ok, false, "undecided on the stored rows alone");
 
-  const out = await decide(contractId, [{ rateId: rateIds[0], choice: pen, name: "Blue Ballpoint Pen" }]);
+  const out = await decide(contractId, [{ rateId: rateIds[0], choice: pen, name: "Blue Ballpoint Pen", explicit: true }]);
   assert.deepEqual(out, { ok: true });
   assert.equal((await rateRow(rateIds[0])).item_id, pen);
   assert.equal((await names()).length, 1, "no second item was made");
@@ -266,10 +266,10 @@ test("choices that cannot be read, or name an item that is gone, are refused", {
   const { contractId, rateIds } = await contractWith([{ printed: "Hydraulic Floor Jack" }]);
   const gone = "00000000-0000-4000-8000-000000000000";
   for (const bad of [
-    { rateId: "nope", choice: "new", name: "x" },
-    { rateId: rateIds[0], choice: "new", name: "   " },
-    { rateId: rateIds[0], choice: "not-an-id", name: "x" },
-    { rateId: rateIds[0], choice: gone, name: "x" },
+    { rateId: "nope", choice: "new", name: "x", explicit: true },
+    { rateId: rateIds[0], choice: "new", name: "   ", explicit: true },
+    { rateId: rateIds[0], choice: "not-an-id", name: "x", explicit: true },
+    { rateId: rateIds[0], choice: gone, name: "x", explicit: true },
   ]) {
     assert.equal((await decide(contractId, [bad])).ok, false, JSON.stringify(bad));
   }
@@ -279,7 +279,7 @@ test("choices that cannot be read, or name an item that is gone, are refused", {
 test("a decision cannot reach a rate on another contract", { skip }, async () => {
   const mine = await contractWith([{ printed: "Hydraulic Floor Jack" }]);
   const theirs = await contractWith([{ printed: "Whiteboard Marker" }]);
-  await decide(mine.contractId, [{ rateId: theirs.rateIds[0], choice: "new", name: "Hijacked" }]);
+  await decide(mine.contractId, [{ rateId: theirs.rateIds[0], choice: "new", name: "Hijacked", explicit: true }]);
   assert.equal((await rateRow(theirs.rateIds[0])).new_item_name, null);
 });
 
@@ -369,4 +369,81 @@ test("a correction saved between the confirm reading a rate and writing it is no
     holder.release();
     confirming.release();
   }
+});
+
+// Greptile on #222. An untouched row shows "New item" and its printed name only
+// because that is the default. Sent as a decision, it would skip the check for
+// exactly the rows the check exists for.
+test("an untouched row is not a decision, so close matches still stop the confirm", { skip }, async () => {
+  await item("Ballpoint Pen Blue Fine Tip");
+  const { contractId, rateIds } = await contractWith([{ printed: "Blue Ballpoint Pen" }]);
+  const out = await decide(contractId, [
+    { rateId: rateIds[0], choice: "new", name: "Blue Ballpoint Pen", explicit: false },
+  ]);
+  assert.equal(out.ok, false);
+  assert.deepEqual(await names(), ["Ballpoint Pen Blue Fine Tip"], "no near duplicate was made");
+  assert.equal((await rateRow(rateIds[0])).new_item_name, null);
+});
+
+test("saying it is a new item, on purpose, goes through", { skip }, async () => {
+  await item("Ballpoint Pen Blue Fine Tip");
+  const { contractId, rateIds } = await contractWith([{ printed: "Blue Ballpoint Pen" }]);
+  const out = await decide(contractId, [
+    { rateId: rateIds[0], choice: "new", name: "Blue Ballpoint Pen", explicit: true },
+  ]);
+  assert.deepEqual(out, { ok: true });
+  assert.equal((await names()).length, 2);
+});
+
+// Also #222. Two contracts holding the same pair of new names, in opposite
+// order, used to wait on each other until Postgres aborted one of them.
+test("two contracts creating the same pair of items in opposite order both finish", { skip }, async () => {
+  const a = await contractWith([
+    { printed: "aaa", newName: "Hydraulic Floor Jack" },
+    { printed: "bbb", newName: "Industrial Stapler Heavy" },
+  ]);
+  const b = await contractWith([
+    { printed: "aaa", newName: "Industrial Stapler Heavy" },
+    { printed: "bbb", newName: "Hydraulic Floor Jack" },
+  ]);
+  const [ra, rb] = await Promise.all([resolve(a.contractId), resolve(b.contractId)]);
+  assert.deepEqual([ra, rb], [{ ok: true }, { ok: true }]);
+  assert.deepEqual(await names(), ["Hydraulic Floor Jack", "Industrial Stapler Heavy"]);
+});
+
+// Also #222. A connection released mid-transaction goes back to the pool still
+// inside it. A stand-in pool records what happens to the one it hands out.
+test("a failed near-miss search rolls back and gives the connection back clean", { skip }, async () => {
+  const calls: string[] = [];
+  let released: unknown = "not released";
+  const client = {
+    async query(sql: string) {
+      calls.push(sql.trim().split(/\s+/)[0]);
+      if (/set_config/i.test(sql)) throw new Error("search failed");
+      return { rows: [] };
+    },
+    release(arg?: unknown) {
+      released = arg;
+    },
+  };
+  const pool = { connect: async () => client } as unknown as import("pg").Pool;
+  await assert.rejects(near!.nearMissesFor(pool, ["Blue Ballpoint Pen"], SUGGEST), /search failed/);
+  assert.ok(calls.includes("ROLLBACK"), "the open transaction was rolled back");
+  assert.equal(released, undefined, "a client that rolled back cleanly is returned, not discarded");
+});
+
+test("a connection that cannot be rolled back is discarded, not returned", { skip }, async () => {
+  let released: unknown = "not released";
+  const client = {
+    async query(sql: string) {
+      if (/set_config/i.test(sql) || /ROLLBACK/i.test(sql)) throw new Error("connection lost");
+      return { rows: [] };
+    },
+    release(arg?: unknown) {
+      released = arg;
+    },
+  };
+  const pool = { connect: async () => client } as unknown as import("pg").Pool;
+  await assert.rejects(near!.nearMissesFor(pool, ["Blue Ballpoint Pen"], SUGGEST), /connection lost|search/);
+  assert.ok(released instanceof Error, "the broken connection was handed back as an error so the pool drops it");
 });

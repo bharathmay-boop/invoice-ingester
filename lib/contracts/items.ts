@@ -16,7 +16,9 @@ const UNREADABLE = "An item choice could not be read. Reload the page and try ag
  * the browser until Save. Confirm used to read the stored rows alone and then
  * create an item under the printed name, not the name the screen had promised
  * (#149). The screen now sends every row's current choice with Confirm, and
- * this writes them before anything is resolved.
+ * this writes them before anything is resolved. Only rows the reviewer touched,
+ * or that already carry a saved decision, are marked explicit; the rest are
+ * left for the close-match check.
  */
 export async function applyDecisions(
   client: pg.PoolClient,
@@ -24,7 +26,7 @@ export async function applyDecisions(
   raw: string[],
 ): Promise<ResolveResult> {
   for (const entry of raw) {
-    let decision: { rateId?: unknown; choice?: unknown; name?: unknown };
+    let decision: { rateId?: unknown; choice?: unknown; name?: unknown; explicit?: unknown };
     try {
       decision = JSON.parse(entry);
     } catch {
@@ -35,6 +37,10 @@ export async function applyDecisions(
     if (typeof rateId !== "string" || !UUID.test(rateId) || typeof choice !== "string") {
       return { ok: false, message: UNREADABLE };
     }
+    // A row nobody touched shows "New item" and its printed name only because
+    // that is what an unmatched row defaults to. Treating that as a decision
+    // would skip the close-match check for exactly the rows it exists for.
+    if (decision.explicit !== true) continue;
     if (choice === "new") {
       if (!name) return { ok: false, message: "A new item needs a name." };
       if (name.length > 200) return { ok: false, message: "That item name is too long." };
@@ -123,6 +129,14 @@ export async function resolveRateItems(
     };
   }
 
+  // Every name lock is taken up front, in one sorted order. Taken as each item
+  // is made, two contracts holding the same pair of names in opposite order
+  // would each wait on the other and Postgres would abort one of them.
+  const keys = [...new Set(toCreate.map(({ name }) => normalize(name)))].sort();
+  for (const key of keys) {
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [`item:${key}`]);
+  }
+
   for (const { id, name } of toCreate) {
     const itemId = await itemNamed(client, name);
     await client.query(
@@ -167,14 +181,13 @@ export async function resolveRateItems(
  *
  * "Already does" includes an alias: a name somebody taught the matcher belongs
  * to the item it was taught for, and a second item under it would make every
- * later match pick one and miss the other. The lock is on the name, held to the
- * end of the transaction, because item.normalized_name is not unique and two
- * contracts confirmed together would otherwise both find nothing and both
+ * later match pick one and miss the other. The caller holds the name lock, to
+ * the end of its transaction, because item.normalized_name is not unique and
+ * two contracts confirmed together would otherwise both find nothing and both
  * insert.
  */
 async function itemNamed(client: pg.PoolClient, name: string): Promise<string> {
   const key = normalize(name);
-  await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [`item:${key}`]);
 
   const byName = await client.query<{ id: string }>(
     "SELECT id FROM item WHERE normalized_name = $1 ORDER BY created_at LIMIT 1",
