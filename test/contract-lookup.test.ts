@@ -498,3 +498,17 @@ test("an undated rate cannot be reviewed without a start", { skip }, async () =>
     /contract_rate_reviewed_has_start/,
   );
 });
+
+// Greptile on #220: a contract reviewed before the period was stored is covered
+// by its rates, gaps included. Deriving one span from the earliest start and the
+// latest end would have called April covered when nobody said so.
+test("a legacy contract with a gap between its rates still leaves the gap uncovered", { skip }, async () => {
+  const v = await vendor("Acme");
+  const paper = await item("A4 Paper");
+  const pens = await item("Pens");
+  const c = await contract(v);
+  await rate(c, v, paper, 285, "2026-01-01", "2026-03-31");
+  await rate(c, v, paper, 290, "2026-07-01", "2026-12-31");
+  assert.deepEqual(await lookup!.coverageFor(v, pens, "2026-04-15"), { kind: "outside_period" });
+  assert.deepEqual(await lookup!.coverageFor(v, pens, "2026-08-15"), { kind: "not_priced" });
+});

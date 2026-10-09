@@ -65,8 +65,9 @@ export async function coverageFor(
   );
   if (Number(inForce) > 0) return { kind: "not_priced" };
 
-  // A reviewed contract only counts once its period is known. One reviewed
-  // before the period was stored, with no rates, has none, and counting it
+  // A reviewed contract's own period only counts once it is known. One reviewed
+  // before the period was stored has none, and is covered by its rates alone as
+  // it always was. A legacy contract with no rates has neither, and counting it
   // would light up every invoice from that supplier as outside its period.
   const [{ n: ever }] = await query<{ n: number }>(
     `SELECT (SELECT count(*) FROM contract_rate WHERE reviewed AND vendor_id = $1)

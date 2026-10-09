@@ -20,18 +20,10 @@ ALTER TABLE contract_rate
   ADD CONSTRAINT contract_rate_reviewed_has_start
     CHECK (NOT reviewed OR effective_from IS NOT NULL);
 
--- Contracts reviewed before this existed: the span of their rates is the period
--- they were already being checked over, so behaviour does not change. An open
--- ended rate makes the contract open ended. A reviewed contract with no rates
--- has nothing to take a period from, and stays without one.
-UPDATE contract c
-SET effective_from = r.first_start,
-    effective_to   = r.last_end
-FROM (
-  SELECT contract_id,
-         min(effective_from) AS first_start,
-         CASE WHEN bool_or(effective_to IS NULL) THEN NULL ELSE max(effective_to) END AS last_end
-  FROM contract_rate
-  GROUP BY contract_id
-) r
-WHERE c.id = r.contract_id AND c.status = 'reviewed' AND r.first_start IS NOT NULL;
+-- Contracts reviewed before this existed keep no period, on purpose. Their
+-- coverage is what their rate rows say it is, gaps included: a contract with
+-- rates for January to March and July to December does not cover April, and a
+-- single span taken from the earliest start and latest end would say it did.
+-- Their rates also need not be consistent with each other, so deriving one
+-- could break the order check above. A period is only ever what a person
+-- confirmed, and these were confirmed before it was stored.
