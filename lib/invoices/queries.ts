@@ -64,7 +64,9 @@ export type InvoiceDetail = {
   invoice_date: string;
   currency: Currency;
   subtotal: number;
-  taxes: { label: string; rate: number | string | null; amount: number }[];
+  // `included` means the tax is already inside the line prices, so it explains
+  // part of the total rather than adding to it.
+  taxes: { label: string; rate: number | string | null; amount: number; included?: boolean }[];
   adjustments: { label: string; amount: number }[];
   total: number;
   status: string;

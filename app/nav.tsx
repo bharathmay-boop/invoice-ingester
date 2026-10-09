@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { capture } from "./analytics-provider.tsx";
-import { NAV_LINKS } from "./nav-links.ts";
+import { COUNTED, NAV_LINKS } from "./nav-links.ts";
 
 function SignOut() {
   const router = useRouter();
@@ -95,7 +95,7 @@ export function Nav({
               }`}
             >
               {link.label}
-              {(counts[link.href] ?? 0) > 0 && (
+              {COUNTED.has(link.href) && (counts[link.href] ?? 0) > 0 && (
                 <span className="bg-secondary text-secondary-foreground ml-1.5 rounded-full px-1.5 py-0.5 text-xs tabular-nums">
                   {counts[link.href]}
                 </span>

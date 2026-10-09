@@ -3,9 +3,10 @@ import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { getInvoice } from "@/lib/invoices/queries.ts";
+import { isUuid } from "@/lib/invoices/filter.ts";
 import { TAGS } from "@/lib/contracts/tags.ts";
 import type { Tag } from "@/lib/contracts/variance.ts";
-import { formatDate, money } from "@/lib/format.ts";
+import { formatDate, money, unitMoney } from "@/lib/format.ts";
 import {
   Table,
   TableBody,
@@ -25,7 +26,7 @@ export default async function InvoiceDetail({ params }: { params: Promise<{ id: 
   const { id } = await params;
 
   // A bad id in the URL is a 404, not a crash.
-  if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
+  if (!isUuid(id)) notFound();
 
   const invoice = await getInvoice(id);
   if (!invoice) notFound();
@@ -90,7 +91,7 @@ export default async function InvoiceDetail({ params }: { params: Promise<{ id: 
                     {line.unit && <span className="opacity-60"> {line.unit}</span>}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {money(line.unit_price, invoice.currency)}
+                    {unitMoney(line.unit_price, invoice.currency)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {money(line.amount, invoice.currency)}
@@ -118,7 +119,10 @@ export default async function InvoiceDetail({ params }: { params: Promise<{ id: 
         </div>
         {invoice.taxes.map((tax, index) => (
           <div key={`tax-${index}`} className="flex justify-between gap-6">
-            <dt className="opacity-70">{tax.label}</dt>
+            <dt className="opacity-70">
+              {tax.label}
+              {tax.included && <span className="text-xs"> (already in the prices)</span>}
+            </dt>
             <dd className="tabular-nums">{money(tax.amount, invoice.currency)}</dd>
           </div>
         ))}

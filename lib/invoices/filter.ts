@@ -15,13 +15,20 @@ export type InvoiceFilter = {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+/** The whole shape of a uuid. 36 hyphens is 36 characters and not one. */
+export function isUuid(value: string): boolean {
+  return UUID.test(value);
+}
+
 function one(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
 /** A real calendar date: 2026-02-31 matches the shape and is not one. */
 function realDate(value: string | undefined): string | null {
-  if (!value || !DATE.test(value)) return null;
+  // Year zero round-trips through JavaScript and is refused by Postgres, so it
+  // would pass here and fail in the query.
+  if (!value || !DATE.test(value) || value.startsWith("0000-")) return null;
   const parsed = new Date(`${value}T00:00:00Z`);
   return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value
     ? null

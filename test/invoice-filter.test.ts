@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { parseInvoiceFilter } from "../lib/invoices/filter.ts";
+import { isUuid, parseInvoiceFilter } from "../lib/invoices/filter.ts";
 
 const VENDOR = "3f2a9c1e-7b4d-4e8a-9d11-0a5b6c7d8e9f";
 
@@ -27,7 +27,7 @@ test("a supplier that is not an id is dropped, never passed on", () => {
 });
 
 test("a date that is not a real date is dropped", () => {
-  for (const bad of ["2026-02-31", "2026-13-01", "26-01-01", "yesterday", "2026-1-1", "2026-01-01T00:00", ""]) {
+  for (const bad of ["2026-02-31", "2026-13-01", "26-01-01", "yesterday", "2026-1-1", "2026-01-01T00:00", "", "0000-01-01", "0000-12-31"]) {
     assert.equal(parseInvoiceFilter({ from: bad }).from, null, bad);
   }
   assert.equal(parseInvoiceFilter({ to: "2024-02-29" }).to, "2024-02-29", "a leap day is real");
@@ -50,4 +50,14 @@ test("a repeated parameter uses the first one", () => {
 test("one end of a range is enough", () => {
   assert.deepEqual(parseInvoiceFilter({ from: "2026-04-01" }), { vendorId: null, from: "2026-04-01", to: null });
   assert.deepEqual(parseInvoiceFilter({ to: "2026-04-01" }), { vendorId: null, from: null, to: "2026-04-01" });
+});
+
+// Greptile on #225. 36 characters that are hex or hyphens is not an id, and
+// Postgres throws on it where the page promised a 404.
+test("an id is the whole uuid shape, not just 36 plausible characters", () => {
+  assert.equal(isUuid(VENDOR), true);
+  assert.equal(isUuid("-".repeat(36)), false);
+  assert.equal(isUuid("a".repeat(36)), false);
+  assert.equal(isUuid(`${VENDOR}0`), false);
+  assert.equal(isUuid(""), false);
 });

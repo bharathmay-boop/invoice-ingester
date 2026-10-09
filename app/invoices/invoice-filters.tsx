@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
@@ -32,13 +33,22 @@ export function InvoiceFilters({
 }) {
   const router = useRouter();
 
-  function apply(next: { vendor?: string | null; from?: string | null; to?: string | null }) {
+  // What the controls show. Held here rather than read from the address, which
+  // only catches up when a navigation finishes: pick a supplier and change a
+  // date before then, and the second URL would be built from stale props and
+  // drop the supplier. The address still wins when it changes, so the back
+  // button and Clear are followed.
+  const [sel, setSel] = useState({ vendor: vendorId, from, to });
+  const [seen, setSeen] = useState(`${vendorId}|${from}|${to}`);
+  if (seen !== `${vendorId}|${from}|${to}`) {
+    setSeen(`${vendorId}|${from}|${to}`);
+    setSel({ vendor: vendorId, from, to });
+  }
+
+  function apply(next: Partial<typeof sel>) {
+    const merged = { ...sel, ...next };
+    setSel(merged);
     const params = new URLSearchParams();
-    const merged = {
-      vendor: "vendor" in next ? next.vendor : vendorId,
-      from: "from" in next ? next.from : from,
-      to: "to" in next ? next.to : to,
-    };
     for (const [key, value] of Object.entries(merged)) {
       if (value) params.set(key, value);
     }
@@ -46,7 +56,7 @@ export function InvoiceFilters({
     router.push(query ? `/invoices?${query}` : "/invoices");
   }
 
-  const filtered = Boolean(vendorId || from || to);
+  const filtered = Boolean(sel.vendor || sel.from || sel.to);
 
   return (
     <div className="flex flex-wrap items-end gap-3">
@@ -55,7 +65,7 @@ export function InvoiceFilters({
           Supplier
         </Label>
         <Select
-          value={vendorId ?? ALL}
+          value={sel.vendor ?? ALL}
           onValueChange={(value) => apply({ vendor: value === ALL ? null : value })}
         >
           <SelectTrigger id="invoice-vendor" className="w-64">
@@ -79,7 +89,7 @@ export function InvoiceFilters({
         <Input
           id="invoice-from"
           type="date"
-          value={from ?? ""}
+          value={sel.from ?? ""}
           onChange={(event) => apply({ from: event.target.value || null })}
           className="w-40"
         />
@@ -92,7 +102,7 @@ export function InvoiceFilters({
         <Input
           id="invoice-to"
           type="date"
-          value={to ?? ""}
+          value={sel.to ?? ""}
           onChange={(event) => apply({ to: event.target.value || null })}
           className="w-40"
         />
