@@ -22,6 +22,26 @@ export type SavedLine = {
 };
 
 /**
+ * Serialise the saves that would create the same item.
+ *
+ * `item.normalized_name` is not unique, so two invoices saved together, each
+ * with a line nothing resembles, would both find nothing and both insert (#223).
+ * A transaction-scoped lock on the name, taken before the lookup and held to
+ * commit, makes the second save wait and then find the first one's item. The key
+ * is the one the contract path uses, so the two paths exclude each other too.
+ *
+ * A caller saving several lines takes them all first, through here, in one
+ * sorted order: taken one by one as lines are saved, two invoices holding the
+ * same pair of names in opposite order would each wait on the other.
+ */
+export async function lockItemNames(client: pg.PoolClient, descriptions: string[]) {
+  const keys = [...new Set(descriptions.map(normalize))].sort();
+  for (const key of keys) {
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [`item:${key}`]);
+  }
+}
+
+/**
  * One line item, matched and written.
  *
  * Three outcomes, and only two of them touch the catalogue. A clear match
@@ -44,6 +64,9 @@ export async function saveLine(
   options: { demo?: boolean } = {},
 ): Promise<SavedLine> {
   const key = normalize(line.description);
+  // Already held when the caller used lockItemNames, and the same session can
+  // take its own lock again, so this only matters to callers that did not.
+  await lockItemNames(client, [line.description]);
   const match = await findMatch(client, key, thresholds);
 
   const itemId =

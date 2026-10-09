@@ -380,3 +380,59 @@ test("an item's own name beats somebody else's alias for it", { skip }, async ()
   );
   assert.equal(next.itemId, photocopy.itemId, "the entry actually called that still wins");
 });
+
+test("two invoices saved together create a new item once, not twice (#223)", { skip }, async () => {
+  const v = await vendor("Racing Supplies");
+  const first = await invoice(v, "R-1", "2026-09-01");
+  const second = await invoice(v, "R-2", "2026-09-01");
+  const row = { item_code: null, quantity: 1, unit: "pcs", unit_price: 10, amount: 10 };
+  const description = "Hydraulic Floor Jack 2 Tonne";
+
+  // The first save has made its item and not committed. The second starts now,
+  // and must wait for it rather than look at a catalogue that cannot see it.
+  const a = await db!.pool.connect();
+  const b = await db!.pool.connect();
+  try {
+    await a.query("BEGIN");
+    await saving!.saveLine(a, first, { ...row, description }, thresholds);
+
+    await b.query("BEGIN");
+    let finished = false;
+    const waiting = saving!
+      .saveLine(b, second, { ...row, description }, thresholds)
+      .then((saved) => {
+        finished = true;
+        return saved;
+      });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    assert.equal(finished, false, "the second save did not wait for the first");
+
+    await a.query("COMMIT");
+    const saved = await waiting;
+    await b.query("COMMIT");
+    assert.ok(saved.itemId);
+  } finally {
+    a.release();
+    b.release();
+  }
+
+  const items = await db!.query("SELECT id FROM item WHERE canonical_name = $1", [description]);
+  assert.equal(items.length, 1);
+  const linked = await db!.query("SELECT DISTINCT item_id FROM line_item");
+  assert.equal(linked.length, 1);
+});
+
+test("two saves holding the same names in opposite order do not deadlock", { skip }, async () => {
+  const run = async (names: string[]) => {
+    const client = await db!.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await saving!.lockItemNames(client, names);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await client.query("COMMIT");
+    } finally {
+      client.release();
+    }
+  };
+  await Promise.all([run(["Alpha Widget", "Beta Widget"]), run(["Beta Widget", "Alpha Widget"])]);
+});
