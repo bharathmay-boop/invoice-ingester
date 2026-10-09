@@ -48,7 +48,7 @@ type Line = {
   unitPrice: number;
 };
 
-type Draft = {
+export type Draft = {
   gstin: string;
   number: string;
   date: string;
@@ -246,7 +246,7 @@ export function asExtraction(invoice: SeedInvoice) {
   };
 }
 
-function build(draft: Draft): SeedInvoice {
+export function build(draft: Draft): SeedInvoice {
   const lines = draft.lines.map((line) => ({
     description: line.description,
     normalizedName: normalize(line.description),

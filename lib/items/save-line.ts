@@ -38,6 +38,10 @@ export async function saveLine(
   invoiceId: string,
   line: SavableLine,
   thresholds: Thresholds,
+  // The demo seed runs the real matcher, and an item it has to create must be
+  // labelled as demo, or it would be left behind on the next seed and look like
+  // somebody's own catalogue entry.
+  options: { demo?: boolean } = {},
 ): Promise<SavedLine> {
   const key = normalize(line.description);
   const match = await findMatch(client, key, thresholds);
@@ -48,7 +52,9 @@ export async function saveLine(
       : match.kind === "new"
         ? (
             await client.query<{ id: string }>(
-              "INSERT INTO item (canonical_name, normalized_name) VALUES ($1,$2) RETURNING id",
+              options.demo
+                ? "INSERT INTO item (canonical_name, normalized_name, is_demo) VALUES ($1,$2,true) RETURNING id"
+                : "INSERT INTO item (canonical_name, normalized_name) VALUES ($1,$2) RETURNING id",
               [line.description, key],
             )
           ).rows[0].id
