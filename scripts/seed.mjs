@@ -18,6 +18,8 @@ const { asExtraction, invoices, items, vendors } = await import("../lib/demo/dat
 const { contracts } = await import("../lib/demo/contracts.ts");
 const { ALIASES, matcherInvoice, normalizedAlias } = await import("../lib/demo/matcher-cases.ts");
 const { contractPdf } = await import("../lib/demo/contract-pdf.ts");
+const { demoDraft, draftText } = await import("../lib/demo/draft.ts");
+const { invoicePng } = await import("../lib/demo/invoice-png.ts");
 const { validateArithmetic } = await import("../lib/extract/validate.ts");
 const { normalizeAddress, normalizeName, normalizeTaxId } = await import("../lib/vendors/normalize.ts");
 
@@ -78,9 +80,12 @@ try {
   // run can be cleaned up afterwards. Only these are ever deleted: the blob
   // store is shared across environments, so sweeping a whole path would take
   // another database's documents with it.
-  previous = (await client.query("SELECT blob_url FROM contract WHERE is_demo")).rows.map(
-    (row) => row.blob_url,
-  );
+  previous = (
+    await client.query(
+      "SELECT blob_url FROM contract WHERE is_demo UNION SELECT blob_url FROM draft WHERE is_demo",
+    )
+  ).rows.map((row) => row.blob_url);
+  await client.query("DELETE FROM draft WHERE is_demo");
   // Rates cascade from the contract. Before the items, since a rate points at
   // one and the item delete below checks that nothing still does.
   await client.query("DELETE FROM contract WHERE is_demo");
@@ -344,6 +349,33 @@ try {
     }
   }
 
+  // A draft left waiting, so the review screen has something to show (#206).
+  // Its document is a PNG the demo wrote, since the screenshot browser cannot
+  // show a PDF inline.
+  const png = invoicePng(draftText());
+  const pngDigest = createHash("sha256").update(png).digest("hex");
+  const pngBlob = await put(`drafts/demo/${pngDigest.slice(0, 12)}.png`, png, {
+    access: "private",
+    contentType: "image/png",
+    addRandomSuffix: false,
+    allowOverwrite: true,
+  });
+  uploaded.push(pngBlob.url);
+  const waiting = demoDraft();
+  await client.query(
+    `INSERT INTO draft
+       (blob_url, file_name, content_type, extracted, discrepancies, status,
+        extraction_meta, is_demo)
+     VALUES ($1,$2,'image/png',$3,$4,'needs_review',$5,true)`,
+    [
+      pngBlob.url,
+      `${waiting.invoice.number.replace("/", "-")}.png`,
+      JSON.stringify(waiting.extracted),
+      JSON.stringify(waiting.discrepancies),
+      JSON.stringify({ source: "demo-seed" }),
+    ],
+  );
+
   // Counted from the database while the transaction is open, since the matcher
   // can create items the dataset does not list.
   const { rows: [{ n: itemCount }] } = await client.query(
@@ -380,9 +412,10 @@ try {
   // points there, so deleting it would leave a committed contract with no
   // document. Only remove what nothing points at.
   for (const uploadedUrl of uploaded) {
-    const { rowCount } = await client.query("SELECT 1 FROM contract WHERE blob_url = $1", [
-      uploadedUrl,
-    ]);
+    const { rowCount } = await client.query(
+      "SELECT 1 FROM contract WHERE blob_url = $1 UNION SELECT 1 FROM draft WHERE blob_url = $1",
+      [uploadedUrl],
+    );
     if (!rowCount) await del(uploadedUrl).catch(() => {});
   }
 
@@ -407,7 +440,9 @@ if (committed) {
     // nothing pointing at it. Only the ones this database had before are
     // considered, and only where nothing points at them now.
     const live = new Set(
-      (await pool.query("SELECT blob_url FROM contract")).rows.map((row) => row.blob_url),
+      (
+        await pool.query("SELECT blob_url FROM contract UNION SELECT blob_url FROM draft")
+      ).rows.map((row) => row.blob_url),
     );
     let swept = 0;
     for (const old of new Set(previous)) {
