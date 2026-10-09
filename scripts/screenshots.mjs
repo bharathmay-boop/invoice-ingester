@@ -46,7 +46,8 @@ const [real] = await query(
   `SELECT (SELECT count(*) FROM vendor   WHERE NOT is_demo)::int AS vendors,
           (SELECT count(*) FROM item     WHERE NOT is_demo)::int AS items,
           (SELECT count(*) FROM invoice  WHERE NOT is_demo)::int AS invoices,
-          (SELECT count(*) FROM contract WHERE NOT is_demo)::int AS contracts`,
+          (SELECT count(*) FROM contract WHERE NOT is_demo)::int AS contracts,
+          (SELECT count(*) FROM draft    WHERE NOT is_demo)::int AS drafts`,
 );
 const found = realRows(real);
 if (found.length) {
@@ -66,12 +67,13 @@ if (found.length) {
   process.exit(1);
 }
 
-// There is deliberately no review.png here. /review/[id] is the screen where a
-// draft is checked before it becomes an invoice, and the `draft` table carries no
-// is_demo column, so no draft can be shown to be demo data. A draft holds a
-// document somebody uploaded, which is exactly what must not reach a public
-// repository. #206 covers giving the seed a demo draft; the shot comes back with
-// it, and the old docs/screenshots/review.png is deleted rather than kept.
+// The demo draft is an image, not a PDF: headless Chromium has no PDF viewer and
+// would render "this browser will not display the PDF inline" exactly where the
+// invoice should be. `npm run seed` writes one (#206).
+const [draft] = await query(
+  `SELECT id FROM draft WHERE is_demo AND content_type LIKE 'image/%'
+   ORDER BY created_at DESC LIMIT 1`,
+);
 
 /**
  * An item with more than one purchase, a contract with rates, and the largest
@@ -116,7 +118,7 @@ async function skip(file, why) {
   await rm(new URL(file, OUT), { force: true });
   skipped.push(`${file}: ${why}`);
 }
-await skip("review.png", "the review screen has no demo draft to photograph (#206)");
+if (!draft) await skip("review.png", "no demo draft, run `npm run seed`");
 if (!item) await skip("price-history.png", "no item with a repeat purchase, run `npm run seed`");
 if (!contract) await skip("contract-review.png", "no contract with rates, run `npm run seed`");
 if (!finding) await skip("finding.png", "nothing billed above contract, run `npm run seed`");
@@ -169,6 +171,7 @@ const settle = (ms) => (p) => p.waitForTimeout(ms);
 console.log("writing docs/screenshots/");
 await shoot("/", "home.png", settle(1200));
 await shoot("/upload", "upload.png");
+if (draft) await shoot(`/review/${draft.id}`, "review.png", settle(1500));
 await shoot("/items", "items.png");
 if (item) await shoot(`/items/${item.id}`, "price-history.png", settle(1500));
 await shoot("/vendors", "vendors.png");
