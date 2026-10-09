@@ -8,6 +8,7 @@
 // One off, and safe to run twice: it only touches rows that still have no type.
 import { get } from "@vercel/blob";
 import pg from "pg";
+import { verifyFull } from "../lib/db-url.ts";
 
 const SIGNATURES = [
   { type: "application/pdf", bytes: [0x25, 0x50, 0x44, 0x46] }, // %PDF
@@ -26,7 +27,7 @@ function sniff(buffer) {
 }
 
 const client = new pg.Client({
-  connectionString: process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL,
+  connectionString: verifyFull(process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL),
 });
 await client.connect();
 
