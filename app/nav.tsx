@@ -5,14 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { capture } from "./analytics-provider.tsx";
-
-const LINKS = [
-  { href: "/upload", label: "Upload" },
-  { href: "/items", label: "Items" },
-  { href: "/vendors", label: "Vendors" },
-  { href: "/contracts", label: "Contracts" },
-  { href: "/suggestions", label: "Suggestions" },
-];
+import { NAV_LINKS } from "./nav-links.ts";
 
 function SignOut() {
   const router = useRouter();
@@ -57,14 +50,23 @@ function SignOut() {
   );
 }
 
-export function Nav({ signedIn, waiting = 0 }: { signedIn: boolean; waiting?: number }) {
+export function Nav({
+  signedIn,
+  waiting = 0,
+  findings = 0,
+}: {
+  signedIn: boolean;
+  waiting?: number;
+  findings?: number;
+}) {
+  const counts: Record<string, number> = { "/suggestions": waiting, "/findings": findings };
   const pathname = usePathname();
 
   // Signed out, none of these exist: the proxy sends every one of them to the
   // sign in page. Linking them would promise screens that bounce, and Next
   // prefetches, so it would also fire a redirect on every page load before
   // anyone clicked anything.
-  const links = signedIn ? [...LINKS, { href: "/settings", label: "Settings" }] : [];
+  const links = signedIn ? [...NAV_LINKS, { href: "/settings", label: "Settings" }] : [];
 
   return (
     <header className="border-b border-black/10 dark:border-white/15">
@@ -93,9 +95,9 @@ export function Nav({ signedIn, waiting = 0 }: { signedIn: boolean; waiting?: nu
               }`}
             >
               {link.label}
-              {link.href === "/suggestions" && waiting > 0 && (
+              {(counts[link.href] ?? 0) > 0 && (
                 <span className="bg-secondary text-secondary-foreground ml-1.5 rounded-full px-1.5 py-0.5 text-xs tabular-nums">
-                  {waiting}
+                  {counts[link.href]}
                 </span>
               )}
             </Link>

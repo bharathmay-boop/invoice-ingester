@@ -257,10 +257,14 @@ Keys are entered in settings and encrypted at rest with AES-256-GCM, using a mas
 |---|---|
 | Upload | Dropzone plus per file progress and status |
 | Review | Original rendered beside editable extracted fields |
+| Invoices | Every saved invoice, newest first, narrowed by supplier and date range; a row opens the invoice as saved, with its lines |
 | Item search | Price history, total paid, cheapest vendor, every purchase |
 | Vendor detail | Total spend, invoice list, most purchased items |
 | Suggestions | Queue of borderline item matches to accept or reject |
+| Findings | What was billed that disagrees with a contract, with a count in the nav like Suggestions has |
 | Settings | As above |
+
+The nav reads Upload, Items, Invoices, Contracts, Vendors, Suggestions, Findings, Settings. Invoices exists because an invoice was reviewed once and afterwards could only be reached through a vendor or an item, which left the nav without an honest entry for the thing the whole product is about. Findings has its own entry rather than a tab on the invoice because a held invoice nobody can find is the same as no check at all. Spend by vendor and by item stay on their own pages and are not rebuilt on the invoices list. Line order is not stored, so a saved invoice lists its lines alphabetically rather than as printed.
 
 The review screen puts the original beside the fields because checking an extraction means comparing it to its source. Any layout that makes you hold a number in your head while scrolling has already failed.
 

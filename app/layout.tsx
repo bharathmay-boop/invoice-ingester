@@ -7,7 +7,7 @@ import { Nav } from "./nav.tsx";
 import { ThemeProvider } from "./theme-provider.tsx";
 import { Analytics } from "./analytics-provider.tsx";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
-import { countWaitingSuggestions } from "@/lib/queries.ts";
+import { countFindings, countWaitingSuggestions } from "@/lib/queries.ts";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,7 +29,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   const signedIn = await isValidSession(jar.get(sessionCookie.name)?.value);
   // Only asked for when it can be shown, so a signed out visitor does not
   // cost a query for a number they never see.
-  const [waiting] = signedIn ? await countWaitingSuggestions() : [{ n: 0 }];
+  const [[waiting], [findings]] = signedIn
+    ? await Promise.all([countWaitingSuggestions(), countFindings()])
+    : [[{ n: 0 }], [{ n: 0 }]];
 
   return (
     <html
@@ -43,7 +45,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <ThemeProvider>
           <Suspense>
             <Analytics>
-              <Nav signedIn={signedIn} waiting={waiting.n} />
+              <Nav signedIn={signedIn} waiting={waiting.n} findings={findings.n} />
               {children}
             </Analytics>
           </Suspense>
