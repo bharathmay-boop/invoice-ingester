@@ -7,28 +7,33 @@ export function normalizeTaxId(taxId: string): string {
   return taxId.toUpperCase().replace(/[^A-Z0-9]+/g, "");
 }
 
-/** Make address spelling and spacing irrelevant while preserving its words. */
-export function normalizeAddress(address: string): string {
-  return address
+/**
+ * Case, punctuation and spacing are not identity; the words are. Every letter,
+ * mark and digit survives in any script, because stripping to ASCII turns two
+ * unrelated companies written in kanji into the same empty-ish key, and
+ * dropping combining marks splits Devanagari words apart.
+ *
+ * Deliberately not the item normaliser: that one deletes filler words such as
+ * "quality" and sorts the rest, which is right for a line description and
+ * wrong for a company, where "Jain Quality Traders" and "Jain Traders" are two
+ * suppliers. See #217.
+ */
+function collapse(value: string): string {
+  return value
     .normalize("NFKC")
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/[^\p{L}\p{M}\p{N}]+/gu, " ")
     .trim();
 }
 
-/**
- * Make supplier name punctuation, case and spacing irrelevant, and nothing else.
- *
- * Every letter and digit survives, in any script. Stripping to ASCII the way
- * the address rule does would turn "三井 Ltd" and "三菱 Ltd" both into "ltd",
- * which is not a spelling difference, it is two different companies.
- */
+/** Make address spelling and spacing irrelevant while preserving its words. */
+export function normalizeAddress(address: string): string {
+  return collapse(address);
+}
+
+/** Make supplier name punctuation, case and spacing irrelevant, and nothing else. */
 export function normalizeName(name: string): string {
-  return name
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .trim();
+  return collapse(name);
 }
 
 /**

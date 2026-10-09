@@ -17,8 +17,7 @@ import {
 } from "@/lib/extract/validate.ts";
 import type { ExtractedInvoice } from "@/lib/extract/schema.ts";
 import { MAX_INVOICES_PER_FILE, MAX_PDF_PAGES, storedType } from "@/lib/upload.ts";
-import { normalize } from "@/lib/items/normalize.ts";
-import { normalizeAddress, normalizeTaxId } from "@/lib/vendors/normalize.ts";
+import { normalizeAddress, normalizeName, normalizeTaxId } from "@/lib/vendors/normalize.ts";
 import { countPages } from "@/lib/pdf.ts";
 import { recordExtraction } from "@/lib/usage.ts";
 import { trackError } from "@/lib/analytics/server.ts";
@@ -33,7 +32,7 @@ export const maxDuration = 120;
  * do not turn the same registration or address into a second supplier.
  */
 async function alreadySaved(invoice: ExtractedInvoice): Promise<boolean> {
-  const normalizedName = normalize(invoice.vendor_name);
+  const normalizedName = normalizeName(invoice.vendor_name);
   const normalizedAddress = normalizeAddress(invoice.vendor_address ?? "");
   const normalizedTaxId = invoice.tax_id ? normalizeTaxId(invoice.tax_id) : null;
   const rows = await query(

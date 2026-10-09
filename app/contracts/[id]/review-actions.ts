@@ -78,14 +78,6 @@ export async function confirmContract(
       // Same identity rules as the invoice path, on purpose. Two definitions
       // of the same supplier is one too many, and the whole point of a
       // contract is to be found by the invoices that arrive against it.
-      //
-      // What it will not do is decide that for you. The normalised name a
-      // conflict fires on is a loose key, so a conflict is only taken as the
-      // same supplier when the printed names agree too. Anything else comes
-      // back as a message naming the supplier already saved, because a
-      // contract on the wrong supplier flags invoices from someone who never
-      // signed it and every rate still reads correctly. See
-      // lib/vendors/resolve.ts.
       const resolved = await resolveNewContractVendor(client, {
         name: vendorName,
         address: vendorAddress,

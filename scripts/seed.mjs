@@ -18,7 +18,7 @@ const { asExtraction, invoices, items, vendors } = await import("../lib/demo/dat
 const { contracts } = await import("../lib/demo/contracts.ts");
 const { contractPdf } = await import("../lib/demo/contract-pdf.ts");
 const { validateArithmetic } = await import("../lib/extract/validate.ts");
-const { normalizeAddress, normalizeTaxId } = await import("../lib/vendors/normalize.ts");
+const { normalizeAddress, normalizeName, normalizeTaxId } = await import("../lib/vendors/normalize.ts");
 
 const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
 if (!url) {
@@ -129,7 +129,7 @@ try {
         vendor.gstin,
         normalizeTaxId(vendor.gstin),
         vendor.name,
-        vendor.name.toLowerCase(),
+        normalizeName(vendor.name),
         vendor.address,
         normalizeAddress(vendor.address),
       ],

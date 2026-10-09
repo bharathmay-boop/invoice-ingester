@@ -63,3 +63,16 @@ test("two names in another script stay two names", () => {
   assert.equal(defaultVendorId(vendors, "三井 Ltd"), "mitsui");
   assert.equal(defaultVendorId(vendors, "ब्रह्म  Traders."), "bharat");
 });
+
+// Devanagari words are made of letters and combining marks. Dropping the marks
+// splits them into single letters, so only the letters of two different names
+// would be compared.
+test("combining marks stay in the key", () => {
+  assert.equal(normalizeName("ब्रह्म"), "ब्रह्म");
+  assert.notEqual(normalizeName("कि"), normalizeName("की"));
+});
+
+test("an address in another script keeps its words", () => {
+  assert.notEqual(normalizeAddress("東京都"), normalizeAddress("大阪府"));
+  assert.notEqual(normalizeAddress("東京都"), "");
+});

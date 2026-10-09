@@ -1,25 +1,19 @@
 import type pg from "pg";
 import { normalizeAddress, normalizeName, normalizeTaxId } from "./normalize.ts";
-import { normalize } from "../items/normalize.ts";
 
 /**
  * Resolve the supplier a reviewed contract is with, when the reviewer said the
  * supplier is new.
  *
- * This exists apart from the server action because it is the point where a
- * contract can end up attached to the wrong supplier, and that is only worth
- * trusting with a test on a real database behind it. The server action cannot
- * be reached from a test: it reads cookies.
- *
- * The reuse rule is the part that matters. `vendor.normalized_name` is built
- * with the item normaliser, which drops words like "quality" and sorts the
- * rest, so "Jain Quality Traders" and "Jain Traders" land on the same key and
- * the unique index treats them as one supplier. Reusing on that alone would
- * take a contract the reviewer said was for a new supplier and quietly attach
- * it to an existing one, renaming that supplier on the way through. So an
- * insert that conflicts is only accepted as the same supplier when the printed
- * names also match under `normalizeName`, and otherwise the reviewer is asked
- * to choose, by name, rather than guessed at.
+ * It lives apart from the server action so a test can reach it; the action
+ * reads cookies. With the current key a conflict is a real match, since two
+ * rows share a key only when the printed names are the same words (#217). The
+ * printed names are still compared on a tax-free conflict, because a row saved
+ * before the fix keeps its old key until `npm run rekey-vendors` has run, and
+ * an old key such as "jain traders" belongs to "Jain Quality Traders" too.
+ * Taking that as a match would attach the contract to, and rename, a supplier
+ * the reviewer never chose. So a mismatch is refused, naming the supplier
+ * already saved, and the choice is left to the person with the contract open.
  */
 export type VendorInput = {
   name: string;
@@ -34,12 +28,13 @@ type Client = Pick<pg.PoolClient, "query">;
 
 export async function resolveNewContractVendor(
   client: Client,
-  input: VendorInput,
+  { name, address, taxId, taxIdKind }: VendorInput,
 ): Promise<Resolved> {
-  const { name, address, taxId, taxIdKind } = input;
+  const normalizedName = normalizeName(name);
+  const normalizedAddress = normalizeAddress(address);
 
   // A tax registration is the supplier's identity, so a conflict on it is the
-  // same supplier by definition and the typed spelling wins. Unchanged.
+  // same supplier whatever the name says, and the typed spelling wins.
   if (taxId) {
     const rows = await client.query<{ id: string }>(
       `INSERT INTO vendor (tax_id, tax_id_kind, normalized_tax_id, name,
@@ -47,21 +42,10 @@ export async function resolveNewContractVendor(
        VALUES ($1,$2,$3,$4,$5,$6,$7)
        ON CONFLICT (tax_id_kind, normalized_tax_id) WHERE tax_id IS NOT NULL
        DO UPDATE SET name = EXCLUDED.name RETURNING id`,
-      [
-        taxId,
-        taxIdKind,
-        normalizeTaxId(taxId),
-        name,
-        normalize(name),
-        address || null,
-        normalizeAddress(address),
-      ],
+      [taxId, taxIdKind, normalizeTaxId(taxId), name, normalizedName, address || null, normalizedAddress],
     );
     return { ok: true, id: rows.rows[0].id };
   }
-
-  const normalizedName = normalize(name);
-  const normalizedAddress = normalizeAddress(address);
 
   const inserted = await client.query<{ id: string }>(
     `INSERT INTO vendor (name, normalized_name, address, normalized_address)
@@ -78,23 +62,19 @@ export async function resolveNewContractVendor(
     [normalizedName, normalizedAddress],
   );
   const row = existing.rows[0];
-  if (!row) {
-    return { ok: false, message: "That supplier could not be saved. Try again." };
-  }
+  if (!row) return { ok: false, message: "That supplier could not be saved. Try again." };
 
-  if (normalizeName(row.name) !== normalizeName(name)) {
+  if (normalizeName(row.name) !== normalizedName) {
     return {
       ok: false,
       message:
-        `"${row.name}" is already saved at this address, and this product cannot tell ` +
-        `it apart from "${name}". Saving would rename it and attach the contract to ` +
-        `it. Pick "${row.name}" from the supplier list if that is who signed this ` +
-        `contract, or give the new supplier an address that tells them apart.`,
+        `"${row.name}" is already saved at this address under an older key, and saving ` +
+        `"${name}" would rename it and attach the contract to it. Pick "${row.name}" ` +
+        `from the supplier list if that is who signed this contract, or run ` +
+        `rekey-vendors and try again.`,
     };
   }
 
-  // Same supplier, spelled differently. The reviewer has the contract open, so
-  // their spelling replaces the stored one.
   await client.query(`UPDATE vendor SET name = $2 WHERE id = $1`, [row.id, name]);
   return { ok: true, id: row.id };
 }
