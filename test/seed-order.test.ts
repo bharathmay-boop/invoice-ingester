@@ -31,3 +31,10 @@ test("every import that reaches the database comes after DATABASE_URL is set", (
     assert.ok(at > assignment, `${path} is imported before DATABASE_URL is set`);
   }
 });
+
+test("the seed locks every item name in one call, before the loop that saves lines (#229)", () => {
+  const lock = source.indexOf("await lockItemNames(client, matcherInvoice.lines.map(");
+  const loop = source.indexOf("for (const line of matcherInvoice.lines)");
+  assert.ok(lock > 0, "one lock call takes every line description");
+  assert.ok(loop > lock, "the lock call must come before the loop, not inside it");
+});

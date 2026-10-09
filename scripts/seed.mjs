@@ -39,7 +39,7 @@ process.env.DATABASE_URL = url;
 // After the assignment above, not with the other imports: save-line reaches
 // lib/db.ts through match.ts and the settings store, and db.ts builds its pool
 // the moment it is first imported, from whatever DATABASE_URL is then.
-const { saveLine } = await import("../lib/items/save-line.ts");
+const { lockItemNames, saveLine } = await import("../lib/items/save-line.ts");
 const { DEFAULT_LINK, DEFAULT_SUGGEST } = await import("../lib/items/match.ts");
 
 // Every invoice goes through the same checks a real extraction would, so the
@@ -251,6 +251,9 @@ try {
       JSON.stringify({ source: "demo-seed" }),
     ],
   );
+  // All names first, in one sorted order, as the invoice save does, so a seed
+  // running beside a save cannot wait on it while it waits on the seed (#229).
+  await lockItemNames(client, matcherInvoice.lines.map((l) => l.description));
   for (const line of matcherInvoice.lines) {
     await saveLine(
       client,

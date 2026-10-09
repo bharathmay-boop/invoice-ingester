@@ -412,6 +412,9 @@ test("two invoices saved together create a new item once, not twice (#223)", { s
     await b.query("COMMIT");
     assert.ok(saved.itemId);
   } finally {
+    // A failed assertion must not leave either transaction holding locks.
+    await a.query("ROLLBACK").catch(() => {});
+    await b.query("ROLLBACK").catch(() => {});
     a.release();
     b.release();
   }
@@ -422,17 +425,28 @@ test("two invoices saved together create a new item once, not twice (#223)", { s
   assert.equal(linked.length, 1);
 });
 
-test("two saves holding the same names in opposite order do not deadlock", { skip }, async () => {
-  const run = async (names: string[]) => {
+test("names are locked in one sorted order whatever order they arrive in", { skip }, async () => {
+  const taken: string[][] = [];
+  for (const names of [["Beta Widget", "Alpha Widget"], ["Alpha Widget", "Beta Widget"]]) {
     const client = await db!.pool.connect();
     try {
       await client.query("BEGIN");
+      const query = client.query.bind(client) as (...args: unknown[]) => Promise<unknown>;
+      const seen: string[] = [];
+      (client as unknown as { query: unknown }).query = (sql: unknown, params?: unknown[]) => {
+        if (typeof sql === "string" && sql.includes("pg_advisory_xact_lock")) seen.push(String(params?.[0]));
+        return query(sql, params);
+      };
       await saving!.lockItemNames(client, names);
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      await client.query("COMMIT");
+      taken.push(seen);
     } finally {
+      // The pool hands the same client out again, so the spy must not stay on it.
+      delete (client as unknown as { query?: unknown }).query;
+      await client.query("ROLLBACK").catch(() => {});
       client.release();
     }
-  };
-  await Promise.all([run(["Alpha Widget", "Beta Widget"]), run(["Beta Widget", "Alpha Widget"])]);
+  }
+  assert.deepEqual(taken[0], taken[1]);
+  assert.deepEqual(taken[0], [...taken[0]].sort());
+  assert.equal(taken[0].length, 2);
 });
