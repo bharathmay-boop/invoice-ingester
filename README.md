@@ -21,6 +21,10 @@ Upload a PDF or a photo. One file can hold several invoices, and a five page PDF
 
 ![The upload screen, with a file being read](docs/screenshots/upload.png)
 
+The review screen. The original sits beside what was read from it, and the total here is Rs377.74 more than the lines and taxes add up to, so the draft waits for a person instead of becoming an invoice.
+
+![The review screen: the invoice image beside the extracted fields, with a total that does not add up](docs/screenshots/review.png)
+
 An item, with what it has cost over time, the cheapest vendor, and the names a person has taught the matcher.
 
 ![An item screen: total paid, current price, cheapest vendor, and a price line](docs/screenshots/price-history.png)
