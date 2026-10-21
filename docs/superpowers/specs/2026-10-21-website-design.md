@@ -32,8 +32,9 @@ An audit of the live home page found:
 
 - The sign-in page gets a "Try the demo" button. It sets a session whose signed payload carries a `demo` role, signed and revocable exactly like the owner's session (bound to the expiry and the password).
 - The proxy rejects any non-GET request from a demo session with 403, except signing out. Server actions are POSTs, so this one check covers routes and actions alike.
+- Allowing every GET is safe only while no GET handler changes anything. A test lists every GET route handler and fails when a new one appears, so each new one is checked against this rule.
 - The settings page does not render for a demo session, so no paid model call can start from a demo.
-- Machine routes (cron, worker, Blob callback) are unchanged.
+- Machine routes (cron, worker, Blob callback) are unchanged. Each checks its own secret or signature, so a demo cookie gets nothing from them.
 - Tests: a demo session gets 403 on each write route and on a server action POST, settings is unreachable, an owner session still writes, a tampered role is rejected, the machine route exemptions still reach their handlers.
 - Auth changes, so the security-audit skill runs again afterwards.
 
@@ -63,7 +64,7 @@ Matches the home page. Two ways in: the password, and Try the demo, with one lin
 
 - `motion` added as a dependency, with one shared `Reveal` component (fade up plus stagger on entering the viewport) and hover and press micro-animations on cards and buttons.
 - Every animation is skipped under `prefers-reduced-motion`.
-- The hero keeps its own CSS animation.
+- The hero keeps its own CSS animation, which already stops under reduced motion (`motion-safe` and `motion-reduce:animate-none`).
 
 ## 6. Copy
 
