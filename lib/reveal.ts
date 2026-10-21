@@ -16,5 +16,10 @@ export function revealMotion({ delay = 0 }: { delay?: number } = {}) {
   };
 }
 
-/** Beats motion's inline styles, so a reduced motion visitor never sees it hidden or moving. */
-export const STILL_UNDER_REDUCED_MOTION = "motion-reduce:opacity-100! motion-reduce:transform-none!";
+/**
+ * Beats motion's inline styles, so a reduced motion visitor never sees it
+ * hidden or moving, and a visitor without JavaScript, for whom nothing would
+ * ever animate the section in, still sees it.
+ */
+export const SHOWN_WITHOUT_ANIMATION =
+  "motion-reduce:opacity-100! motion-reduce:transform-none! noscript:opacity-100! noscript:transform-none!";

@@ -3,12 +3,19 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { revealMotion, STILL_UNDER_REDUCED_MOTION } from "../lib/reveal.ts";
+import { revealMotion, SHOWN_WITHOUT_ANIMATION } from "../lib/reveal.ts";
 
 test("a reduced motion visitor is forced visible and still by CSS, from the first paint", () => {
   // motion writes opacity and transform inline, so only !important beats it.
-  assert.match(STILL_UNDER_REDUCED_MOTION, /motion-reduce:opacity-100!/);
-  assert.match(STILL_UNDER_REDUCED_MOTION, /motion-reduce:transform-none!/);
+  assert.match(SHOWN_WITHOUT_ANIMATION, /motion-reduce:opacity-100!/);
+  assert.match(SHOWN_WITHOUT_ANIMATION, /motion-reduce:transform-none!/);
+});
+
+test("a visitor without JavaScript still sees every section", () => {
+  // The server renders the hidden starting state inline, and without scripts
+  // nothing ever animates it in. Kimi K2.5 review on #252.
+  assert.match(SHOWN_WITHOUT_ANIMATION, /noscript:opacity-100!/);
+  assert.match(SHOWN_WITHOUT_ANIMATION, /noscript:transform-none!/);
 });
 
 test("everyone else gets a short fade up, once, as it enters the viewport", () => {

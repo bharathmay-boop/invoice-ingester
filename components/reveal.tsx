@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import { revealMotion, STILL_UNDER_REDUCED_MOTION } from "@/lib/reveal.ts";
+import { revealMotion, SHOWN_WITHOUT_ANIMATION } from "@/lib/reveal.ts";
 import { cn } from "@/lib/utils";
 
 /**
@@ -18,7 +18,7 @@ export function Reveal({
   className?: string;
 }) {
   return (
-    <motion.div className={cn(STILL_UNDER_REDUCED_MOTION, className)} {...revealMotion({ delay })}>
+    <motion.div className={cn(SHOWN_WITHOUT_ANIMATION, className)} {...revealMotion({ delay })}>
       {children}
     </motion.div>
   );
