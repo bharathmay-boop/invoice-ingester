@@ -5,17 +5,26 @@ import { test } from "node:test";
 
 import { revealMotion, SHOWN_WITHOUT_ANIMATION } from "../lib/reveal.ts";
 
-test("a reduced motion visitor is forced visible and still by CSS, from the first paint", () => {
+// Compiled with Tailwind itself, since a class it does not know is dropped
+// silently and a string check would still pass. Kimi K2.5 review on #252.
+const { compile } = await import("tailwindcss");
+const css = (await compile("@tailwind utilities;")).build(SHOWN_WITHOUT_ANIMATION.split(" "));
+
+function forcedUnder(media: string) {
+  const block = css.split("@media").find((b) => b.startsWith(` (${media})`)) ?? "";
   // motion writes opacity and transform inline, so only !important beats it.
-  assert.match(SHOWN_WITHOUT_ANIMATION, /motion-reduce:opacity-100!/);
-  assert.match(SHOWN_WITHOUT_ANIMATION, /motion-reduce:transform-none!/);
+  assert.match(block, /opacity: 100% !important/, media);
+  assert.match(block, /transform: none !important/, media);
+}
+
+test("a reduced motion visitor is forced visible and still by CSS, from the first paint", () => {
+  forcedUnder("prefers-reduced-motion: reduce");
 });
 
 test("a visitor without JavaScript still sees every section", () => {
   // The server renders the hidden starting state inline, and without scripts
-  // nothing ever animates it in. Kimi K2.5 review on #252.
-  assert.match(SHOWN_WITHOUT_ANIMATION, /noscript:opacity-100!/);
-  assert.match(SHOWN_WITHOUT_ANIMATION, /noscript:transform-none!/);
+  // nothing ever animates it in.
+  forcedUnder("scripting: none");
 });
 
 test("everyone else gets a short fade up, once, as it enters the viewport", () => {
