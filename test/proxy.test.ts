@@ -121,6 +121,53 @@ test("an expired session is treated as no session", async () => {
   assert.equal(await status("/settings", "GET", expired), 307);
 });
 
+// --- the read-only demo session (#233) --------------------------------------
+
+const { mintDemoSession } = await import("../lib/auth.ts");
+const demo = await mintDemoSession();
+
+test("a demo session reads every page and API route except settings", async () => {
+  for (const path of ["/items", "/vendors/abc", "/invoices", "/contracts/1", "/findings", "/api/original"]) {
+    for (const method of READ_METHODS) {
+      assert.equal(await status(path, method, demo), 200, `${method} ${path}`);
+    }
+  }
+});
+
+test("a demo session cannot write anything, route or server action", async () => {
+  // Server actions are POSTs to the page's own path, so a page path stands in
+  // for every action on it.
+  for (const path of ["/api/invoices", "/api/extract", "/api/upload", "/api/contracts/start", "/review/1", "/items/1", "/suggestions", "/settings"]) {
+    for (const method of WRITE_METHODS) {
+      assert.equal(await status(path, method, demo), 403, `${method} ${path}`);
+    }
+  }
+  const response = await proxy(request("/api/invoices", "POST", demo));
+  assert.deepEqual(await response.json(), { error: "The demo is read only." });
+});
+
+test("a demo session never sees settings, where the paid keys live", async () => {
+  const response = await proxy(request("/settings", "GET", demo));
+  assert.equal(response.status, 307);
+  assert.equal(new URL(response.headers.get("location") ?? "").pathname, "/");
+});
+
+test("a demo visitor can still sign out, and an owner can still write", async () => {
+  assert.equal(await status("/api/session", "DELETE", demo), 200);
+  assert.equal(await status("/api/invoices", "POST", session), 200);
+});
+
+test("the machine routes are untouched by a demo cookie", async () => {
+  // Each checks its own secret, so the proxy passes them through whatever cookie comes along.
+  assert.equal(await status("/api/contracts/worker", "POST", demo), 200);
+  assert.equal(await status("/api/contracts/upload", "POST", demo), 200);
+});
+
+test("taking a demo session is reachable while signed out", async () => {
+  // The route itself only sets mintDemoSession's token, which the auth tests cover.
+  assert.equal(await status("/api/session/demo", "POST"), 200);
+});
+
 // --- where sign in sends you afterwards ------------------------------------
 
 const { safeNext } = await import("../lib/next-path.ts");
@@ -154,4 +201,23 @@ test("the return path can only ever be a page on this site", () => {
 test("a return path keeps its query and fragment", () => {
   assert.equal(safeNext("/items?q=a%20b#top"), "/items?q=a%20b#top");
   assert.equal(safeNext("/"), "/");
+});
+
+// --- a demo session may make any GET, so no GET may change anything ----------
+
+const { readdirSync, readFileSync } = await import("node:fs");
+
+test("every GET route handler is one that was checked to change nothing", () => {
+  // A new GET handler fails this until someone confirms it only reads, or
+  // guards itself like the cron sweep. Kimi K2.5 review on #250.
+  const checked = [
+    "app/api/contracts/sweep/route.ts", // cron only, behind CRON_SECRET
+    "app/api/original/route.ts", // streams a stored file, writes nothing
+  ];
+  const withGet = (readdirSync("app", { recursive: true }) as string[])
+    .map((f) => `app/${f.replaceAll("\\", "/")}`)
+    .filter((f) => /\/route\.tsx?$/.test(f))
+    .filter((f) => /export\s+(async\s+)?(function|const)\s+GET\b/.test(readFileSync(f, "utf8")))
+    .sort();
+  assert.deepEqual(withGet, checked);
 });

@@ -6,7 +6,7 @@ import { cookies } from "next/headers";
 import { Nav } from "./nav.tsx";
 import { ThemeProvider } from "./theme-provider.tsx";
 import { Analytics } from "./analytics-provider.tsx";
-import { isValidSession, sessionCookie } from "@/lib/auth.ts";
+import { canRead, sessionCookie } from "@/lib/auth.ts";
 import { countFindings, countWaitingSuggestions } from "@/lib/queries.ts";
 
 const geistSans = Geist({
@@ -26,7 +26,8 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const jar = await cookies();
-  const signedIn = await isValidSession(jar.get(sessionCookie.name)?.value);
+  // The demo gets the nav and the counts too: it can read everything (#233).
+  const signedIn = await canRead(jar.get(sessionCookie.name)?.value);
   // Only asked for when it can be shown, so a signed out visitor does not
   // cost a query for a number they never see.
   const [[waiting], [findings]] = signedIn

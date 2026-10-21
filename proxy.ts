@@ -6,7 +6,7 @@
 // product, so the home page carries the story and the app is for whoever signs
 // in.
 import { NextResponse, type NextRequest } from "next/server.js";
-import { isValidSession, sessionCookie } from "./lib/auth.ts";
+import { sessionRole, sessionCookie } from "./lib/auth.ts";
 
 // Signing in has to be reachable while signed out, or there is no way in.
 const ALWAYS_OPEN = ["/api/session"];
@@ -22,6 +22,8 @@ const MACHINE_ROUTES = new Set([
   "/api/contracts/upload",
 ]);
 
+const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
 function isUnder(pathname: string, prefixes: string[]): boolean {
   return prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
@@ -33,10 +35,20 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const authenticated = await isValidSession(
-    request.cookies.get(sessionCookie.name)?.value,
-  );
-  if (authenticated) return NextResponse.next();
+  const role = await sessionRole(request.cookies.get(sessionCookie.name)?.value);
+  if (role === "owner") return NextResponse.next();
+
+  // The demo looks at everything and changes nothing. Server actions are POSTs
+  // to the page's own path, so refusing every method that is not a read covers
+  // actions and API routes in one place. Settings is where the paid keys are,
+  // so it is not shown at all (#233).
+  if (role === "demo") {
+    if (!READ_METHODS.has(request.method)) {
+      return NextResponse.json({ error: "The demo is read only." }, { status: 403 });
+    }
+    if (isUnder(pathname, ["/settings"])) return NextResponse.redirect(new URL("/", request.url));
+    return NextResponse.next();
+  }
 
   // The home page is matched exactly, since as a prefix "/" would match
   // everything. /login keeps its prefix so its own assets come with it.

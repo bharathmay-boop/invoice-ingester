@@ -1,0 +1,23 @@
+import { NextResponse, type NextRequest } from "next/server.js";
+import { demoSessionFor, sessionCookie } from "@/lib/auth.ts";
+
+export const runtime = "nodejs";
+
+/**
+ * Anyone can take a demo session. It costs nothing to issue and can only read
+ * the seeded, invented data, since the proxy refuses its writes (#233).
+ *
+ * ponytail: no switch to turn this off. Production holds only demo data until
+ * accounts (#174); the day it holds real invoices, this route has to go first.
+ */
+export async function POST(request: NextRequest) {
+  const token = await demoSessionFor(request.cookies.get(sessionCookie.name)?.value);
+  if (!token) return NextResponse.json({ error: "You are already signed in." }, { status: 409 });
+
+  const response = NextResponse.json({ ok: true });
+  response.cookies.set(sessionCookie.name, token, {
+    ...sessionCookie.options,
+    maxAge: sessionCookie.maxAge,
+  });
+  return response;
+}

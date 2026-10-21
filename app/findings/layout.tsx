@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
-import { isValidSession, sessionCookie } from "@/lib/auth.ts";
+import { canRead, sessionCookie } from "@/lib/auth.ts";
 import { findingTotals, listFindings } from "@/lib/queries.ts";
 import { FindingsList } from "./findings-list.tsx";
 
@@ -16,7 +16,7 @@ export const metadata = { title: "Findings" };
  */
 export default async function FindingsLayout({ children }: { children: React.ReactNode }) {
   const jar = await cookies();
-  if (!(await isValidSession(jar.get(sessionCookie.name)?.value))) notFound();
+  if (!(await canRead(jar.get(sessionCookie.name)?.value))) notFound();
 
   const [findings, totals] = await Promise.all([listFindings(), findingTotals()]);
 

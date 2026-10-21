@@ -1,7 +1,7 @@
 import { get } from "@vercel/blob";
 import { NextResponse, type NextRequest } from "next/server.js";
 import { cookies } from "next/headers";
-import { isValidSession, sessionCookie } from "@/lib/auth.ts";
+import { canRead, sessionCookie } from "@/lib/auth.ts";
 import { query } from "@/lib/db.ts";
 
 export const runtime = "nodejs";
@@ -15,7 +15,7 @@ export const runtime = "nodejs";
  */
 export async function GET(request: NextRequest) {
   const jar = await cookies();
-  if (!(await isValidSession(jar.get(sessionCookie.name)?.value))) {
+  if (!(await canRead(jar.get(sessionCookie.name)?.value))) {
     return NextResponse.json({ error: "Sign in to view the original." }, { status: 401 });
   }
 
