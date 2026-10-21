@@ -61,41 +61,82 @@ function fromBase64Url(value: string): Uint8Array<ArrayBuffer> {
  * stored, so sign out alone cannot reach a copied cookie; a password change can.
  * The password only goes into the HMAC and never into the token itself.
  */
-function signedPayload(expiry: string): Uint8Array<ArrayBuffer> {
+function signedPayload(expiry: string, role: SessionRole): Uint8Array<ArrayBuffer> {
   const password = process.env.ADMIN_PASSWORD;
   if (!password) throw new Error("ADMIN_PASSWORD is not set");
-  return encoder.encode(`${expiry}.${password}`);
+  // The owner's payload is unchanged from before the demo existed, so sessions
+  // already issued stay valid. The demo's starts with a word where the owner's
+  // starts with digits, so neither signature can stand in for the other.
+  return encoder.encode(role === "demo" ? `${DEMO}.${expiry}.${password}` : `${expiry}.${password}`);
 }
 
-/** `<expiry>.<signature>`. */
-export async function mintSession(now = Date.now()): Promise<string> {
+/**
+ * The owner can do everything. The demo reads the seeded data and nothing
+ * else: the proxy refuses its writes and hides settings (#233).
+ */
+export type SessionRole = "owner" | "demo";
+
+const DEMO = "demo";
+
+async function mint(role: SessionRole, now: number): Promise<string> {
   const expiry = String(Math.floor(now / 1000) + TTL_SECONDS);
   const signature = await crypto.subtle.sign(
     "HMAC",
     await signingKey(),
-    signedPayload(expiry),
+    signedPayload(expiry, role),
   );
-  return `${expiry}.${toBase64Url(signature)}`;
+  const token = `${expiry}.${toBase64Url(signature)}`;
+  return role === "demo" ? `${DEMO}.${token}` : token;
 }
 
+/** `<expiry>.<signature>`. */
+export function mintSession(now = Date.now()): Promise<string> {
+  return mint("owner", now);
+}
+
+/** `demo.<expiry>.<signature>`, with the role inside the signature too. */
+export function mintDemoSession(now = Date.now()): Promise<string> {
+  return mint("demo", now);
+}
+
+/**
+ * True only for the owner. Every write guard in the app asks this, so a demo
+ * session fails all of them even if the proxy were ever bypassed.
+ */
 export async function isValidSession(
   token: string | undefined,
   now = Date.now(),
 ): Promise<boolean> {
-  if (!token) return false;
+  return (await sessionRole(token, now)) === "owner";
+}
+
+/** Owner or demo: anyone allowed to look at the data. */
+export async function canRead(token: string | undefined, now = Date.now()): Promise<boolean> {
+  return (await sessionRole(token, now)) !== null;
+}
+
+/** Which kind of session a cookie holds, or null for none. */
+export async function sessionRole(
+  token: string | undefined,
+  now = Date.now(),
+): Promise<SessionRole | null> {
+  if (!token) return null;
+
+  const role: SessionRole = token.startsWith(`${DEMO}.`) ? "demo" : "owner";
+  if (role === "demo") token = token.slice(DEMO.length + 1);
 
   const separator = token.indexOf(".");
-  if (separator < 1) return false;
+  if (separator < 1) return null;
 
   const expiry = token.slice(0, separator);
   const signature = token.slice(separator + 1);
-  if (!/^\d+$/.test(expiry) || !signature) return false;
+  if (!/^\d+$/.test(expiry) || !signature) return null;
 
   let signatureBytes: Uint8Array<ArrayBuffer>;
   try {
     signatureBytes = fromBase64Url(signature);
   } catch {
-    return false;
+    return null;
   }
 
   // Signature first, expiry second. Checking the expiry of an unverified token
@@ -104,11 +145,11 @@ export async function isValidSession(
     "HMAC",
     await signingKey(),
     signatureBytes,
-    signedPayload(expiry),
+    signedPayload(expiry, role),
   );
-  if (!verified) return false;
+  if (!verified) return null;
 
-  return Number(expiry) > Math.floor(now / 1000);
+  return Number(expiry) > Math.floor(now / 1000) ? role : null;
 }
 
 /**

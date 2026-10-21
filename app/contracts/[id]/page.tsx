@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
-import { isValidSession, sessionCookie } from "@/lib/auth.ts";
+import { canRead, sessionCookie } from "@/lib/auth.ts";
 import { getContract } from "@/lib/queries.ts";
 import { formatDate, money } from "@/lib/format.ts";
 import { Empty, Page } from "../../ui.tsx";
@@ -25,7 +25,7 @@ const TERM: Record<string, string> = {
 export default async function Contract({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const jar = await cookies();
-  if (!(await isValidSession(jar.get(sessionCookie.name)?.value))) notFound();
+  if (!(await canRead(jar.get(sessionCookie.name)?.value))) notFound();
 
   const contract = await getContract(id);
   if (!contract) notFound();
