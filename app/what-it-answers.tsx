@@ -41,19 +41,21 @@ export function WhatItAnswers() {
       }}
     >
       {/*
-        Scrolls sideways rather than wrapping. Three questions this long wrap
-        to three stacked rows on a phone, which reads as a broken button group
-        rather than as a set of tabs.
+        A 2 by 2 grid on a phone. The sideways scroll this replaced hid three
+        of the four questions off screen, so most visitors saw one (#239).
+        From sm up there is room for one row.
       */}
-      <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-        <TabsList className="w-max">
-          {QUESTIONS.map((q) => (
-            <TabsTrigger key={q.key} value={q.key} className="text-xs sm:text-sm">
-              {q.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </div>
+      <TabsList className="grid w-full grid-cols-2 gap-1 group-data-horizontal/tabs:h-auto sm:inline-flex sm:w-max sm:gap-0 sm:group-data-horizontal/tabs:h-8">
+        {QUESTIONS.map((q) => (
+          <TabsTrigger
+            key={q.key}
+            value={q.key}
+            className="h-full min-h-10 whitespace-normal px-2 py-1.5 text-xs leading-snug sm:min-h-0 sm:whitespace-nowrap sm:text-sm"
+          >
+            {q.label}
+          </TabsTrigger>
+        ))}
+      </TabsList>
 
       <div className="border-border bg-card mt-4 rounded-xl border p-5 sm:p-6">
         <TabsContent value="contract">
