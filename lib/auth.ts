@@ -100,6 +100,18 @@ export function mintDemoSession(now = Date.now()): Promise<string> {
 }
 
 /**
+ * A demo session for whoever asks, except an owner who is already signed in.
+ * A cross-site form posting to the demo route would otherwise quietly swap the
+ * owner's session for a read only one. Null means keep the cookie they have.
+ */
+export async function demoSessionFor(
+  current: string | undefined,
+  now = Date.now(),
+): Promise<string | null> {
+  return (await isValidSession(current, now)) ? null : mintDemoSession(now);
+}
+
+/**
  * True only for the owner. Every write guard in the app asks this, so a demo
  * session fails all of them even if the proxy were ever bypassed.
  */

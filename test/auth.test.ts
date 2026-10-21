@@ -152,3 +152,17 @@ test("a demo session expires and ends with a password change like any other", as
     process.env.ADMIN_PASSWORD = saved;
   }
 });
+
+// A cross-site form can POST to the demo route with the owner's cookie attached
+// on a top level navigation. Without this check that silently swaps the owner's
+// session for a read only one. Kimi K2.5 review on #251.
+const { demoSessionFor } = await import("../lib/auth.ts");
+
+test("a signed in owner is never swapped onto a demo session", async () => {
+  assert.equal(await demoSessionFor(await mintSession(NOW), NOW), null);
+
+  const stranger = await demoSessionFor(undefined, NOW);
+  assert.equal(await sessionRole(stranger!, NOW), "demo");
+  const expiredDemo = await demoSessionFor(await mintDemoSession(NOW - 30 * DAY), NOW);
+  assert.equal(await sessionRole(expiredDemo!, NOW), "demo");
+});

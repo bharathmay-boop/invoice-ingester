@@ -202,3 +202,22 @@ test("a return path keeps its query and fragment", () => {
   assert.equal(safeNext("/items?q=a%20b#top"), "/items?q=a%20b#top");
   assert.equal(safeNext("/"), "/");
 });
+
+// --- a demo session may make any GET, so no GET may change anything ----------
+
+const { readdirSync, readFileSync } = await import("node:fs");
+
+test("every GET route handler is one that was checked to change nothing", () => {
+  // A new GET handler fails this until someone confirms it only reads, or
+  // guards itself like the cron sweep. Kimi K2.5 review on #250.
+  const checked = [
+    "app/api/contracts/sweep/route.ts", // cron only, behind CRON_SECRET
+    "app/api/original/route.ts", // streams a stored file, writes nothing
+  ];
+  const withGet = (readdirSync("app", { recursive: true }) as string[])
+    .map((f) => `app/${f.replaceAll("\\", "/")}`)
+    .filter((f) => /\/route\.tsx?$/.test(f))
+    .filter((f) => /export\s+(async\s+)?(function|const)\s+GET\b/.test(readFileSync(f, "utf8")))
+    .sort();
+  assert.deepEqual(withGet, checked);
+});
