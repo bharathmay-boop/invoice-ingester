@@ -2,6 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Reveal } from "@/components/reveal.tsx";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { FlowHero } from "./flow-hero.tsx";
 import { HomeWalkthrough } from "./home-walkthrough.tsx";
@@ -77,25 +78,29 @@ export default async function Home() {
       <Separator />
 
       <section id="how" className="mx-auto w-full max-w-6xl scroll-mt-8 px-4 py-12 sm:px-6">
-        <h2 className="text-2xl font-semibold tracking-tight">How it works</h2>
-        <p className="text-muted-foreground mt-2 max-w-2xl text-sm leading-relaxed">
-          What happens to a file before it counts.
-        </p>
-        <div className="mt-6">
+        <Reveal>
+          <h2 className="text-2xl font-semibold tracking-tight">How it works</h2>
+          <p className="text-muted-foreground mt-2 max-w-2xl text-sm leading-relaxed">
+            What happens to a file before it counts.
+          </p>
+        </Reveal>
+        <Reveal delay={0.1} className="mt-6">
           <HomeWalkthrough />
-        </div>
+        </Reveal>
       </section>
 
       <Separator />
 
       <section className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6">
-        <h2 className="text-2xl font-semibold tracking-tight">What it answers</h2>
-        <p className="text-muted-foreground mt-2 max-w-2xl text-sm leading-relaxed">
-          Pick a question.
-        </p>
-        <div className="mt-6">
+        <Reveal>
+          <h2 className="text-2xl font-semibold tracking-tight">What it answers</h2>
+          <p className="text-muted-foreground mt-2 max-w-2xl text-sm leading-relaxed">
+            Pick a question.
+          </p>
+        </Reveal>
+        <Reveal delay={0.1} className="mt-6">
           <WhatItAnswers />
-        </div>
+        </Reveal>
       </section>
 
       {!signedIn && (
