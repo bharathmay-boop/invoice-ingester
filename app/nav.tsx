@@ -5,7 +5,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { capture } from "./analytics-provider.tsx";
-import { COUNTED, NAV_LINKS } from "./nav-links.ts";
+import type { SessionRole } from "@/lib/auth.ts";
+import { COUNTED, linksFor } from "./nav-links.ts";
 
 function SignOut() {
   const router = useRouter();
@@ -51,22 +52,22 @@ function SignOut() {
 }
 
 export function Nav({
-  signedIn,
+  role,
   waiting = 0,
   findings = 0,
 }: {
-  signedIn: boolean;
+  role: SessionRole | null;
   waiting?: number;
   findings?: number;
 }) {
   const counts: Record<string, number> = { "/suggestions": waiting, "/findings": findings };
   const pathname = usePathname();
 
-  // Signed out, none of these exist: the proxy sends every one of them to the
-  // sign in page. Linking them would promise screens that bounce, and Next
-  // prefetches, so it would also fire a redirect on every page load before
-  // anyone clicked anything.
-  const links = signedIn ? [...NAV_LINKS, { href: "/settings", label: "Settings" }] : [];
+  // Linking a screen the proxy would bounce promises something that is not
+  // there, and Next prefetches, so it would also fire a redirect on every page
+  // load before anyone clicked anything.
+  const links = linksFor(role);
+  const signedIn = role !== null;
 
   return (
     <header className="border-b border-black/10 dark:border-white/15">

@@ -1,4 +1,6 @@
 import { notFound } from "next/navigation";
+import { cookies } from "next/headers";
+import { sessionRole, sessionCookie } from "@/lib/auth.ts";
 import { query } from "@/lib/db.ts";
 import { upgradeStoredInvoice } from "@/lib/extract/stored.ts";
 import { originalHref, originalSrc } from "@/lib/original.ts";
@@ -56,6 +58,11 @@ export default async function Review({ params }: { params: Promise<{ id: string 
      LIMIT 1`,
     [draft.blob_url, draft.id],
   );
+
+  // The proxy already turns away anyone signed out; this page does not rely on it.
+  const role = await sessionRole((await cookies()).get(sessionCookie.name)?.value);
+  if (!role) notFound();
+  const demo = role === "demo";
 
   const original = originalSrc(draft.blob_url);
   // The browser's PDF viewer opens at a page given in the fragment, so the
@@ -126,6 +133,9 @@ export default async function Review({ params }: { params: Promise<{ id: string 
             Everything here is editable. Nothing is stored until you save.
           </p>
           <div className="mt-3">
+            {/* A demo session sees the screen as the owner would, with every
+              control disabled rather than left to fail with a 403 (#234). */}
+            <fieldset disabled={demo} className="min-w-0">
             <ReviewForm
               draftId={draft.id}
               initial={draft.extracted}
@@ -135,6 +145,7 @@ export default async function Review({ params }: { params: Promise<{ id: string 
               warnings={draft.discrepancies.filter(isValidityWarning).map(describeDiscrepancy)}
               nextHref={next ? `/review/${next.id}` : null}
             />
+            </fieldset>
           </div>
         </div>
       </div>

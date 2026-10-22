@@ -6,7 +6,8 @@ import { cookies } from "next/headers";
 import { Nav } from "./nav.tsx";
 import { ThemeProvider } from "./theme-provider.tsx";
 import { Analytics } from "./analytics-provider.tsx";
-import { canRead, sessionCookie } from "@/lib/auth.ts";
+import { sessionRole, sessionCookie } from "@/lib/auth.ts";
+import { DemoBar } from "./demo-bar.tsx";
 import { countFindings, countWaitingSuggestions } from "@/lib/queries.ts";
 
 const geistSans = Geist({
@@ -27,7 +28,8 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const jar = await cookies();
   // The demo gets the nav and the counts too: it can read everything (#233).
-  const signedIn = await canRead(jar.get(sessionCookie.name)?.value);
+  const role = await sessionRole(jar.get(sessionCookie.name)?.value);
+  const signedIn = role !== null;
   // Only asked for when it can be shown, so a signed out visitor does not
   // cost a query for a number they never see.
   const [[waiting], [findings]] = signedIn
@@ -46,7 +48,8 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <ThemeProvider>
           <Suspense>
             <Analytics>
-              <Nav signedIn={signedIn} waiting={waiting.n} findings={findings.n} />
+              {role === "demo" && <DemoBar />}
+              <Nav role={role} waiting={waiting.n} findings={findings.n} />
               {children}
             </Analytics>
           </Suspense>
