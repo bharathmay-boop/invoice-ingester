@@ -31,3 +31,9 @@ test("sharp is past the librsvg advisory GHSA-wq5f-xc86-pv6w (#253)", () => {
   assert.ok(sharp, "sharp is not at the top of the lockfile; check where it moved");
   assert.ok(atLeast(sharp.version, "0.35.5"), `sharp ${sharp.version} is below 0.35.5`);
 });
+
+test("next is past the remote code execution advisories GHSA-2464-fhr4-w9xw and GHSA-673q-mjm6-r5xr (#260)", () => {
+  const next = lock.packages["node_modules/next"];
+  assert.ok(next, "next is not at the top of the lockfile; check where it moved");
+  assert.ok(atLeast(next.version, "16.4.2"), `next ${next.version} is below 16.4.2`);
+});
