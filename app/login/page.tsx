@@ -3,7 +3,8 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { capture } from "../analytics-provider.tsx";
-import { demoLanding, safeNext } from "@/lib/next-path.ts";
+import { safeNext } from "@/lib/next-path.ts";
+import { TryDemo } from "../try-demo.tsx";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,11 +17,11 @@ export default function Login() {
   const next = safeNext(rawNext);
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"owner" | "demo" | null>(null);
+  const [busy, setBusy] = useState(false);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    setBusy("owner");
+    setBusy(true);
     setError(null);
 
     let response: Response;
@@ -34,7 +35,7 @@ export default function Login() {
       // A rejected fetch never reaches the branches below, so without this the
       // form stays disabled on "Signing in…" and the only way out is a reload.
       setError("Could not reach the server. Check your connection and try again.");
-      setBusy(null);
+      setBusy(false);
       return;
     }
 
@@ -47,24 +48,7 @@ export default function Login() {
 
     const body = await response.json().catch(() => ({}));
     setError(body.error ?? "Could not sign in.");
-    setBusy(null);
-  }
-
-  async function tryDemo() {
-    setBusy("demo");
-    setError(null);
-    try {
-      const response = await fetch("/api/session/demo", { method: "POST" });
-      // 409 means the owner is already signed in, which is a way in too.
-      if (!response.ok && response.status !== 409) throw new Error();
-    } catch {
-      setError("Could not start the demo. Check your connection and try again.");
-      setBusy(null);
-      return;
-    }
-    capture("demo_started");
-    router.push(demoLanding(rawNext));
-    router.refresh();
+    setBusy(false);
   }
 
   return (
@@ -78,9 +62,7 @@ export default function Login() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
-          <Button size="lg" onClick={tryDemo} disabled={busy !== null}>
-            {busy === "demo" ? "Opening the demo…" : "Try the demo"}
-          </Button>
+          <TryDemo next={rawNext} className="w-full" />
 
           <div className="flex items-center gap-3">
             <Separator className="flex-1" />
@@ -101,8 +83,8 @@ export default function Login() {
               aria-describedby={error ? "password-error" : undefined}
               aria-invalid={error ? true : undefined}
             />
-            <Button type="submit" variant="outline" disabled={busy !== null || !password}>
-              {busy === "owner" ? "Signing in…" : "Sign in"}
+            <Button type="submit" variant="outline" disabled={busy || !password}>
+              {busy ? "Signing in…" : "Sign in"}
             </Button>
           </form>
 

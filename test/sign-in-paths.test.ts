@@ -22,6 +22,8 @@ test("a demo visitor sent here from a screen goes back to it, and only on this s
 test("the page offers both ways in", () => {
   const page = readFileSync("app/login/page.tsx", "utf8");
   assert.match(page, /fetch\("\/api\/session", \{\s*method: "POST"/);
-  assert.match(page, /fetch\("\/api\/session\/demo", \{ method: "POST" \}\)/);
-  assert.match(page, /Try the demo/);
+  assert.match(page, /<TryDemo next=\{rawNext\}/);
+  const button = readFileSync("app/try-demo.tsx", "utf8");
+  assert.match(button, /fetch\("\/api\/session\/demo", \{ method: "POST" \}\)/);
+  assert.match(button, /router\.push\(demoLanding\(next\)\)/);
 });
