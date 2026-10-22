@@ -1,14 +1,24 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { CheckIcon, FileTextIcon, PauseIcon, PlayIcon, TriangleAlertIcon } from "lucide-react";
+import {
+  ArrowRightIcon,
+  CheckIcon,
+  FileTextIcon,
+  PauseIcon,
+  PlayIcon,
+  TriangleAlertIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { rowDelay, STEPS } from "./walkthrough-steps.ts";
 
 /**
- * The two things that happen to a file before it counts, shown rather than
- * described: a file being read, and a figure being caught.
+ * The four things that happen to a file before it counts, shown rather than
+ * described: it is read, its arithmetic is checked, its lines and vendor are
+ * matched to what is already known, and its rates are checked against the
+ * contract (#238).
  *
  * What you can then ask of it used to be a third panel here, and it drew the
  * same price history the questions section below draws. One of the two had to
@@ -21,7 +31,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
  * so, so nobody mistakes it for real spending.
  */
 
-const STAGES = ["Read it", "Check it"] as const;
+const STAGES = STEPS;
 type Stage = (typeof STAGES)[number];
 
 const HOLD_MS = 4200;
@@ -92,14 +102,24 @@ export function HomeWalkthrough() {
           </Button>
         </div>
 
-        <TabsContent value="Read it" className="mt-4">
+        <TabsContent value="Read" className="mt-4">
           <Panel>
             <ReadIt />
           </Panel>
         </TabsContent>
-        <TabsContent value="Check it" className="mt-4">
+        <TabsContent value="Check" className="mt-4">
           <Panel>
             <CheckIt />
+          </Panel>
+        </TabsContent>
+        <TabsContent value="Match" className="mt-4">
+          <Panel>
+            <MatchIt />
+          </Panel>
+        </TabsContent>
+        <TabsContent value="Contract" className="mt-4">
+          <Panel>
+            <ContractIt />
           </Panel>
         </TabsContent>
       </Tabs>
@@ -156,7 +176,7 @@ function ReadIt() {
           <li
             key={invoice.number}
             className="border-border flex items-center justify-between gap-3 rounded-lg border px-4 py-2 text-sm motion-safe:animate-[fade-up_0.5s_ease-out_backwards]"
-            style={{ animationDelay: `${0.5 + i * 0.35}s` }}
+            style={{ animationDelay: `${rowDelay(i)}s` }}
           >
             <span className="flex items-center gap-2">
               <FileTextIcon className="text-muted-foreground size-4" aria-hidden />
@@ -190,7 +210,7 @@ function CheckIt() {
           </div>
         </dl>
 
-        <div className="border-destructive/40 bg-destructive/5 rounded-lg border p-4 motion-safe:animate-[fade-up_0.5s_ease-out_0.6s_backwards]">
+        <div className="border-destructive/40 bg-destructive/5 rounded-lg border p-4 motion-safe:animate-[fade-up_0.5s_ease-out_0.3s_backwards]">
           <p className="flex items-center gap-2 text-sm font-medium">
             <TriangleAlertIcon className="size-4" aria-hidden />
             These figures do not add up
@@ -202,6 +222,83 @@ function CheckIt() {
             Held for checking, next to the original, with nothing saved until
             you say so.
           </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The same paper under three names, and a vendor known by its tax number
+ * rather than how it spells itself.
+ */
+function MatchIt() {
+  const lines = [
+    { printed: "Paper, A4, 1 ream", item: "A4 Paper 500 Sheets", how: "Taught once, matched since" },
+    { printed: "A4 copier paper 75gsm", item: "A4 Paper 500 Sheets", how: "Close match, waiting for you" },
+    { printed: "Marker, black (box of 10)", item: "Whiteboard Marker Black", how: "Box against piece, kept apart" },
+  ];
+  return (
+    <div>
+      <Caption>
+        Lines become items you can follow across vendors, and a vendor is
+        recognised by its tax number. Anything unsure waits for a person
+        instead of being merged on a guess.
+      </Caption>
+
+      <p className="border-border mt-5 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border px-4 py-2 text-sm">
+        <span className="font-medium">Nandi Stationers</span>
+        <span className="text-muted-foreground font-mono text-xs">GSTIN 29AABCN1234F1Z5</span>
+        <span className="text-muted-foreground text-xs">matched to the vendor you already have</span>
+      </p>
+
+      <ul className="mt-3 space-y-2">
+        {lines.map((line, i) => (
+          <li
+            key={line.printed}
+            className="border-border grid gap-1 rounded-lg border px-4 py-2 text-sm motion-safe:animate-[fade-up_0.5s_ease-out_backwards] sm:grid-cols-[1fr_auto_1fr_auto] sm:items-center sm:gap-3"
+            style={{ animationDelay: `${rowDelay(i)}s` }}
+          >
+            <span className="text-muted-foreground">{line.printed}</span>
+            <ArrowRightIcon className="text-muted-foreground hidden size-4 sm:block" aria-hidden />
+            <span className="font-medium">{line.item}</span>
+            <span className="text-muted-foreground text-xs">{line.how}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** A rate billed above the one agreed, held with the line that agreed it. */
+function ContractIt() {
+  return (
+    <div>
+      <Caption>
+        Each line is checked against the contract in force on the invoice date.
+        A rate above the agreed one is held, with the page and the words in the
+        contract that set it.
+      </Caption>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <dl className="border-border space-y-2 rounded-lg border p-4 text-sm">
+          <Row label="A4 Paper 500 Sheets, billed" value="₹279.00 a ream" off />
+          <Row label="Agreed in the contract" value="₹265.00 a ream" />
+          <Row label="Reams on this invoice" value="20" />
+          <div className="border-border border-t pt-2">
+            <Row label="Billed above the contract" value="₹280.00" off />
+          </div>
+        </dl>
+
+        <div className="border-destructive/40 bg-destructive/5 rounded-lg border p-4 motion-safe:animate-[fade-up_0.5s_ease-out_0.3s_backwards]">
+          <p className="flex items-center gap-2 text-sm font-medium">
+            <TriangleAlertIcon className="size-4" aria-hidden />
+            Held: billed above the contract
+          </p>
+          <blockquote className="border-border text-muted-foreground mt-2 border-l-2 pl-3 text-sm italic">
+            &ldquo;A4 copier paper, 500 sheets: Rs 265 per ream.&rdquo;
+          </blockquote>
+          <p className="text-muted-foreground mt-2 text-xs">Supply agreement, page 3</p>
         </div>
       </div>
     </div>
