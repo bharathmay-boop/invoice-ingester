@@ -23,3 +23,13 @@ export function safeNext(next: string | null | undefined): string {
   if (url.origin !== BASE) return "/";
   return url.pathname + url.search + url.hash;
 }
+
+/**
+ * Where the demo starts. Findings, unless the visitor was sent here from a
+ * particular screen, because findings is what the product is for: what you
+ * were billed that disagrees with a contract (#235).
+ */
+export function demoLanding(next: string | null | undefined): string {
+  const path = safeNext(next);
+  return path === "/" ? "/findings" : path;
+}
