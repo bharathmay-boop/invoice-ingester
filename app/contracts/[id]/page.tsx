@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
-import { canRead, sessionCookie } from "@/lib/auth.ts";
+import { sessionRole, sessionCookie } from "@/lib/auth.ts";
 import { getContract } from "@/lib/queries.ts";
 import { formatDate, money } from "@/lib/format.ts";
 import { Empty, Page } from "../../ui.tsx";
@@ -25,7 +25,9 @@ const TERM: Record<string, string> = {
 export default async function Contract({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const jar = await cookies();
-  if (!(await canRead(jar.get(sessionCookie.name)?.value))) notFound();
+  const role = await sessionRole(jar.get(sessionCookie.name)?.value);
+  if (!role) notFound();
+  const demo = role === "demo";
 
   const contract = await getContract(id);
   if (!contract) notFound();
@@ -62,6 +64,9 @@ export default async function Contract({ params }: { params: Promise<{ id: strin
         title={contract.title}
         lead="Check this against the document before it starts counting. Nothing here affects an invoice until you confirm."
       >
+        {/* A demo session sees the screen as the owner would, with every
+          control disabled rather than left to fail with a 403 (#234). */}
+        <fieldset disabled={demo} className="contents">
         <ContractReview
           contractId={contract.id}
           blobUrl={contract.blob_url}
@@ -78,6 +83,7 @@ export default async function Contract({ params }: { params: Promise<{ id: strin
           items={items}
           near={near}
         />
+        </fieldset>
       </Page>
     );
   }
