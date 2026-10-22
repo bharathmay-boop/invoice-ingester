@@ -59,7 +59,10 @@ export default async function Review({ params }: { params: Promise<{ id: string 
     [draft.blob_url, draft.id],
   );
 
-  const demo = (await sessionRole((await cookies()).get(sessionCookie.name)?.value)) === "demo";
+  // The proxy already turns away anyone signed out; this page does not rely on it.
+  const role = await sessionRole((await cookies()).get(sessionCookie.name)?.value);
+  if (!role) notFound();
+  const demo = role === "demo";
 
   const original = originalSrc(draft.blob_url);
   // The browser's PDF viewer opens at a page given in the fragment, so the
@@ -132,7 +135,7 @@ export default async function Review({ params }: { params: Promise<{ id: string 
           <div className="mt-3">
             {/* A demo session sees the screen as the owner would, with every
               control disabled rather than left to fail with a 403 (#234). */}
-            <fieldset disabled={demo} className="contents">
+            <fieldset disabled={demo} className="min-w-0">
             <ReviewForm
               draftId={draft.id}
               initial={draft.extracted}

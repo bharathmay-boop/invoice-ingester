@@ -66,7 +66,7 @@ export default async function Contract({ params }: { params: Promise<{ id: strin
       >
         {/* A demo session sees the screen as the owner would, with every
           control disabled rather than left to fail with a 403 (#234). */}
-        <fieldset disabled={demo} className="contents">
+        <fieldset disabled={demo} className="min-w-0">
         <ContractReview
           contractId={contract.id}
           blobUrl={contract.blob_url}

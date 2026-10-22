@@ -44,10 +44,11 @@ test("the two review screens are disabled, not live, for a demo session", () => 
     "app/review/[id]/page.tsx",
     "app/contracts/[id]/page.tsx",
   ]) {
-    assert.match(
-      readFileSync(page, "utf8"),
-      /<fieldset disabled=\{demo\}/,
-      page,
-    );
+    const source = readFileSync(page, "utf8");
+    assert.match(source, /<fieldset disabled=\{demo\}/, page);
+    // display: contents can drop a fieldset from the accessibility tree.
+    // Kimi K2.5 review on #256.
+    assert.ok(!/<fieldset[^>]*\bcontents\b/.test(source), `${page}: fieldset uses display contents`);
+    assert.match(source, /if \(!role\) notFound\(\)/, `${page}: renders without a session`);
   }
 });
