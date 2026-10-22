@@ -2,7 +2,7 @@
 
 Drop in the invoices you have already paid and the contracts behind them. It reads both, matches the line items to a catalogue, and tells you where you were billed something other than what you agreed.
 
-**Live:** [invoice-ingester.vercel.app](https://invoice-ingester.vercel.app). The home page is open. The app is behind a password, because it holds real invoices.
+**Live:** [invoice-ingester.vercel.app](https://invoice-ingester.vercel.app). The home page is open, and **Try the demo** on the sign in page opens the whole app, read only, on invented invoices and contracts. Changing anything needs the owner's password.
 
 ![The home page: invoices you have already paid, turned into answers](docs/screenshots/home.png)
 
