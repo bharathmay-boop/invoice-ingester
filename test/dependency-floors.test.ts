@@ -37,3 +37,9 @@ test("next is past the remote code execution advisories GHSA-2464-fhr4-w9xw and 
   assert.ok(next, "next is not at the top of the lockfile; check where it moved");
   assert.ok(atLeast(next.version, "16.4.2"), `next ${next.version} is below 16.4.2`);
 });
+
+test("dompurify, shipped through posthog-js, is past GHSA-cg2g-xh64-v4q7 and its siblings (#261)", () => {
+  const dompurify = lock.packages["node_modules/dompurify"];
+  assert.ok(dompurify, "dompurify is not at the top of the lockfile; check where it moved");
+  assert.ok(atLeast(dompurify.version, "3.4.17"), `dompurify ${dompurify.version} is below 3.4.17`);
+});
