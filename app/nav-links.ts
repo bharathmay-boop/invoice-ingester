@@ -34,3 +34,15 @@ export function linksFor(role: SessionRole | null) {
   if (role === "demo") return NAV_LINKS.filter((link) => link.href !== "/upload");
   return [];
 }
+
+/**
+ * The signed out header: the home page's sections, so a visitor from an
+ * outreach email can find their way without scrolling the whole page (#237).
+ * Each one has a test that its section exists.
+ */
+export const PUBLIC_LINKS = [
+  { href: "/#how", label: "How it works" },
+  { href: "/#answers", label: "What it answers" },
+] as const;
+
+export const SOURCE_URL = "https://github.com/bharathmay-boop/invoice-ingester";

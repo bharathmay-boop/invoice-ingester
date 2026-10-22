@@ -5,6 +5,7 @@ import { Separator } from "@/components/ui/separator";
 import { Reveal } from "@/components/reveal.tsx";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { FlowHero } from "./flow-hero.tsx";
+import { TryDemo } from "./try-demo.tsx";
 import { HomeWalkthrough } from "./home-walkthrough.tsx";
 import { WhatItAnswers } from "./what-it-answers.tsx";
 
@@ -55,9 +56,7 @@ export default async function Home() {
               </>
             ) : (
               <>
-                <Button asChild size="lg">
-                  <Link href="/login">Sign in</Link>
-                </Button>
+                <TryDemo />
                 <Button asChild size="lg" variant="outline">
                   <a href="#how">See how it works</a>
                 </Button>
@@ -66,8 +65,8 @@ export default async function Home() {
           </div>
           {!signedIn && (
             <p className="text-muted-foreground mt-3 text-xs">
-              Behind a password, since it holds real invoices. Everything below
-              is drawn to match the real screens, with invented figures.
+              No sign up. The demo opens the real app on invented invoices and
+              contracts, read only.
             </p>
           )}
         </div>
@@ -91,7 +90,7 @@ export default async function Home() {
 
       <Separator />
 
-      <section className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6">
+      <section id="answers" className="mx-auto w-full max-w-6xl scroll-mt-8 px-4 py-12 sm:px-6">
         <Reveal>
           <h2 className="text-2xl font-semibold tracking-tight">What it answers</h2>
           <p className="text-muted-foreground mt-2 max-w-2xl text-sm leading-relaxed">
@@ -107,12 +106,10 @@ export default async function Home() {
         <section className="mx-auto w-full max-w-6xl px-4 pb-14 sm:px-6">
           <div className="border-border bg-card flex flex-wrap items-center justify-between gap-4 rounded-xl border p-6">
             <p className="max-w-xl text-sm leading-relaxed">
-              Those are drawings of the real screens. To use the real ones on
-              your own invoices, sign in.
+              Those are drawings of the real screens. The demo opens the real
+              ones, on invented invoices and contracts.
             </p>
-            <Button asChild>
-              <Link href="/login">Sign in</Link>
-            </Button>
+            <TryDemo />
           </div>
         </section>
       )}

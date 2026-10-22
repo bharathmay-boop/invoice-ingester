@@ -6,7 +6,18 @@ import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { capture } from "./analytics-provider.tsx";
 import type { SessionRole } from "@/lib/auth.ts";
-import { COUNTED, linksFor } from "./nav-links.ts";
+import { MenuIcon } from "lucide-react";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import { COUNTED, linksFor, PUBLIC_LINKS, SOURCE_URL } from "./nav-links.ts";
+import { TryDemo } from "./try-demo.tsx";
 
 function SignOut() {
   const router = useRouter();
@@ -48,6 +59,62 @@ function SignOut() {
         {busy ? "Signing out…" : failed ? "Try again" : "Sign out"}
       </Button>
     </span>
+  );
+}
+
+/** What a signed out visitor gets: the home page's sections, the source, and two ways in. */
+function PublicLinks() {
+  const sections = PUBLIC_LINKS.map((link) => (
+    <Link key={link.href} href={link.href} className="rounded px-2 py-1 text-sm opacity-70 hover:opacity-100">
+      {link.label}
+    </Link>
+  ));
+  const source = (
+    <a key="source" href={SOURCE_URL} className="rounded px-2 py-1 text-sm opacity-70 hover:opacity-100">
+      GitHub
+    </a>
+  );
+  const signIn = (
+    <Link key="login" href="/login" className="rounded px-2 py-1 text-sm opacity-70 hover:opacity-100">
+      Sign in
+    </Link>
+  );
+
+  return (
+    <>
+      <span className="hidden items-center gap-x-1 sm:flex">{sections}</span>
+      <span className="ml-auto hidden items-center gap-x-1 sm:flex">
+        {source}
+        {signIn}
+        <TryDemo size="sm" />
+      </span>
+
+      {/* On a phone the links fold into a sheet, and the demo stays in reach. */}
+      <span className="ml-auto flex items-center gap-2 sm:hidden">
+        <TryDemo size="sm" />
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" aria-label="Open the menu">
+              <MenuIcon />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="right">
+            <SheetHeader>
+              <SheetTitle>Invoice Ingester</SheetTitle>
+              <SheetDescription>Invoices checked against the contracts behind them.</SheetDescription>
+            </SheetHeader>
+            <nav aria-label="Sections" className="flex flex-col gap-1 px-2">
+              {/* Each closes the sheet, or a section link scrolls the page behind it. */}
+              {[...sections, source, signIn].map((link) => (
+                <SheetClose key={link.key} asChild>
+                  {link}
+                </SheetClose>
+              ))}
+            </nav>
+          </SheetContent>
+        </Sheet>
+      </span>
+    </>
   );
 }
 
@@ -105,15 +172,13 @@ export function Nav({
           );
         })}
 
-        <span className="ml-auto text-sm">
-          {signedIn ? (
+        {signedIn ? (
+          <span className="ml-auto text-sm">
             <SignOut />
-          ) : (
-            <Link href="/login" className="underline opacity-70 hover:opacity-100">
-              Sign in
-            </Link>
-          )}
-        </span>
+          </span>
+        ) : (
+          <PublicLinks />
+        )}
       </nav>
     </header>
   );
