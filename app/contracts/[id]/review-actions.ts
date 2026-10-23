@@ -7,7 +7,7 @@ import { pool } from "@/lib/db.ts";
 import { amendRateRow } from "@/lib/contracts/amend.ts";
 import { getThresholds } from "@/lib/items/match.ts";
 import { applyDecisions, resolveRateItems } from "@/lib/contracts/items.ts";
-import { applyReview } from "@/lib/contracts/confirm.ts";
+import { applyReview, lockReviewable } from "@/lib/contracts/confirm.ts";
 import { resolveNewContractVendor } from "@/lib/vendors/resolve.ts";
 import { track } from "@/lib/analytics/server.ts";
 import { recomputeVariance } from "@/lib/contracts/recompute.ts";
@@ -77,6 +77,14 @@ export async function confirmContract(
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+
+    // Before anything is written: only a contract that has been read can be
+    // confirmed, and it stays locked until this commits (#113).
+    const refusal = await lockReviewable(client, contractId);
+    if (refusal) {
+      await client.query("ROLLBACK");
+      return { ok: false, message: refusal };
+    }
 
     let vendorId = vendorChoice;
     if (vendorChoice === "new") {

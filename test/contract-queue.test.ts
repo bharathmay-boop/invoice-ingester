@@ -321,4 +321,30 @@ test("the worker stores the count before the model is paid", () => {
   const stored = worker.indexOf("recordPages(contract.id, facts.pages)");
   assert.ok(stored > 0, "the worker does not store the page count");
   assert.ok(stored < worker.indexOf("await readContract("), "the page count must be stored before the paid read");
+
+// confirmContract updated the row whatever its state, so a contract still
+// queued, being read, or unreadable could be marked reviewed, and one being
+// read could have its rates replaced by the worker after the review (#113).
+test("only a contract that has been read can be confirmed", { skip }, async () => {
+  const confirm = await import("../lib/contracts/confirm.ts");
+  for (const [status, allowed] of [
+    ["queued", false],
+    ["reading", false],
+    ["could_not_read", false],
+    ["ready_for_review", true],
+    ["reviewed", true],
+  ] as const) {
+    const id = await queued(`state-${status}`);
+    await db!.query("UPDATE contract SET status = $2 WHERE id = $1", [id, status]);
+    const client = await db!.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const refusal = await confirm.lockReviewable(client, id);
+      await client.query("ROLLBACK");
+      assert.equal(refusal === null, allowed, `${status}: ${refusal}`);
+      if (!allowed) assert.match(refusal ?? "", /cannot be confirmed/);
+    } finally {
+      client.release();
+    }
+  }
 });
