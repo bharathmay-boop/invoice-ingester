@@ -19,6 +19,8 @@ test("the sheet scrolls to the section once it has closed", () => {
   const nav = readFileSync("app/nav.tsx", "utf8");
   assert.match(nav, /onCloseAutoFocus=/);
   assert.match(nav, /scrollIntoView/);
+  // Focus follows the scroll, or the next Tab starts from the top of the page.
+  assert.match(nav, /focus\(\{ preventScroll: true \}\)/);
   // From another page, the navigation waits for the sheet to close too.
   assert.match(nav, /router\.push\(href\)/);
 });

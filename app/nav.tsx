@@ -62,6 +62,21 @@ function SignOut() {
   );
 }
 
+/**
+ * Scrolls to a section and moves keyboard focus there, so the next Tab goes
+ * on from the section rather than from the top of the page. Kimi K2.5 review
+ * on #267.
+ */
+function goToSection(id: string) {
+  const section = document.getElementById(id);
+  if (!section) return;
+  // A section is not focusable by default; -1 lets a script focus it without
+  // adding it to the Tab order.
+  if (!section.hasAttribute("tabindex")) section.setAttribute("tabindex", "-1");
+  section.scrollIntoView();
+  section.focus({ preventScroll: true });
+}
+
 /** What a signed out visitor gets: the home page's sections, the source, and two ways in. */
 function PublicLinks() {
   const pathname = usePathname();
@@ -127,7 +142,7 @@ function PublicLinks() {
               // Focus would go back to the menu button, at the top of the page.
               event.preventDefault();
               const id = samePageSection(href, pathname);
-              if (id) requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView());
+              if (id) requestAnimationFrame(() => goToSection(id));
               else router.push(href);
             }}
           >
