@@ -3,6 +3,7 @@
 import { z } from "zod";
 
 import { currencySchema } from "../money/schema.ts";
+import { isCalendarDate } from "../calendar-date.ts";
 
 // Bounds match the database columns, so an absurd figure fails here with a
 // readable error instead of at save time, or worse, sailing through the
@@ -96,7 +97,7 @@ export const extractedInvoiceSchema = z
     invoice_date: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD")
-      .refine((d) => !Number.isNaN(Date.parse(d)), "not a real date"),
+      .refine(isCalendarDate, "not a real date"),
     currency,
     line_items: z.array(lineItemSchema).min(1),
     subtotal: amount,

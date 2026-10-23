@@ -3,6 +3,7 @@ import { z } from "zod";
 import { currencySchema } from "../money/schema.ts";
 
 import { describeUnusable, type Failure } from "../extract/failure.ts";
+import { isCalendarDate } from "../calendar-date.ts";
 
 /**
  * What a contract comes back as.
@@ -18,7 +19,7 @@ const MAX_RATE = 9_999_999_999.9999; // numeric(14,4)
 const date = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD")
-  .refine((d) => !Number.isNaN(Date.parse(d)), "not a real date");
+  .refine(isCalendarDate, "not a real date");
 
 /**
  * One agreed rate. Every one carries its own dates, which is what lets an
