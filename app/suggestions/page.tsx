@@ -5,6 +5,7 @@ import { listSuggestions } from "@/lib/queries.ts";
 import { formatDate, money } from "@/lib/format.ts";
 import { Empty, Page } from "../ui.tsx";
 import { SuggestionCard } from "./suggestion-card.tsx";
+import { rowEnter } from "@/lib/reveal.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -36,8 +37,8 @@ export default async function Suggestions() {
         </Empty>
       ) : (
         <ul className="space-y-4">
-          {waiting.map((suggestion) => (
-            <li key={suggestion.line_item_id}>
+          {waiting.map((suggestion, i) => (
+            <li key={suggestion.line_item_id} {...rowEnter(i)}>
               <SuggestionCard
                 canDecide={canDecide}
                 lineItemId={suggestion.line_item_id}

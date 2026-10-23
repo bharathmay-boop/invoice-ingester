@@ -6,6 +6,7 @@ import { money } from "@/lib/format.ts";
 import { TAGS } from "@/lib/contracts/tags.ts";
 import type { Tag } from "@/lib/contracts/variance.ts";
 import type { FindingRow } from "@/lib/queries.ts";
+import { LINK_FEEDBACK, rowEnter } from "@/lib/reveal.ts";
 
 type Totals = { currency: "INR" | "USD" | "EUR"; variance_tag: string; total: number; lines: number }[];
 
@@ -96,14 +97,14 @@ function Rows({ findings }: { findings: FindingRow[] }) {
   const pathname = usePathname();
   return (
     <ul className="divide-y divide-black/10 dark:divide-white/15">
-      {findings.map((finding) => {
+      {findings.map((finding, i) => {
         const tag = TAGS[finding.variance_tag as Tag];
         const here = pathname === `/findings/${finding.line_id}`;
         return (
-          <li key={finding.line_id}>
+          <li key={finding.line_id} {...rowEnter(i)}>
             <Link
               href={`/findings/${finding.line_id}`}
-              className={`flex items-baseline justify-between gap-3 rounded-md px-2 py-3 hover:opacity-80 ${
+              className={`flex items-baseline justify-between gap-3 rounded-md px-2 py-3 ${LINK_FEEDBACK} ${
                 here ? "bg-black/5 dark:bg-white/10" : ""
               }`}
             >
