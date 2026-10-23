@@ -43,6 +43,7 @@ export function linksFor(role: SessionRole | null) {
 export const PUBLIC_LINKS = [
   { href: "/#how", label: "How it works" },
   { href: "/#answers", label: "What it answers" },
+  { href: "/#contracts", label: "Contracts" },
 ] as const;
 
 export const SOURCE_URL = "https://github.com/bharathmay-boop/invoice-ingester";
