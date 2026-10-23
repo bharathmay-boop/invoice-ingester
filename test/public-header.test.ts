@@ -8,12 +8,19 @@ import { PUBLIC_LINKS } from "../app/nav-links.ts";
 
 const home = readFileSync("app/page.tsx", "utf8");
 
+// The home page and the section components it imports from app/, since a
+// section can live in its own file (#240).
+const rendered = [
+  home,
+  ...[...home.matchAll(/from "\.\/([\w-]+\.tsx)"/g)].map((m) => readFileSync(`app/${m[1]}`, "utf8")),
+].join("\n");
+
 test("every section link in the header lands on a section that exists", () => {
   assert.ok(PUBLIC_LINKS.length > 0);
   for (const link of PUBLIC_LINKS) {
     const id = link.href.split("#")[1];
     assert.ok(id, `${link.href} is not a section link`);
-    assert.match(home, new RegExp(`id="${id}"`), `no section with id ${id}`);
+    assert.match(rendered, new RegExp(`id="${id}"`), `no section with id ${id}`);
   }
 });
 
