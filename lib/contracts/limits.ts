@@ -30,6 +30,22 @@ export const MAX_CONTRACTS_PER_BATCH = 20;
 export type Refusal = { reason: string };
 
 /**
+ * The files one drop will send, and a refusal for each one past the limit.
+ * They used to be sliced off and never mentioned (#115).
+ */
+export function splitBatch<T extends { name: string }>(
+  files: T[],
+): { batch: T[]; overflow: (Refusal & { name: string })[] } {
+  return {
+    batch: files.slice(0, MAX_CONTRACTS_PER_BATCH),
+    overflow: files.slice(MAX_CONTRACTS_PER_BATCH).map((file) => ({
+      name: file.name,
+      reason: `${file.name} was not sent. Contracts go ${MAX_CONTRACTS_PER_BATCH} at a time, so drop it again once these are uploaded.`,
+    })),
+  };
+}
+
+/**
  * Checked by the worker before the model is paid to read the file. The browser
  * only knows the size; the page count needs the bytes, and the worker is the
  * first place that has them. Past the limit the page parse that follows the

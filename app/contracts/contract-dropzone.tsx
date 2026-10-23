@@ -8,6 +8,7 @@ import {
   CONTRACT_ACCEPT_ATTRIBUTE,
   MAX_CONTRACTS_PER_BATCH,
   rejectContract,
+  splitBatch,
 } from "@/lib/contracts/limits.ts";
 
 type Progress = { name: string; state: "hashing" | "uploading" | "done" | "failed"; detail?: string };
@@ -34,9 +35,13 @@ export function ContractDropzone() {
   async function send(files: File[]) {
     if (!files.length || busy) return;
 
-    const batch = files.slice(0, MAX_CONTRACTS_PER_BATCH);
+    const { batch, overflow } = splitBatch(files);
     setBusy(true);
-    setProgress(batch.map((file) => ({ name: file.name, state: "hashing" })));
+    // The ones past the limit are listed as refused, after the ones being sent.
+    setProgress([
+      ...batch.map((file): Progress => ({ name: file.name, state: "hashing" })),
+      ...overflow.map((file): Progress => ({ name: file.name, state: "failed", detail: file.reason })),
+    ]);
 
     const update = (i: number, next: Partial<Progress>) =>
       setProgress((rows) => rows.map((row, at) => (at === i ? { ...row, ...next } : row)));
