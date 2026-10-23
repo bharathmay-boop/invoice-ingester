@@ -6,6 +6,7 @@ import {
   claimNext,
   markFailed,
   markReadyForReview,
+  recordPages,
   recordRates,
   waitingCount,
 } from "@/lib/contracts/queue.ts";
@@ -57,7 +58,9 @@ export async function POST(request: NextRequest) {
     const bytes = Buffer.from(await new Response(stored.stream).arrayBuffer());
 
     // Refused before the model is paid, and never worth another attempt.
-    const refusal = refuseBeforeReading(await readPdf(bytes));
+    const facts = await readPdf(bytes);
+    if (facts) await recordPages(contract.id, facts.pages);
+    const refusal = refuseBeforeReading(facts);
     const read = refusal
       ? null
       : await readContract({ data: bytes.toString("base64"), contentType: contract.content_type });
