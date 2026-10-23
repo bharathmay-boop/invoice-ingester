@@ -26,6 +26,12 @@
     from { opacity: 0; translate: 0 0.5rem; }
     to { opacity: 1; translate: 0 0; }
   }
+  /* The tick on "Saved" after an invoice is saved (#247). */
+  @keyframes tick {
+    from { opacity: 0; scale: 0.4; }
+    70% { opacity: 1; scale: 1.15; }
+    to { opacity: 1; scale: 1; }
+  }
   @keyframes sweep {
     from { clip-path: inset(0 100% 0 0); }
     to { clip-path: inset(0 0 0 0); }

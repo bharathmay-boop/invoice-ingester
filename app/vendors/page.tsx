@@ -1,18 +1,25 @@
 import Link from "next/link";
 import { listVendors } from "@/lib/queries.ts";
 import { money } from "@/lib/format.ts";
+import { savedFrom } from "@/lib/save-ack.ts";
 import { DemoNotice, Empty, Page } from "../ui.tsx";
 import { LINK_FEEDBACK, rowEnter } from "@/lib/reveal.ts";
+import { SavedNotice } from "../saved-notice.tsx";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = { title: "Vendors" };
 
-export default async function Vendors() {
-  const vendors = await listVendors();
+export default async function Vendors({
+  searchParams,
+}: {
+  searchParams: Promise<{ saved?: string | string[] }>;
+}) {
+  const [vendors, { saved }] = await Promise.all([listVendors(), searchParams]);
 
   return (
     <Page title="Vendors" lead="Everyone you have bought from, by what you have spent.">
+      <SavedNotice invoiceId={savedFrom(saved)} />
       {vendors.length === 0 ? (
         <Empty title="No vendors yet" action={{ href: "/upload", label: "Upload an invoice" }}>
           Vendors appear here once an invoice has been saved. A tax registration,
