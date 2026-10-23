@@ -45,12 +45,12 @@ export function WhatItAnswers() {
         of the four questions off screen, so most visitors saw one (#239).
         From sm up there is room for one row.
       */}
-      <TabsList className="grid w-full grid-cols-2 gap-1 group-data-horizontal/tabs:h-auto sm:inline-flex sm:w-max sm:gap-0 sm:group-data-horizontal/tabs:h-8">
+      <TabsList className="grid w-full grid-cols-2 gap-1 group-data-horizontal/tabs:h-auto lg:inline-flex lg:w-max lg:gap-0 lg:group-data-horizontal/tabs:h-8">
         {QUESTIONS.map((q) => (
           <TabsTrigger
             key={q.key}
             value={q.key}
-            className="h-full min-h-10 whitespace-normal px-2 py-1.5 text-xs leading-snug sm:min-h-0 sm:whitespace-nowrap sm:text-sm"
+            className="h-full min-h-10 whitespace-normal px-2 py-1.5 text-xs leading-snug sm:text-sm lg:min-h-0 lg:whitespace-nowrap"
           >
             {q.label}
           </TabsTrigger>

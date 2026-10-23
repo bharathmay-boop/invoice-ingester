@@ -22,7 +22,7 @@ export function ContractsSection() {
         </p>
       </Reveal>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
+      <div className="mt-6 grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2">
         <Reveal delay={0.05}>
           <Step
             title="A long PDF, read in the background"
