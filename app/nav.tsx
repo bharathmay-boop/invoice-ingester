@@ -117,15 +117,15 @@ function PublicLinks() {
 
   return (
     <>
-      <span className="hidden items-center gap-x-1 sm:flex">{sections}</span>
-      <span className="ml-auto hidden items-center gap-x-1 sm:flex">
+      <span className="hidden items-center gap-x-1 lg:flex">{sections}</span>
+      <span className="ml-auto hidden items-center gap-x-1 lg:flex">
         {source}
         {signIn}
         <TryDemo size="sm" />
       </span>
 
       {/* On a phone the links fold into a sheet, and the demo stays in reach. */}
-      <span className="ml-auto flex items-center gap-2 sm:hidden">
+      <span className="ml-auto flex items-center gap-2 lg:hidden">
         <TryDemo size="sm" />
         <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
           <SheetTrigger asChild>

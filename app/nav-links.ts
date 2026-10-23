@@ -44,6 +44,7 @@ export const PUBLIC_LINKS = [
   { href: "/#how", label: "How it works" },
   { href: "/#answers", label: "What it answers" },
   { href: "/#contracts", label: "Contracts" },
+  { href: "/#models", label: "Your model" },
   { href: "/#limits", label: "Limits" },
 ] as const;
 
