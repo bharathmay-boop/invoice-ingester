@@ -6,6 +6,7 @@ import { Reveal } from "@/components/reveal.tsx";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { ContractsSection } from "./contracts-section.tsx";
 import { FlowHero } from "./flow-hero.tsx";
+import { LimitsSection } from "./limits-section.tsx";
 import { TryDemo } from "./try-demo.tsx";
 import { HomeWalkthrough } from "./home-walkthrough.tsx";
 import { WhatItAnswers } from "./what-it-answers.tsx";
@@ -106,6 +107,10 @@ export default async function Home() {
       <Separator />
 
       <ContractsSection />
+
+      <Separator />
+
+      <LimitsSection />
 
       {!signedIn && (
         <section className="mx-auto w-full max-w-6xl px-4 pb-14 sm:px-6">
