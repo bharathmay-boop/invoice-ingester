@@ -8,6 +8,7 @@ import { formatDate, money } from "@/lib/format.ts";
 import { DemoNotice, Empty, Page, StatusBadge } from "../ui.tsx";
 import { InvoiceOriginal } from "../invoice-original.tsx";
 import { InvoiceFilters } from "./invoice-filters.tsx";
+import { LINK_FEEDBACK, rowEnter } from "@/lib/reveal.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -58,14 +59,17 @@ export default async function Invoices({
           )
         ) : (
           <ul className="divide-y divide-black/10 dark:divide-white/15">
-            {shown.map((invoice) => (
+            {shown.map((invoice, i) => {
+              const enter = rowEnter(i);
+              return (
               <li
                 key={invoice.id}
-                className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-3"
+                className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-3 ${enter.className}`}
+                style={enter.style}
               >
                 <Link
                   href={`/invoices/${invoice.id}`}
-                  className="flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-4 gap-y-1 hover:opacity-80"
+                  className={`flex min-w-0 flex-1 flex-wrap items-baseline justify-between gap-x-4 gap-y-1 ${LINK_FEEDBACK}`}
                 >
                   <span className="flex min-w-0 flex-col">
                     <span className="truncate font-medium">{invoice.vendor_name}</span>
@@ -95,7 +99,8 @@ export default async function Invoices({
                   />
                 )}
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </div>

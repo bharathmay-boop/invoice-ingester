@@ -23,3 +23,18 @@ export function revealMotion({ delay = 0 }: { delay?: number } = {}) {
  */
 export const SHOWN_WITHOUT_ANIMATION =
   "motion-reduce:opacity-100! motion-reduce:transform-none! noscript:opacity-100! noscript:transform-none!";
+
+/**
+ * How a list row comes in on the app's list screens: a short fade up,
+ * staggered, with no row waiting more than 0.3s however long the list. CSS
+ * rather than motion, since the lists are server rendered (#246).
+ */
+export function rowEnter(index: number) {
+  return {
+    className: "motion-safe:animate-[fade-up_0.35s_ease-out_backwards]",
+    style: { animationDelay: `${Math.min(index * 0.03, 0.3)}s` },
+  };
+}
+
+/** Hover and press on a row link, so a click is seen to land. */
+export const LINK_FEEDBACK = "transition-opacity hover:opacity-80 active:opacity-60";

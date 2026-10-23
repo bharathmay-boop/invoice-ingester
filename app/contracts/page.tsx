@@ -5,6 +5,7 @@ import { listContracts } from "@/lib/queries.ts";
 import { formatDate } from "@/lib/format.ts";
 import { DemoNotice, Empty, Page } from "../ui.tsx";
 import { ContractDropzone } from "./contract-dropzone.tsx";
+import { LINK_FEEDBACK, rowEnter } from "@/lib/reveal.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,7 @@ export default async function Contracts() {
         </Empty>
       ) : (
         <ul className="divide-y divide-black/10 dark:divide-white/15">
-          {contracts.map((contract) => {
+          {contracts.map((contract, i) => {
             const state = STATE[contract.status] ?? { label: contract.status, tone: "neutral" };
             const tone = {
               good: "bg-emerald-500/15 text-emerald-900 dark:text-emerald-200",
@@ -79,9 +80,9 @@ export default async function Contracts() {
             // Only a contract that has something to review is worth opening.
             // A link to a page that says "still reading" teaches nothing.
             return (
-              <li key={contract.id}>
+              <li key={contract.id} {...rowEnter(i)}>
                 {contract.status === "ready_for_review" || contract.status === "reviewed" ? (
-                  <Link href={`/contracts/${contract.id}`} className="block hover:opacity-80">
+                  <Link href={`/contracts/${contract.id}`} className={`block ${LINK_FEEDBACK}`}>
                     {row}
                   </Link>
                 ) : (

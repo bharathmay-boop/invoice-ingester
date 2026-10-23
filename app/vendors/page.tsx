@@ -2,6 +2,7 @@ import Link from "next/link";
 import { listVendors } from "@/lib/queries.ts";
 import { money } from "@/lib/format.ts";
 import { DemoNotice, Empty, Page } from "../ui.tsx";
+import { LINK_FEEDBACK, rowEnter } from "@/lib/reveal.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -20,11 +21,11 @@ export default async function Vendors() {
         </Empty>
       ) : (
         <ul className="divide-y divide-black/10 dark:divide-white/15">
-          {vendors.map((vendor) => (
-            <li key={`${vendor.id}-${vendor.currency}`}>
+          {vendors.map((vendor, i) => (
+            <li key={`${vendor.id}-${vendor.currency}`} {...rowEnter(i)}>
               <Link
                 href={`/vendors/${vendor.id}`}
-                className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-4 hover:opacity-80"
+                className={`flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-4 ${LINK_FEEDBACK}`}
               >
                 <span className="flex flex-col">
                   <span className="font-medium">{vendor.name}</span>
