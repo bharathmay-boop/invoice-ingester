@@ -12,6 +12,14 @@ test("real dates pass, including a leap day in a leap year", () => {
   }
 });
 
+test("years under 100 and the century rules are read as the calendar has them", () => {
+  // Date would read year 99 as 1999. Kimi K2.5 review on #279.
+  assert.equal(isCalendarDate("0099-12-31"), true);
+  assert.equal(isCalendarDate("0004-02-29"), true);
+  assert.equal(isCalendarDate("1900-02-29"), false, "a century year is not a leap year");
+  assert.equal(isCalendarDate("2000-02-29"), true, "unless it divides by 400");
+});
+
 test("dates that do not exist are refused", () => {
   for (const d of ["2026-02-30", "2026-02-29", "2026-04-31", "2026-13-01", "2026-00-10", "2026-01-00", "26-01-01", "2026-1-1", ""]) {
     assert.equal(isCalendarDate(d), false, d);
