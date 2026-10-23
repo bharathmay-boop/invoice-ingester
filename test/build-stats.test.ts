@@ -18,6 +18,12 @@ test("the page never claims more tests than the suite has", () => {
 
 test("every figure says when it was counted", () => {
   assert.match(BUILD_STATS.asOf, /^\d{4}-\d{2}-\d{2}$/);
+  // A real date, or the page reads "Counted on Invalid Date". The round trip
+  // also catches a day that rolls over, like the 31st of a 30 day month.
+  // Kimi K2.5 review on #275.
+  const parsed = new Date(`${BUILD_STATS.asOf}T00:00:00Z`);
+  assert.ok(!Number.isNaN(parsed.getTime()), `${BUILD_STATS.asOf} is not a date`);
+  assert.equal(parsed.toISOString().slice(0, 10), BUILD_STATS.asOf);
   assert.ok(BUILD_STATS.pullRequests > 0);
 });
 
