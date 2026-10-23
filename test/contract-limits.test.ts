@@ -6,6 +6,7 @@
 // shown to a person verbatim and has to name the file and say what to do.
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
 import {
   CONTRACT_ACCEPT_ATTRIBUTE,
   MAX_CONTRACT_BYTES,
@@ -67,4 +68,25 @@ test("the worker refuses an over-long contract before the paid read", () => {
 test("the worker refuses a locked or unreadable PDF before the paid read", () => {
   assert.match(refuseBeforeReading({ pages: 3, encrypted: true }) ?? "", /password/);
   assert.match(refuseBeforeReading(null) ?? "", /could not be opened/);
+});
+
+// Files past the twentieth were sliced off and never mentioned, so someone
+// dropping thirty contracts was told nothing about ten of them (#115).
+test("files past the batch limit are refused by name, not dropped", async () => {
+  const { splitBatch, MAX_CONTRACTS_PER_BATCH } = await import("../lib/contracts/limits.ts");
+  const files = Array.from({ length: MAX_CONTRACTS_PER_BATCH + 3 }, (_, i) => ({ name: `c${i + 1}.pdf` }));
+  const { batch, overflow } = splitBatch(files);
+  assert.equal(batch.length, MAX_CONTRACTS_PER_BATCH);
+  assert.deepEqual(
+    overflow.map((o) => o.name),
+    [`c${MAX_CONTRACTS_PER_BATCH + 1}.pdf`, `c${MAX_CONTRACTS_PER_BATCH + 2}.pdf`, `c${MAX_CONTRACTS_PER_BATCH + 3}.pdf`],
+  );
+  assert.match(overflow[0].reason, new RegExp(`${MAX_CONTRACTS_PER_BATCH} at a time`));
+  assert.deepEqual(splitBatch(files.slice(0, 2)).overflow, []);
+});
+
+test("the dropzone lists the refused overflow", () => {
+  const dropzone = readFileSync("app/contracts/contract-dropzone.tsx", "utf8");
+  assert.match(dropzone, /splitBatch\(/);
+  assert.ok(!dropzone.includes("files.slice(0, MAX_CONTRACTS_PER_BATCH)"), "the silent slice is back");
 });
