@@ -321,6 +321,7 @@ test("the worker stores the count before the model is paid", () => {
   const stored = worker.indexOf("recordPages(contract.id, facts.pages)");
   assert.ok(stored > 0, "the worker does not store the page count");
   assert.ok(stored < worker.indexOf("await readContract("), "the page count must be stored before the paid read");
+});
 
 // confirmContract updated the row whatever its state, so a contract still
 // queued, being read, or unreadable could be marked reviewed, and one being
