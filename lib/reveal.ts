@@ -38,3 +38,10 @@ export function rowEnter(index: number) {
 
 /** Hover and press on a row link, so a click is seen to land. */
 export const LINK_FEEDBACK = "transition-opacity hover:opacity-80 active:opacity-60";
+
+/**
+ * A piece of a screen arriving in a new state: a contract's status, the
+ * finding just opened, the filtered rows. Keyed on that state where it is
+ * used, so a change mounts it again and it plays once more (#248).
+ */
+export const STATE_ENTER = "motion-safe:animate-[fade-up_0.3s_ease-out_backwards]";
