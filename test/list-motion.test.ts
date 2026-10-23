@@ -32,3 +32,17 @@ test("every list screen uses them", () => {
     assert.match(source, /rowEnter\(/, `${page} rows do not enter`);
   }
 });
+
+test("every list whose rows are links answers a press", () => {
+  // Suggestions are cards with buttons, not row links, so they are not here.
+  // Kimi K2.5 review on #276.
+  for (const page of [
+    "app/invoices/page.tsx",
+    "app/items/page.tsx",
+    "app/vendors/page.tsx",
+    "app/findings/findings-list.tsx",
+    "app/contracts/page.tsx",
+  ]) {
+    assert.match(readFileSync(page, "utf8"), /\$\{LINK_FEEDBACK\}/, `${page} rows do not answer a press`);
+  }
+});

@@ -59,11 +59,13 @@ export default async function Invoices({
           )
         ) : (
           <ul className="divide-y divide-black/10 dark:divide-white/15">
-            {shown.map((invoice, i) => (
+            {shown.map((invoice, i) => {
+              const enter = rowEnter(i);
+              return (
               <li
                 key={invoice.id}
-                className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-3 ${rowEnter(i).className}`}
-                style={rowEnter(i).style}
+                className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-3 ${enter.className}`}
+                style={enter.style}
               >
                 <Link
                   href={`/invoices/${invoice.id}`}
@@ -97,7 +99,8 @@ export default async function Invoices({
                   />
                 )}
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </div>
