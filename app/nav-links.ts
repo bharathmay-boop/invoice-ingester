@@ -46,3 +46,13 @@ export const PUBLIC_LINKS = [
 ] as const;
 
 export const SOURCE_URL = "https://github.com/bharathmay-boop/invoice-ingester";
+
+/**
+ * The section a link points at when it is on the page already open, or null
+ * when following it means going to another page. The phone menu scrolls to
+ * the first itself, once its scroll lock has let go (#266).
+ */
+export function samePageSection(href: string, pathname: string): string | null {
+  const [path, id] = href.split("#");
+  return id && path === pathname ? id : null;
+}
