@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { afterSave } from "@/lib/save-ack.ts";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
@@ -228,7 +229,7 @@ export async function confirmDraft(_previous: SaveResult, form: FormData): Promi
   revalidatePath("/");
   revalidatePath("/items");
   revalidatePath("/vendors");
-  redirect(await nextFromSameFile(blobUrl, `/vendors?saved=${savedId}`));
+  redirect(afterSave(await nextDraftId(blobUrl), savedId));
 }
 
 export async function discardDraft(_previous: SaveResult, form: FormData): Promise<SaveResult> {
@@ -254,10 +255,15 @@ export async function discardDraft(_previous: SaveResult, form: FormData): Promi
  * back to the upload page between each.
  */
 async function nextFromSameFile(blobUrl: string, otherwise: string): Promise<string> {
+  const next = await nextDraftId(blobUrl);
+  return next ? `/review/${next}` : otherwise;
+}
+
+async function nextDraftId(blobUrl: string): Promise<string | null> {
   const [next] = await query<{ id: string }>(
     `SELECT id FROM draft WHERE blob_url = $1
      ORDER BY first_page NULLS FIRST, created_at LIMIT 1`,
     [blobUrl],
   );
-  return next ? `/review/${next.id}` : otherwise;
+  return next?.id ?? null;
 }

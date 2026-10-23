@@ -7,6 +7,8 @@ import { originalHref, originalSrc } from "@/lib/original.ts";
 import type { ExtractedInvoice } from "@/lib/extract/schema.ts";
 import { describeDiscrepancy, isValidityWarning, type Discrepancy } from "@/lib/extract/validate.ts";
 import { ReviewForm } from "./review-form.tsx";
+import { SavedNotice } from "../../saved-notice.tsx";
+import { savedFrom } from "@/lib/save-ack.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -25,8 +27,14 @@ type DraftRow = {
   siblings: number;
 };
 
-export default async function Review({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export default async function Review({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ saved?: string | string[] }>;
+}) {
+  const [{ id }, { saved }] = await Promise.all([params, searchParams]);
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
 
   const [draft] = await query<DraftRow>(
@@ -77,6 +85,8 @@ export default async function Review({ params }: { params: Promise<{ id: string 
 
   return (
     <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 sm:py-12">
+      {/* The invoice before this one in the same file, just saved (#247). */}
+      <SavedNotice invoiceId={savedFrom(saved)} />
       <h1 className="text-2xl font-semibold sm:text-3xl">Review</h1>
       <p className="text-muted-foreground mt-2 text-sm">
         {draft.file_name}
