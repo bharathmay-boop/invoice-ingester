@@ -42,3 +42,13 @@ test("the signed out header and the hero both open the demo in one click", () =>
   assert.match(home, /<TryDemo/);
   assert.ok(!home.includes("holds real invoices"), "production holds only the demo");
 });
+
+test("the full row of header links only appears once it fits on one line", () => {
+  // Five section links, GitHub, Sign in and the demo button wrapped onto two
+  // rows between 640px and 1023px, so the sheet stays until lg (#242).
+  const nav = readFileSync("app/nav.tsx", "utf8");
+  const publicLinks = nav.slice(nav.indexOf("function PublicLinks"), nav.indexOf("export function Nav"));
+  assert.ok(!/\bsm:(flex|hidden)\b/.test(publicLinks), "the row switches at sm again");
+  assert.match(publicLinks, /\blg:flex\b/);
+  assert.match(publicLinks, /\blg:hidden\b/);
+});

@@ -7,6 +7,7 @@ import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { ContractsSection } from "./contracts-section.tsx";
 import { FlowHero } from "./flow-hero.tsx";
 import { LimitsSection } from "./limits-section.tsx";
+import { ModelsSection } from "./models-section.tsx";
 import { TryDemo } from "./try-demo.tsx";
 import { HomeWalkthrough } from "./home-walkthrough.tsx";
 import { WhatItAnswers } from "./what-it-answers.tsx";
@@ -107,6 +108,10 @@ export default async function Home() {
       <Separator />
 
       <ContractsSection />
+
+      <Separator />
+
+      <ModelsSection />
 
       <Separator />
 
