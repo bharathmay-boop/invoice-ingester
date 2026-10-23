@@ -3,6 +3,7 @@
 // never read. So the state machine is tested against real Postgres, including
 // the concurrency the self-chaining design depends on.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { after, before, beforeEach, test } from "node:test";
 
 const configured = Boolean(process.env.DATABASE_URL);
@@ -304,4 +305,20 @@ test("a read that found no rates writes nothing and says so", { skip }, async ()
   const id = await queued("a letter, not a rate card");
   assert.equal(await queue!.recordRates(id, "INR", []), 0);
   assert.equal((await ratesOf(id)).length, 0);
+});
+
+// contract.pages existed from migration 020 and nothing wrote it, so the page
+// count the limit is checked against was thrown away (#116).
+test("the page count is kept with the contract", { skip }, async () => {
+  const id = await queued("counted");
+  await queue!.recordPages(id, 212);
+  const [row] = await db!.query<{ pages: number | null }>("SELECT pages FROM contract WHERE id = $1", [id]);
+  assert.equal(row.pages, 212);
+});
+
+test("the worker stores the count before the model is paid", () => {
+  const worker = readFileSync("app/api/contracts/worker/route.ts", "utf8");
+  const stored = worker.indexOf("recordPages(contract.id, facts.pages)");
+  assert.ok(stored > 0, "the worker does not store the page count");
+  assert.ok(stored < worker.indexOf("await readContract("), "stored only after the paid read");
 });

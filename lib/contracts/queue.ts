@@ -132,6 +132,14 @@ export async function waitingCount(): Promise<number> {
 }
 
 /**
+ * How long the document is, kept with it. Counted from the bytes before the
+ * model is paid, the same count the page limit is held to (#116).
+ */
+export async function recordPages(contractId: string, pages: number): Promise<void> {
+  await query("UPDATE contract SET pages = $2 WHERE id = $1", [contractId, pages]);
+}
+
+/**
  * Turn what the model read into rate rows.
  *
  * Every rate is written unreviewed, and the lookup in #32 only sees reviewed
