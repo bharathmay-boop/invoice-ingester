@@ -10,10 +10,19 @@ const home = readFileSync("app/page.tsx", "utf8");
 
 // The home page and the section components it imports from app/, since a
 // section can live in its own file (#240).
+// Either quote, and a file in a subfolder of app/. Kimi K2.5 review on #265.
+const IMPORTED = /from ['"]\.\/([\w/-]+\.tsx)['"]/g;
 const rendered = [
   home,
-  ...[...home.matchAll(/from "\.\/([\w-]+\.tsx)"/g)].map((m) => readFileSync(`app/${m[1]}`, "utf8")),
+  ...[...home.matchAll(IMPORTED)].map((m) => readFileSync(`app/${m[1]}`, "utf8")),
 ].join("\n");
+
+test("the section file finder reads the imports however they are written", () => {
+  const found = (source: string) => [...source.matchAll(IMPORTED)].map((m) => m[1]);
+  assert.deepEqual(found(`import { A } from "./a.tsx";`), ["a.tsx"]);
+  assert.deepEqual(found(`import { B } from './b.tsx';`), ["b.tsx"]);
+  assert.deepEqual(found(`import { C } from "./sections/c.tsx";`), ["sections/c.tsx"]);
+});
 
 test("every section link in the header lands on a section that exists", () => {
   assert.ok(PUBLIC_LINKS.length > 0);
