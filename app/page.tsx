@@ -5,6 +5,7 @@ import { Separator } from "@/components/ui/separator";
 import { Reveal } from "@/components/reveal.tsx";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { ContractsSection } from "./contracts-section.tsx";
+import { BuildStrip } from "./build-strip.tsx";
 import { FlowHero } from "./flow-hero.tsx";
 import { LimitsSection } from "./limits-section.tsx";
 import { ModelsSection } from "./models-section.tsx";
@@ -116,6 +117,8 @@ export default async function Home() {
       <Separator />
 
       <LimitsSection />
+
+      <BuildStrip />
 
       {!signedIn && (
         <section className="mx-auto w-full max-w-6xl px-4 pb-14 sm:px-6">
