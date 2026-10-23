@@ -2,7 +2,7 @@
 // public text: no em dashes and none of the words that mark copy as generated
 // (#245). Comments are stripped first, since they are not shown.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import { dirname, join, normalize } from "node:path";
@@ -20,12 +20,23 @@ function publicFiles(): string[] {
     if (seen.has(file)) continue;
     seen.add(file);
     const source = readFileSync(file, "utf8");
-    for (const [, spec] of source.matchAll(/from ['"](\.{1,2}\/[^'"]+\.tsx?)['"]/g)) {
-      const next = normalize(join(dirname(file), spec)).replaceAll("\\", "/");
-      if (next.startsWith("app/")) queue.push(next);
+    for (const [, spec] of source.matchAll(/from ['"](\.{1,2}\/[^'"]+)['"]/g)) {
+      const next = resolveImport(file, spec);
+      if (next) queue.push(next);
     }
   }
   return [...seen].sort();
+}
+
+/**
+ * The source file an import points at, with or without its extension, or
+ * null for anything else: a stylesheet, a file outside app/, or a path that
+ * only appears inside a string. Kimi K2.5 review on #272.
+ */
+function resolveImport(from: string, spec: string): string | null {
+  const base = normalize(join(dirname(from), spec)).replaceAll("\\", "/");
+  if (!base.startsWith("app/")) return null;
+  return [base, `${base}.tsx`, `${base}.ts`].find((p) => /\.tsx?$/.test(p) && existsSync(p)) ?? null;
 }
 
 const PUBLIC_FILES = publicFiles();
@@ -69,6 +80,15 @@ test("every section and control a visitor sees is checked", () => {
   ]) {
     assert.ok(PUBLIC_FILES.includes(file), `${file} is not checked`);
   }
+});
+
+test("the file finder follows imports written with or without an extension", () => {
+  assert.equal(resolveImport("app/page.tsx", "./try-demo.tsx"), "app/try-demo.tsx");
+  assert.equal(resolveImport("app/page.tsx", "./try-demo"), "app/try-demo.tsx");
+  assert.equal(resolveImport("app/login/page.tsx", "../try-demo"), "app/try-demo.tsx");
+  assert.equal(resolveImport("app/layout.tsx", "./globals.css"), null);
+  assert.equal(resolveImport("app/page.tsx", "./made-up-component.tsx"), null);
+  assert.equal(resolveImport("app/page.tsx", "../lib/auth.ts"), null);
 });
 
 test("the comment stripping does not hide real copy", () => {
