@@ -320,5 +320,5 @@ test("the worker stores the count before the model is paid", () => {
   const worker = readFileSync("app/api/contracts/worker/route.ts", "utf8");
   const stored = worker.indexOf("recordPages(contract.id, facts.pages)");
   assert.ok(stored > 0, "the worker does not store the page count");
-  assert.ok(stored < worker.indexOf("await readContract("), "stored only after the paid read");
+  assert.ok(stored < worker.indexOf("await readContract("), "the page count must be stored before the paid read");
 });
