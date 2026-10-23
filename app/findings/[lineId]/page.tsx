@@ -5,6 +5,7 @@ import { getFinding } from "@/lib/queries.ts";
 import { formatDate, money, unitMoney } from "@/lib/format.ts";
 import { TAGS, TONE } from "@/lib/contracts/tags.ts";
 import type { Tag } from "@/lib/contracts/variance.ts";
+import { STATE_ENTER } from "@/lib/reveal.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ export default async function Finding({ params }: { params: Promise<{ lineId: st
     : null;
 
   return (
-    <article>
+    <article className={STATE_ENTER}>
       <Link
         href="/findings"
         className="mb-4 inline-flex items-center gap-1.5 text-sm lg:hidden"

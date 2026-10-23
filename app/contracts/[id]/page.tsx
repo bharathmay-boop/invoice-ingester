@@ -9,6 +9,7 @@ import { listVendorChoices, listItemChoices } from "@/lib/queries.ts";
 import { pool } from "@/lib/db.ts";
 import { getThresholds } from "@/lib/items/match.ts";
 import { nearMissesFor } from "@/lib/items/near.ts";
+import { STATE_ENTER } from "@/lib/reveal.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -93,6 +94,9 @@ export default async function Contract({ params }: { params: Promise<{ id: strin
       title={contract.title}
       lead={`${contract.vendor_name ?? "Vendor not confirmed yet"}, added ${formatDate(contract.created_at)}`}
     >
+      {/* Keyed on the status, so the confirmed view arrives rather than
+          appearing in place of the review screen (#248). */}
+      <div key={contract.status} className={STATE_ENTER}>
       {contract.effective_from && (
         <section>
           <h2 className="text-sm font-medium">Period covered</h2>
@@ -181,6 +185,7 @@ export default async function Contract({ params }: { params: Promise<{ id: strin
           may be an annexure, a signature page, or a scan too faint to read.
         </Empty>
       )}
+      </div>
     </Page>
   );
 }

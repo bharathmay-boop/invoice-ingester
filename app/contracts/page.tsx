@@ -5,7 +5,7 @@ import { listContracts } from "@/lib/queries.ts";
 import { formatDate } from "@/lib/format.ts";
 import { DemoNotice, Empty, Page } from "../ui.tsx";
 import { ContractDropzone } from "./contract-dropzone.tsx";
-import { LINK_FEEDBACK, rowEnter } from "@/lib/reveal.ts";
+import { LINK_FEEDBACK, rowEnter, STATE_ENTER } from "@/lib/reveal.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -69,8 +69,10 @@ export default async function Contracts() {
                     <span className="mt-1 max-w-prose text-xs opacity-70">{contract.failure}</span>
                   )}
                 </span>
+                {/* Keyed on the status, so a change of state plays again (#248). */}
                 <span
-                  className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${tone}`}
+                  key={contract.status}
+                  className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${tone} ${STATE_ENTER}`}
                 >
                   {state.label}
                 </span>

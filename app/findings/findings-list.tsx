@@ -76,7 +76,8 @@ export function FindingsList({ findings, totals }: { findings: FindingRow[]; tot
         </p>
       ) : (
         <>
-          <Rows findings={shown ?? valued} />
+          {/* Keyed on the filter, so switching it brings the rows in again (#248). */}
+          <Rows key={filter ?? "all"} findings={shown ?? valued} />
           {!shown && unvalued.length > 0 && (
             <>
               <h2 className="mt-6 text-sm font-medium">Cannot be valued</h2>
