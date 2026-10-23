@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { COUNTED, linksFor, PUBLIC_LINKS, SOURCE_URL } from "./nav-links.ts";
+import { COUNTED, linksFor, PUBLIC_LINKS, samePageSection, SOURCE_URL } from "./nav-links.ts";
 import { TryDemo } from "./try-demo.tsx";
 
 function SignOut() {
@@ -62,10 +62,45 @@ function SignOut() {
   );
 }
 
+/**
+ * Scrolls to a section and moves keyboard focus there, so the next Tab goes
+ * on from the section rather than from the top of the page. Kimi K2.5 review
+ * on #267.
+ */
+function goToSection(id: string) {
+  const section = document.getElementById(id);
+  if (!section) return;
+  // A section is not focusable by default; -1 lets a script focus it without
+  // adding it to the Tab order.
+  if (!section.hasAttribute("tabindex")) section.setAttribute("tabindex", "-1");
+  section.scrollIntoView();
+  section.focus({ preventScroll: true });
+}
+
 /** What a signed out visitor gets: the home page's sections, the source, and two ways in. */
 function PublicLinks() {
+  const pathname = usePathname();
+  const router = useRouter();
+  // The link a menu tap asked for, followed once the sheet has closed. While
+  // it is open the sheet locks scrolling, so a jump made then is lost, on this
+  // page or on the one a navigation lands on.
+  const pending = useRef<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const sections = PUBLIC_LINKS.map((link) => (
-    <Link key={link.href} href={link.href} className="rounded px-2 py-1 text-sm opacity-70 hover:opacity-100">
+    <Link
+      key={link.href}
+      href={link.href}
+      onClick={(event) => {
+        pending.current = link.href;
+        // Another page: navigate after the sheet closes, not during. Closing
+        // it here, since stopping the link also stops the sheet's own close.
+        if (!samePageSection(link.href, pathname)) {
+          event.preventDefault();
+          setMenuOpen(false);
+        }
+      }}
+      className="rounded px-2 py-1 text-sm opacity-70 hover:opacity-100"
+    >
       {link.label}
     </Link>
   ));
@@ -92,13 +127,25 @@ function PublicLinks() {
       {/* On a phone the links fold into a sheet, and the demo stays in reach. */}
       <span className="ml-auto flex items-center gap-2 sm:hidden">
         <TryDemo size="sm" />
-        <Sheet>
+        <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
           <SheetTrigger asChild>
             <Button variant="ghost" size="icon" aria-label="Open the menu">
               <MenuIcon />
             </Button>
           </SheetTrigger>
-          <SheetContent side="right">
+          <SheetContent
+            side="right"
+            onCloseAutoFocus={(event) => {
+              const href = pending.current;
+              pending.current = null;
+              if (!href) return;
+              // Focus would go back to the menu button, at the top of the page.
+              event.preventDefault();
+              const id = samePageSection(href, pathname);
+              if (id) requestAnimationFrame(() => goToSection(id));
+              else router.push(href);
+            }}
+          >
             <SheetHeader>
               <SheetTitle>Invoice Ingester</SheetTitle>
               <SheetDescription>Invoices checked against the contracts behind them.</SheetDescription>
