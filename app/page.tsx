@@ -115,10 +115,13 @@ export default async function Home() {
       {!signedIn && (
         <section className="mx-auto w-full max-w-6xl px-4 pb-14 sm:px-6">
           <div className="border-border bg-card flex flex-wrap items-center justify-between gap-4 rounded-xl border p-6">
-            <p className="max-w-xl text-sm leading-relaxed">
-              Those are drawings of the real screens. The demo opens the real
-              ones, on invented invoices and contracts.
-            </p>
+            <div className="max-w-xl">
+              <p className="font-medium">See it on the real screens.</p>
+              <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
+                Every screen above is open in the demo, read only, with nothing
+                to sign up for.
+              </p>
+            </div>
             <TryDemo />
           </div>
         </section>

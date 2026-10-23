@@ -27,8 +27,8 @@ import { rowDelay, STEPS } from "./walkthrough-steps.ts";
  *
  * It runs on a timer because a signed out visitor cannot do any of it
  * themselves, and a screenshot of a progress row says nothing about what
- * waiting on one feels like. Every figure here is invented, and the panel says
- * so, so nobody mistakes it for real spending.
+ * waiting on one feels like. Every figure here is invented; the footer says
+ * so once for the whole page (#244).
  */
 
 const STAGES = STEPS;
@@ -124,10 +124,6 @@ export function HomeWalkthrough() {
         </TabsContent>
       </Tabs>
 
-      <p className="text-muted-foreground mt-3 text-xs">
-        Invented invoices, so every figure here is a demonstration rather than
-        anyone&rsquo;s real spending.
-      </p>
     </div>
   );
 }
