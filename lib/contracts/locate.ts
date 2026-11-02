@@ -1,5 +1,6 @@
 import "server-only";
 import { extractText, getDocumentProxy } from "unpdf";
+import { hasTextLayer } from "./page-note.ts";
 
 /**
  * Which page a quote is actually on.
@@ -57,7 +58,7 @@ export async function readPages(bytes: Uint8Array): Promise<PageText[]> {
  */
 export function locate(pages: PageText[], quote: string | null): Located {
   if (!pages.length) return { page: null, scanned: true };
-  if (!pages.some((p) => p.flat.length > 20)) return { page: null, scanned: true };
+  if (!hasTextLayer(pages)) return { page: null, scanned: true };
   if (!quote) return { page: null, scanned: false };
 
   const needle = flatten(quote);
