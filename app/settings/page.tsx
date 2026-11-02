@@ -10,7 +10,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usageSince, type Usage as UsageTotals } from "@/lib/usage.ts";
 import { getThresholds } from "@/lib/items/match.ts";
 import { NumberSetting } from "./number-setting.tsx";
-import { saveThresholds, saveTolerance } from "./actions.ts";
+import { saveThresholds, saveTolerance, saveVarianceTolerance } from "./actions.ts";
+import { loadTolerance } from "@/lib/contracts/recompute.ts";
+import { MAX_TOLERANCE_PERCENT } from "@/lib/contracts/variance.ts";
 import { describeSecret } from "@/lib/settings/store.ts";
 import { DEFAULT_TOLERANCE_RUPEES } from "@/lib/extract/validate.ts";
 import { getProvider, MODEL_SETTING, PROVIDER_LABEL } from "@/lib/extract/provider.ts";
@@ -47,9 +49,10 @@ function Usage({ label, usage }: { label: string; usage: UsageTotals }) {
 }
 
 export default async function Settings() {
-  const [thresholds, tolerance] = await Promise.all([
+  const [thresholds, tolerance, variance] = await Promise.all([
     getThresholds(),
     getSetting<number>("rounding_tolerance").then((v) => v ?? DEFAULT_TOLERANCE_RUPEES),
+    loadTolerance(),
   ]);
 
   const now = new Date();
@@ -239,6 +242,23 @@ export default async function Settings() {
                     // Paise, because the checks compare in paise. A coarser
                     // step would have the browser refuse figures the server
                     // accepts, such as 4.99.
+                    step: 0.01,
+                  },
+                ]}
+              />
+              <Separator />
+              <NumberSetting
+                action={saveVarianceTolerance}
+                fields={[
+                  {
+                    name: "variance",
+                    label: "Contract tolerance",
+                    note: "In percent of the agreed rate. A billed rate within this of the contract counts as matching it; past it is a finding. Saving re-checks every invoice.",
+                    value: variance,
+                    min: 0,
+                    max: MAX_TOLERANCE_PERCENT,
+                    // Hundredths, so the browser accepts every value the
+                    // server does, such as the 0.25 a cautious buyer might set.
                     step: 0.01,
                   },
                 ]}

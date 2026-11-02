@@ -1,9 +1,9 @@
 import "server-only";
 import type { PoolClient } from "pg";
 import { pool } from "../db.ts";
-import { getSetting } from "../settings/store.ts";
+import { getSetting, setSetting } from "../settings/store.ts";
 import { coverageFor } from "./lookup.ts";
-import { assess, DEFAULT_TOLERANCE_PERCENT, TOLERANCE_SETTING } from "./variance.ts";
+import { assess, checkTolerance, DEFAULT_TOLERANCE_PERCENT, TOLERANCE_SETTING } from "./variance.ts";
 
 /**
  * The only thing that ever writes a variance tag.
@@ -36,6 +36,21 @@ export async function recomputeVariance(vendorId: string): Promise<number> {
   } finally {
     client.release();
   }
+}
+
+/**
+ * A new tolerance changes what every tagged line should say, so it is saved
+ * and then every supplier with invoices is re-checked against it, one at a
+ * time on its own transaction. Refuses a tolerance that would switch the
+ * check off (#122). Returns how many suppliers were re-checked.
+ */
+export async function setToleranceAndRecheck(percent: number): Promise<number> {
+  await setSetting(TOLERANCE_SETTING, checkTolerance(percent));
+  const { rows } = await pool.query<{ vendor_id: string }>(
+    "SELECT DISTINCT vendor_id FROM invoice WHERE vendor_id IS NOT NULL",
+  );
+  for (const { vendor_id } of rows) await recomputeVariance(vendor_id);
+  return rows.length;
 }
 
 export async function loadTolerance(): Promise<number> {

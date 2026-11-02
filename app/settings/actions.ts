@@ -6,6 +6,7 @@ import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { deleteSecret, setSecret, setSetting } from "@/lib/settings/store.ts";
 import { checkThresholds, THRESHOLDS_SETTING } from "@/lib/items/match.ts";
 import { checkTolerance } from "@/lib/extract/validate.ts";
+import { setToleranceAndRecheck } from "@/lib/contracts/recompute.ts";
 import {
   isProvider,
   MODEL_SETTING,
@@ -182,5 +183,41 @@ export async function saveTolerance(
       rupees === 0
         ? "Saved. With no tolerance at all, a one paisa rounding difference will hold an invoice."
         : "Saved. This applies to the next invoice you read or save.",
+  };
+}
+
+/**
+ * How far a billed rate may sit from the contract before it is a finding, as
+ * a percent of the agreed rate. Every supplier's invoices are re-checked on
+ * save, so Findings changes the moment this does (#122).
+ */
+export async function saveVarianceTolerance(
+  _previous: ActionResult | null,
+  form: FormData,
+): Promise<ActionResult> {
+  await requireSession();
+
+  const entered = form.get("variance");
+  if (typeof entered !== "string" || entered.trim() === "") {
+    // Number("") is 0, the strictest setting, saved without anyone asking.
+    return { ok: false, message: "Enter a tolerance as a percent." };
+  }
+
+  let suppliers: number;
+  try {
+    suppliers = await setToleranceAndRecheck(Number(entered));
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "That tolerance will not do.",
+    };
+  }
+
+  revalidatePath("/settings");
+  revalidatePath("/findings");
+  revalidatePath("/invoices");
+  return {
+    ok: true,
+    message: `Saved, and ${suppliers} ${suppliers === 1 ? "supplier's" : "suppliers'"} invoices re-checked against it.`,
   };
 }
