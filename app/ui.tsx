@@ -95,15 +95,3 @@ export function Empty({
   );
 }
 
-export function DemoNotice() {
-  return (
-    <p className="mt-8 text-xs opacity-60">
-      These are made up invoices, loaded so the screens have something to show.
-      Nothing here came from a model.{" "}
-      <Link href="https://github.com/bharathmay-boop/invoice-ingester" className="underline">
-        Source
-      </Link>
-      .
-    </p>
-  );
-}

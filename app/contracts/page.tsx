@@ -3,9 +3,10 @@ import { cookies } from "next/headers";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { listContracts } from "@/lib/queries.ts";
 import { formatDate } from "@/lib/format.ts";
-import { DemoNotice, Empty, Page } from "../ui.tsx";
+import { Empty, Page } from "../ui.tsx";
 import { ContractDropzone } from "./contract-dropzone.tsx";
 import { LINK_FEEDBACK, rowEnter, STATE_ENTER } from "@/lib/reveal.ts";
+import { DemoNotice } from "../demo-notice.tsx";
 
 export const dynamic = "force-dynamic";
 
