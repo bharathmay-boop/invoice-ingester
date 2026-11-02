@@ -55,3 +55,29 @@ test("Reject and Accept look the same, and there is a page saying what is set", 
   assert.equal(buttons[0], buttons[1], "the two buttons differ in weight");
   assert.match(readFileSync("app/cookies/page.tsx", "utf8"), /sessionCookie\.name/);
 });
+
+// From the Kimi K2.5 review on #292.
+const { applyChoice } = await import("../lib/analytics/consent.ts");
+
+test("Accept turns tracking on only once the choice is recorded", () => {
+  const calls: string[] = [];
+  const effects = { accept: () => calls.push("accept"), reject: () => calls.push("reject") };
+  assert.equal(applyChoice(storage(), "accepted", effects), true);
+  assert.deepEqual(calls, ["accept"]);
+
+  const blocked = { getItem: () => null, setItem: () => { throw new Error("storage blocked"); } };
+  calls.length = 0;
+  assert.equal(applyChoice(blocked, "accepted", effects), false);
+  assert.deepEqual(calls, [], "tracking ran with nothing recorded");
+
+  // Rejecting still takes effect, since it only removes things.
+  assert.equal(applyChoice(blocked, "rejected", effects), false);
+  assert.deepEqual(calls, ["reject"]);
+});
+
+test("accepting twice does not opt in twice", () => {
+  const provider = readFileSync("app/analytics-provider.tsx", "utf8");
+  const accept = provider.slice(provider.indexOf("export function acceptAnalytics"));
+  assert.match(accept.slice(0, 400), /has_opted_in_capturing\(\)/);
+  assert.match(readFileSync("app/consent-banner.tsx", "utf8"), /aria-live="polite"/);
+});

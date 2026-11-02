@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { currentChoice, recordChoice, type Choice } from "@/lib/analytics/consent.ts";
+import { applyChoice, currentChoice, type Choice } from "@/lib/analytics/consent.ts";
 import { acceptAnalytics, rejectAnalytics } from "./analytics-provider.tsx";
 
 const CHANGED = "consent-change";
@@ -35,13 +35,16 @@ export function useConsent(): Choice | "none" | "server" {
 }
 
 export function choose(choice: Choice) {
+  let store: Storage | null = null;
   try {
-    recordChoice(localStorage, choice);
+    store = localStorage;
   } catch {
-    // Not recorded, so the banner asks again next time, which is the safe way round.
+    // Storage blocked entirely; applyChoice below still refuses to track.
   }
-  if (choice === "accepted") acceptAnalytics();
-  else rejectAnalytics();
+  applyChoice(store ?? { getItem: () => null, setItem: () => { throw new Error("no storage"); } }, choice, {
+    accept: acceptAnalytics,
+    reject: rejectAnalytics,
+  });
   window.dispatchEvent(new Event(CHANGED));
 }
 
@@ -84,7 +87,7 @@ export function ConsentBanner() {
   };
 
   return (
-    <div role="region" aria-label="Cookie choices" className="fixed inset-x-0 bottom-0 z-50 p-4">
+    <div role="region" aria-label="Cookie choices" aria-live="polite" className="fixed inset-x-0 bottom-0 z-50 p-4">
       <Card className="mx-auto max-w-2xl shadow-lg">
         <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm">

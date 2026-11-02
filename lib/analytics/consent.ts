@@ -27,3 +27,25 @@ export function currentChoice(store: Store, gpc: boolean): Choice | null {
 export function recordChoice(store: Store, choice: Choice, at = new Date()): void {
   store.setItem(CONSENT_KEY, JSON.stringify({ choice, at: at.toISOString() }));
 }
+
+/**
+ * Records a choice and then acts on it. Accept takes effect only if the
+ * choice was actually recorded, so tracking never runs with no record of the
+ * agreement, as in a browser that blocks storage. Reject always takes effect,
+ * since it only removes things. Returns whether the choice was recorded.
+ */
+export function applyChoice(
+  store: Store,
+  choice: Choice,
+  effects: { accept: () => void; reject: () => void },
+): boolean {
+  let recorded = true;
+  try {
+    recordChoice(store, choice);
+  } catch {
+    recorded = false;
+  }
+  if (choice === "rejected") effects.reject();
+  else if (recorded) effects.accept();
+  return recorded;
+}

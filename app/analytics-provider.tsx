@@ -34,7 +34,9 @@ if (typeof window !== "undefined" && key && !posthog.__loaded) {
 
 /** What happens on Accept: an identifier that lasts, history across visits, and replay. */
 export function acceptAnalytics(): void {
-  if (!key) return;
+  // Called on the click and again when the stored choice is read back; once
+  // is enough (Kimi K2.5 review on #292).
+  if (!key || posthog.has_opted_in_capturing()) return;
   posthog.opt_in_capturing({ captureEventName: false });
   posthog.set_config({ persistence: "localStorage+cookie" });
   posthog.startSessionRecording();
