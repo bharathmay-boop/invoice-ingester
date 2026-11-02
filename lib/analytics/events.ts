@@ -12,6 +12,8 @@
  * first is what the person saw, from the browser; the second is what the
  * call cost, from the server.
  */
+import type { FindingCounts, ImpactBand } from "./value.ts";
+
 export type Events = {
   $pageview: { $current_url: string };
   signed_in: Empty;
@@ -59,6 +61,15 @@ export type Events = {
   contract_reclaimed: { contracts: number };
   contract_review_opened: { rates: number };
   rate_confirmed: { item: "existing" | "new"; has_page: boolean };
+  // Where the product pays off (#202). A search sends its result count,
+  // never the term; an amount goes as a band.
+  item_viewed: { purchases: number; vendors: number };
+  vendor_viewed: { invoices: number };
+  search_performed: { results: number };
+  findings_viewed: FindingCounts;
+  finding_opened: { tag: string; impact: ImpactBand };
+  original_opened: Empty;
+  price_chart_rendered: { points: number };
 };
 
 type Empty = Record<string, never>;

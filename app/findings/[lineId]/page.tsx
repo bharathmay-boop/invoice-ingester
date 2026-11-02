@@ -6,6 +6,9 @@ import { formatDate, money, unitMoney } from "@/lib/format.ts";
 import { TAGS, TONE } from "@/lib/contracts/tags.ts";
 import type { Tag } from "@/lib/contracts/variance.ts";
 import { STATE_ENTER } from "@/lib/reveal.ts";
+import { after } from "next/server.js";
+import { track } from "@/lib/analytics/server.ts";
+import { impactBucket } from "@/lib/analytics/value.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +24,9 @@ export default async function Finding({ params }: { params: Promise<{ lineId: st
   const { lineId } = await params;
   const finding = await getFinding(lineId);
   if (!finding) notFound();
+  after(() =>
+    track("finding_opened", { tag: finding.variance_tag ?? "none", impact: impactBucket(finding.variance_impact) }),
+  );
 
   const tag = TAGS[finding.variance_tag as Tag];
   const over = finding.variance_contracted !== null

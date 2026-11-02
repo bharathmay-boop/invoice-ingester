@@ -3,6 +3,9 @@ import { notFound } from "next/navigation";
 import { canRead, sessionCookie } from "@/lib/auth.ts";
 import { findingTotals, listFindings } from "@/lib/queries.ts";
 import { FindingsList } from "./findings-list.tsx";
+import { after } from "next/server.js";
+import { track } from "@/lib/analytics/server.ts";
+import { linesByTag } from "@/lib/analytics/value.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +22,7 @@ export default async function FindingsLayout({ children }: { children: React.Rea
   if (!(await canRead(jar.get(sessionCookie.name)?.value))) notFound();
 
   const [findings, totals] = await Promise.all([listFindings(), findingTotals()]);
+  after(() => track("findings_viewed", linesByTag(totals)));
 
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 sm:py-12">

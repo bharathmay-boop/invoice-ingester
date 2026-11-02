@@ -4,6 +4,8 @@ import { money } from "@/lib/format.ts";
 import { Empty, Page } from "../ui.tsx";
 import { LINK_FEEDBACK, rowEnter } from "@/lib/reveal.ts";
 import { DemoNotice } from "../demo-notice.tsx";
+import { after } from "next/server.js";
+import { track } from "@/lib/analytics/server.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +19,8 @@ export default async function Items({
   const { q } = await searchParams;
   const items = await listItems(q);
   const searching = Boolean(q?.trim());
+  // How many results, never the term: it is whatever was typed (#202).
+  if (searching) after(() => track("search_performed", { results: items.length }));
 
   return (
     <Page

@@ -20,6 +20,8 @@ import { PriceChart } from "./chart.tsx";
 import { MergeItem } from "./merge-item.tsx";
 import { ItemAliases } from "./item-aliases.tsx";
 import { DemoNotice } from "../../demo-notice.tsx";
+import { after } from "next/server.js";
+import { track } from "@/lib/analytics/server.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +44,13 @@ export default async function ItemDetail({
   const candidates = signedIn ? await listMergeCandidates(item.id) : [];
   const confirmed = item.purchases.filter((purchase) => purchase.status === "confirmed");
   const currencies: Currency[] = ["INR", "USD", "EUR"];
+  // Counted after the response, so analytics never slows the page (#202).
+  after(() =>
+    track("item_viewed", {
+      purchases: item.purchases.length,
+      vendors: new Set(item.purchases.map((purchase) => purchase.vendor_id)).size,
+    }),
+  );
 
   return (
     <Page title={item.canonical_name}>
@@ -152,6 +161,8 @@ export default async function ItemDetail({
 function CurrencySummary({ purchases }: { purchases: PurchaseRow[] }) {
   const currency = purchases[0].currency;
   const oldestFirst = [...purchases].reverse();
+  // A chart of two points is not a price history; this says how often that is all there is.
+  after(() => track("price_chart_rendered", { points: oldestFirst.length }));
   const spend = purchases.reduce((sum, purchase) => sum + purchase.amount, 0);
   const latest = purchases[0];
   const earliest = oldestFirst[0];

@@ -7,6 +7,8 @@ import { getVendor, listVendorInvoices } from "@/lib/queries.ts";
 import { formatDate, money, moneyRounded } from "@/lib/format.ts";
 import { Empty, Page, Stat, StatusBadge } from "../../ui.tsx";
 import { DemoNotice } from "../../demo-notice.tsx";
+import { after } from "next/server.js";
+import { track } from "@/lib/analytics/server.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +29,7 @@ export default async function VendorDetail({
   if (!vendor) notFound();
 
   const invoices = await listVendorInvoices(id);
+  after(() => track("vendor_viewed", { invoices: invoices.length }));
   // Originals are only readable with a session, so the icon is only offered
   // with one. An icon that answers 401 is worse than no icon.
   const jar = await cookies();
