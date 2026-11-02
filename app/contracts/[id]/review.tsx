@@ -15,6 +15,8 @@ import { originalSrc } from "@/lib/original.ts";
 import { money } from "@/lib/format.ts";
 import { defaultVendorId } from "@/lib/vendors/normalize.ts";
 import { amendRate, confirmContract, type ReviewOutcome } from "./review-actions.ts";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import type { EscalationMismatch } from "@/lib/contracts/escalation.ts";
 
 type Rate = {
   id: string;
@@ -44,6 +46,8 @@ type Props = {
   items: { id: string; name: string }[];
   /** Catalogue items an unmatched rate might already be, by rate id. */
   near: Record<string, NearMiss[]>;
+  /** Rates the stated escalation rule does not produce (#153). */
+  escalation: EscalationMismatch[];
 };
 
 /**
@@ -68,6 +72,7 @@ export function ContractReview({
   rates,
   items,
   near,
+  escalation,
 }: Props) {
   const [page, setPage] = useState<number | null>(null);
   const [confirmed, confirm, confirming] = useActionState<ReviewOutcome, FormData>(
@@ -215,6 +220,30 @@ export function ContractReview({
             )}
           </div>
         </form>
+
+        {escalation.length > 0 && (
+          // Shown, not corrected: the contract may state a rule and a table
+          // that disagree, and only the reviewer can say which one holds.
+          <Alert className="mt-8">
+            <AlertTitle>These rates do not follow the escalation the contract states</AlertTitle>
+            <AlertDescription>
+              <ul className="mt-1 space-y-1">
+                {escalation.map((m) => (
+                  <li key={`${m.printed_name}-${m.effective_from}`}>
+                    {m.printed_name} from {m.effective_from}: read as {money(m.read, rates[0].currency)}, the rule gives{" "}
+                    {money(m.expected, rates[0].currency)}.
+                  </li>
+                ))}
+              </ul>
+              {escalation[0].quote && (
+                <blockquote className="mt-2 border-l-2 border-black/20 pl-3 text-xs dark:border-white/20">
+                  {escalation[0].quote}
+                </blockquote>
+              )}
+              <p className="mt-2 text-xs">Check both against the document. Nothing here has been changed.</p>
+            </AlertDescription>
+          </Alert>
+        )}
 
         <section className="mt-8">
           <h2 className="text-sm font-medium">The rates as read</h2>

@@ -12,6 +12,7 @@ import { nearMissesFor } from "@/lib/items/near.ts";
 import { STATE_ENTER } from "@/lib/reveal.ts";
 import { pageNote } from "@/lib/contracts/page-note.ts";
 import { readBy } from "@/lib/read-by.ts";
+import { checkEscalation } from "@/lib/contracts/escalation.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -77,6 +78,7 @@ export default async function Contract({ params }: { params: Promise<{ id: strin
           contractId={contract.id}
           blobUrl={contract.blob_url}
           pageNote={pageNote(contract.extraction_meta?.text_layer, contract.rates)}
+          escalation={checkEscalation(contract.rates, contract.other_terms)}
           vendors={vendors}
           suggested={{
             name: read.vendor_name ?? contract.title,
