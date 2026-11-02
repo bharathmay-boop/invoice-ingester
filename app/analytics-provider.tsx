@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import posthog from "posthog-js";
 import { PostHogProvider } from "posthog-js/react";
 import { replayOptions, scrubEvent } from "@/lib/analytics/scrub.ts";
+import type { EventArgs, EventName } from "@/lib/analytics/events.ts";
 
 const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
 
@@ -58,7 +59,7 @@ export function Analytics({ children }: { children: React.ReactNode }) {
 }
 
 /** Used by the screens. A no-op when analytics is not configured. */
-export function capture(event: string, properties?: Record<string, unknown>): void {
+export function capture<E extends EventName>(event: E, ...args: EventArgs<E>): void {
   if (!key) return;
-  posthog.capture(event, properties);
+  posthog.capture(event, args[0]);
 }

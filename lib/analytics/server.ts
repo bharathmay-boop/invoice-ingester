@@ -1,6 +1,7 @@
 import "server-only";
 import { PostHog } from "posthog-node";
 import { messageless } from "./scrub.ts";
+import type { EventArgs, EventName } from "./events.ts";
 
 /**
  * Server side events. No key configured means every call here does nothing, so
@@ -31,10 +32,10 @@ const DISTINCT_ID = "owner";
  * failing is not a reason for an upload to fail, and a provider outage at
  * PostHog should not hold a request open.
  */
-export async function track(event: string, properties: Record<string, unknown>): Promise<void> {
+export async function track<E extends EventName>(event: E, ...args: EventArgs<E>): Promise<void> {
   if (!client) return;
   try {
-    client.capture({ distinctId: DISTINCT_ID, event, properties });
+    client.capture({ distinctId: DISTINCT_ID, event, properties: args[0] ?? {} });
     await Promise.race([
       client.flush(),
       new Promise((resolve) => setTimeout(resolve, 2000)),

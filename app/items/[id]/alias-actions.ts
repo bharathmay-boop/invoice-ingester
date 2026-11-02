@@ -38,7 +38,7 @@ export async function addAliasAction(
   const result = await addAlias(itemId, alias);
   if (!result.ok) return result;
 
-  await track("alias_added", { item_id: itemId });
+  await track("alias_added");
   revalidatePath(`/items/${itemId}`);
   return null;
 }

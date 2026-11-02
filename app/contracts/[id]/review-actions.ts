@@ -140,7 +140,7 @@ export async function confirmContract(
   // slow recompute cannot hold the transaction that made the contract live.
   await recomputeVariance(confirmedVendorId);
 
-  await track("contract_reviewed", { contract_id: contractId });
+  await track("contract_reviewed");
   revalidatePath(`/contracts/${contractId}`);
   revalidatePath("/findings");
   revalidatePath("/contracts");
