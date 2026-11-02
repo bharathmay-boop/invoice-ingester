@@ -90,3 +90,15 @@ test("the dropzone lists the refused overflow", () => {
   assert.match(dropzone, /splitBatch\(/);
   assert.ok(!dropzone.includes("files.slice(0, MAX_CONTRACTS_PER_BATCH)"), "the silent slice is back");
 });
+
+// The upload checked the key for the invoice provider, but the contract reader
+// always uses OpenRouter, so someone with only an Anthropic key passed the
+// check and then had every contract fail (#114). Both read one constant.
+test("the contract upload checks the key the contract reader will use", () => {
+  const read = readFileSync("lib/contracts/read.ts", "utf8");
+  const upload = readFileSync("app/api/contracts/upload/route.ts", "utf8");
+  assert.match(read, /export const CONTRACT_READER_SECRET = SECRET_FOR\.openrouter/);
+  assert.match(read, /getSecret\(CONTRACT_READER_SECRET\)/);
+  assert.match(upload, /describeSecret\(CONTRACT_READER_SECRET\)/);
+  assert.ok(!/getProvider\(\)/.test(upload), "the upload still asks which invoice provider is set");
+});

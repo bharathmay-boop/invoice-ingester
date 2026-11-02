@@ -2,7 +2,7 @@ import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { NextResponse, type NextRequest } from "next/server.js";
 import { cookies } from "next/headers";
 import { isValidSession, sessionCookie } from "@/lib/auth.ts";
-import { getProvider, SECRET_FOR } from "@/lib/extract/provider.ts";
+import { CONTRACT_READER_SECRET } from "@/lib/contracts/read.ts";
 import { describeSecret } from "@/lib/settings/store.ts";
 import { query } from "@/lib/db.ts";
 import { MAX_CONTRACT_BYTES } from "@/lib/contracts/limits.ts";
@@ -34,10 +34,11 @@ export async function POST(request: NextRequest) {
 
         // A disabled dropzone is a courtesy, not a guard. Without a key the
         // upload would succeed and the queue would then fail on every file.
-        const provider = await getProvider();
-        const key = await describeSecret(SECRET_FOR[provider]);
+        const key = await describeSecret(CONTRACT_READER_SECRET);
         if (!key.present) {
-          throw new Error("No provider key is saved. Add one in settings before uploading.");
+          throw new Error(
+            "Contracts are read through OpenRouter, and no OpenRouter key is saved. Add one in settings before uploading.",
+          );
         }
 
         // The browser sends the file's SHA-256 alongside its name. Hashing
