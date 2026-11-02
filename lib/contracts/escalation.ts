@@ -34,21 +34,30 @@ const WORD_PERCENT: Record<string, number> = {
  * or anything without a yearly cadence is left alone rather than guessed at.
  */
 export function statedYearlyRise(text: string): number | null {
-  const t = text.toLowerCase();
-  const yearly = /\b(each|every)\s+(year|1st|first|\d{1,2}(st|nd|rd|th)?\s+\w+)|\bannual(ly)?\b|\bper annum\b|\byear on year\b/.test(t);
-  if (!yearly) return null;
-  const figure = /(\d+(?:\.\d+)?)\s*(?:%|per\s?cent\b|percent\b)/.exec(t);
-  if (figure) return Number(figure[1]) / 100;
-  const word = /\b(one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:per\s?cent|percent)\b/.exec(t);
-  return word ? WORD_PERCENT[word[1]] / 100 : null;
+  // Sentence by sentence, so a late payment charge in one sentence is not
+  // read as the yearly rise in the next (Kimi K2.5 review on #290). A full
+  // stop between digits is a decimal point, not a sentence end.
+  for (const sentence of text.toLowerCase().split(/(?<!\d)\.(?!\d)|[;\n]/)) {
+    const yearly = /\b(each|every)\s+(year|1st|first|\d{1,2}(st|nd|rd|th)?\s+\w+)|\bannual(ly)?\b|\bper annum\b|\byear on year\b/.test(sentence);
+    if (!yearly) continue;
+    const figure = /(\d+(?:\.\d+)?)\s*(?:%|per\s?cent\b|percent\b)/.exec(sentence);
+    if (figure) return Number(figure[1]) / 100;
+    const word = /\b(one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:per\s?cent|percent)\b/.exec(sentence);
+    if (word) return WORD_PERCENT[word[1]] / 100;
+  }
+  return null;
 }
 
-const day = (value: string | Date) => (typeof value === "string" ? value : value.toISOString()).slice(0, 10);
+/** YYYY-MM-DD, or null for an invalid Date, which is skipped rather than allowed to crash the page. */
+const day = (value: string | Date): string | null => {
+  if (typeof value === "string") return value.slice(0, 10);
+  return Number.isNaN(value.getTime()) ? null : value.toISOString().slice(0, 10);
+};
 
 export function checkEscalation(rates: Rate[], terms: Term[]): EscalationMismatch[] {
   const rules = terms
     .filter((term) => term.kind === "escalation")
-    .map((term) => ({ term, rise: statedYearlyRise(`${term.summary} ${term.quote ?? ""}`) }))
+    .map((term) => ({ term, rise: statedYearlyRise(`${term.summary}. ${term.quote ?? ""}`) }))
     .filter((rule): rule is { term: Term; rise: number } => rule.rise !== null);
   // Two rules saying different things is not something to pick between.
   if (!rules.length || new Set(rules.map((r) => r.rise)).size > 1) return [];
@@ -57,16 +66,20 @@ export function checkEscalation(rates: Rate[], terms: Term[]): EscalationMismatc
   // One series per item, keeping the name as first printed.
   const byItem = new Map<string, { name: string; periods: { rate: number; from: string }[] }>();
   for (const r of rates) {
-    if (!r.effective_from) continue;
+    const from = r.effective_from ? day(r.effective_from) : null;
+    if (!from) continue;
     const key = r.printed_name.trim().toLowerCase();
     const series = byItem.get(key) ?? { name: r.printed_name, periods: [] };
-    series.periods.push({ rate: r.rate, from: day(r.effective_from) });
+    series.periods.push({ rate: r.rate, from });
     byItem.set(key, series);
   }
 
   const mismatches: EscalationMismatch[] = [];
   for (const { name, periods } of byItem.values()) {
     if (periods.length < 2) continue;
+    // Two rates for one item on one date (two units, or a misread) cannot be
+    // put in a series, so that item is left for the reviewer.
+    if (new Set(periods.map((p) => p.from)).size < periods.length) continue;
     periods.sort((a, b) => a.from.localeCompare(b.from));
     const base = periods[0];
     for (const period of periods.slice(1)) {

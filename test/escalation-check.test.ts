@@ -51,3 +51,17 @@ test("the review screen is given the mismatches and shows them", async () => {
   assert.match(readFileSync("app/contracts/[id]/page.tsx", "utf8"), /escalation=\{checkEscalation\(contract\.rates, contract\.other_terms\)\}/);
   assert.match(readFileSync("app/contracts/[id]/review.tsx", "utf8"), /escalation\.length > 0 &&/);
 });
+
+// From the Kimi K2.5 review on #290.
+test("a percentage only counts when the yearly wording is in the same sentence", () => {
+  assert.equal(statedYearlyRise("Interest on late payment is 10%. Rates escalate each year per the CPI."), null);
+  assert.equal(statedYearlyRise("Late payment carries 2% interest. Rates rise by 5% each 1st April."), 0.05);
+  assert.equal(statedYearlyRise("an escalation of 3.5 per cent per annum"), 0.035, "a decimal is not a sentence end");
+});
+
+test("two rates for one item on one date are not compared, and a bad date is skipped", () => {
+  const twins = [rate(100, "2026-04-01"), rate(105, "2026-04-01"), rate(110, "2027-04-01")];
+  assert.deepEqual(checkEscalation(twins, [rule]), []);
+  const broken = [{ printed_name: "A4", rate: 100, effective_from: new Date("not a date") }, rate(100, "2026-04-01", "A4"), rate(105, "2027-04-01", "A4")];
+  assert.deepEqual(checkEscalation(broken, [rule]), []);
+});
