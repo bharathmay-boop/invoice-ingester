@@ -166,7 +166,7 @@ What a compliant banner looks like, from EDPB guidance and recent enforcement:
 
 Enforcement is not theoretical: in 2025 the CNIL fined Google €325m and Shein €150m on the same day over cookie practice, including a "Reject all" that did not always work.
 
-**The lazy and correct answer for this product**: the session cookie is strictly necessary and needs no consent. Everything else is one vendor. Either drop PostHog, or put it behind a real consent gate that defaults to off, honours GPC, and loads nothing until accepted. Dropping it is a legitimate choice and removes an entire compliance surface; if it stays, it earns its banner.
+**What is built (#175).** PostHog stays, behind a gate. It starts in `cookieless_mode: "on_reject"`, opted out, with in-memory persistence and replay off, so before a choice nothing is stored on the device and visits are counted by a hash PostHog computes on its own servers. Accept upgrades it in place to `localStorage+cookie` and starts masked replay; Reject, or a browser sending `Sec-GPC`, leaves it as it started. The banner (`app/consent-banner.tsx`) gives Reject and Accept the same style on the first layer, gates nothing, and can be reopened from the home page footer and from Settings, Data. The choice is kept in the browser with the time it was made. `/cookies` lists what is set, read from the code that sets it, and is public. The session cookie is strictly necessary and is set without asking.
 
 The signed-in app is not exempt. Consent is still consent inside a logged-in product.
 

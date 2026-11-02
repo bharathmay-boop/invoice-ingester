@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   Card,
   CardContent,
@@ -21,6 +22,7 @@ import { getSetting } from "@/lib/settings/store.ts";
 import { ModelPicker } from "./model-picker.tsx";
 import { Pending } from "./pending.tsx";
 import { ProviderSettings, type ProviderView } from "./provider-settings.tsx";
+import { ConsentChoices } from "../consent-banner.tsx";
 
 export const dynamic = "force-dynamic";
 
@@ -278,6 +280,21 @@ export default async function Settings() {
         </TabsContent>
 
         <TabsContent value="data" className="mt-6 space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Analytics</CardTitle>
+              <CardDescription>
+                Visits are counted without storing anything. An identifier and
+                masked session recordings are kept only if you accepted.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap items-center gap-4 text-sm">
+              <ConsentChoices className="underline underline-offset-4" />
+              <Link href="/cookies" className="underline underline-offset-4">
+                What is stored
+              </Link>
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader>
               <CardTitle>Data</CardTitle>

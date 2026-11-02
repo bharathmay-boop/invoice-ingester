@@ -12,6 +12,7 @@ import { ModelsSection } from "./models-section.tsx";
 import { TryDemo } from "./try-demo.tsx";
 import { HomeWalkthrough } from "./home-walkthrough.tsx";
 import { WhatItAnswers } from "./what-it-answers.tsx";
+import { ConsentChoices } from "./consent-banner.tsx";
 
 export const dynamic = "force-dynamic";
 
@@ -142,12 +143,18 @@ export default async function Home() {
             including the contract it cites. None of it is anyone&rsquo;s real
             spending or anyone&rsquo;s real agreement.
           </p>
-          <Link
-            href="https://github.com/bharathmay-boop/invoice-ingester"
-            className="underline underline-offset-4"
-          >
-            Source and the issue board
-          </Link>
+<span className="flex flex-wrap gap-x-4 gap-y-1">
+            <Link
+              href="https://github.com/bharathmay-boop/invoice-ingester"
+              className="underline underline-offset-4"
+            >
+              Source and the issue board
+            </Link>
+            <Link href="/cookies" className="underline underline-offset-4">
+              Cookies
+            </Link>
+            <ConsentChoices className="underline underline-offset-4" />
+          </span>
         </div>
       </footer>
     </main>

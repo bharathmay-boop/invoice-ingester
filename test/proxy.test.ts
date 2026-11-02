@@ -37,12 +37,17 @@ async function redirectTo(path: string) {
   return `${location.pathname}${location.search}`;
 }
 
-test("only the home page and signing in are public", async () => {
+test("only the home page, signing in and the cookie list are public", async () => {
   for (const method of READ_METHODS) {
-    for (const path of ["/", "/login"]) {
+    for (const path of ["/", "/login", "/cookies"]) {
       assert.equal(await status(path, method), 200, `${method} ${path}`);
     }
   }
+});
+
+test("only the cookie list itself is public, not anything under it", async () => {
+  // Kimi K2.5 review on #292: a prefix would open any future /cookies/... page.
+  assert.equal(await redirectTo("/cookies/export"), "/login?next=%2Fcookies%2Fexport");
 });
 
 test("every other page sends a signed out visitor to sign in, and remembers where they were going", async () => {
