@@ -6,6 +6,7 @@ import { CONTRACT_READER_SECRET } from "@/lib/contracts/read.ts";
 import { describeSecret } from "@/lib/settings/store.ts";
 import { query } from "@/lib/db.ts";
 import { MAX_CONTRACT_BYTES } from "@/lib/contracts/limits.ts";
+import { track } from "@/lib/analytics/server.ts";
 
 export const runtime = "nodejs";
 
@@ -73,12 +74,14 @@ export async function POST(request: NextRequest) {
         // ON CONFLICT DO NOTHING rather than an error: dropping a folder that
         // happens to contain one you already have is an ordinary mistake, and
         // the screen shows it once either way.
-        await query(
+        const inserted = await query<{ id: string }>(
           `INSERT INTO contract (title, blob_url, content_type, digest, status)
            VALUES ($1, $2, 'application/pdf', $3, 'queued')
-           ON CONFLICT (digest) DO NOTHING`,
+           ON CONFLICT (digest) DO NOTHING
+           RETURNING id`,
           [sent.name, blob.url, sent.digest],
         );
+        await track("contract_queued", { duplicate: inserted.length === 0 });
       },
     });
 

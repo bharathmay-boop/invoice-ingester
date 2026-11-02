@@ -13,6 +13,8 @@ import { STATE_ENTER } from "@/lib/reveal.ts";
 import { pageNote } from "@/lib/contracts/page-note.ts";
 import { readBy } from "@/lib/read-by.ts";
 import { checkEscalation } from "@/lib/contracts/escalation.ts";
+import { track } from "@/lib/analytics/server.ts";
+import { after } from "next/server.js";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +42,9 @@ export default async function Contract({ params }: { params: Promise<{ id: strin
   // confirmed gets the read only view below it, because re-presenting a form
   // for something already agreed invites it to be agreed again by accident.
   if (contract.status === "ready_for_review") {
+    // A view, counted per render; demo views count too, which is how the
+    // funnel from the home page is read (#201).
+    after(() => track("contract_review_opened", { rates: contract.rates.length }));
     const [vendors, items] = await Promise.all([listVendorChoices(), listItemChoices()]);
     // Offered before a new item is made: the matcher leaves a rate unmatched
     // when it scores below the link threshold, which is not the same as the

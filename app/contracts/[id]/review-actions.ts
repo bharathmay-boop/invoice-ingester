@@ -199,6 +199,11 @@ export async function amendRate(
     revalidatePath("/findings");
     revalidatePath("/contracts");
   }
+  const [placed] = await pool.query<{ has_page: boolean }>(
+    "SELECT source_page IS NOT NULL AS has_page FROM contract_rate WHERE id = $1",
+    [rateId],
+  ).then((r) => r.rows);
+  await track("rate_confirmed", { item: UUID.test(itemId) ? "existing" : "new", has_page: placed?.has_page ?? false });
   revalidatePath(`/contracts/${contractId}`);
   return null;
 }

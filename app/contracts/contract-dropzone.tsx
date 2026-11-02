@@ -10,6 +10,7 @@ import {
   rejectContract,
   splitBatch,
 } from "@/lib/contracts/limits.ts";
+import { capture } from "../analytics-provider.tsx";
 
 type Progress = { name: string; state: "hashing" | "uploading" | "done" | "failed"; detail?: string };
 
@@ -56,6 +57,7 @@ export function ContractDropzone() {
       try {
         const digest = await sha256(file);
         update(i, { state: "uploading" });
+        capture("contract_upload_started", { content_type: file.type, size_bytes: file.size });
         await upload(`contracts/${file.name}`, file, {
           // Private, like the invoices. A supply contract is the most
           // confidential document a business has, and putting it on a world
