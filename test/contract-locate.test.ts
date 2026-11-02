@@ -74,3 +74,9 @@ test("cells from different rows, or a figure the row does not have, find nothing
   assert.equal(locate([page(1, ROW)], "A4 Paper 80 GSM White | ream | 999.00").page, null);
   assert.equal(locate([page(1, ROW)], "ream | 245.00").page, null, "too little to be sure of");
 });
+
+test("a row found on a page numbered 0 is still found", () => {
+  // Pages count from 1 today; the check is on null so it never depends on it.
+  // Kimi K2.5 review on #286.
+  assert.equal(locate([page(0, ROW)], "A4 Paper 80 GSM White | ream | 245.00").page, 0);
+});

@@ -77,7 +77,7 @@ export function locate(pages: PageText[], quote: string | null): Located {
   // A table row the model tidied up: cells joined with pipes or tabs that
   // never appear in the document (#136). Found by its cells, in order.
   const row = findRow(pages, quote);
-  if (row) return { page: row, scanned: false };
+  if (row !== null) return { page: row, scanned: false };
 
   return { page: null, scanned: false };
 }
