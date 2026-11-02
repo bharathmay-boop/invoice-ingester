@@ -244,7 +244,7 @@ export async function discardDraft(_previous: SaveResult, form: FormData): Promi
     [draftId],
   );
   const released = await releaseDraft(draftId);
-  if (released) await track("draft_discarded", {});
+  if (released) await track("draft_discarded");
 
   redirect(draft ? await nextFromSameFile(draft.blob_url, "/upload") : "/upload");
 }
