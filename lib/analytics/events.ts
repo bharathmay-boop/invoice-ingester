@@ -37,6 +37,28 @@ export type Events = {
   alias_added: Empty;
   suggestion_decided: { verdict: "accepted" | "rejected" };
   contract_reviewed: Empty;
+  // The contract pipeline (#201). Counts and codes only: never a quote, a
+  // rate, a title or an exception message.
+  contract_upload_started: { content_type: string; size_bytes: number };
+  /** A new file entered the queue. Pages are not known until it is opened. */
+  contract_queued: { duplicate: boolean };
+  contract_read: {
+    pages: number | null;
+    rates: number;
+    located: number;
+    unlocated: number;
+    duration_ms: number;
+    model: string | null;
+  };
+  contract_read_failed: {
+    failure: "refused" | "not_a_contract" | "read_failed" | "crashed";
+    pages: number | null;
+    attempt: number;
+  };
+  /** The sweeper handed back contracts a dead worker was holding. */
+  contract_reclaimed: { contracts: number };
+  contract_review_opened: { rates: number };
+  rate_confirmed: { item: "existing" | "new"; has_page: boolean };
 };
 
 type Empty = Record<string, never>;

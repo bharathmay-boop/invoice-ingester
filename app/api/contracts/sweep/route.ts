@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server.js";
 import { reclaimStale, waitingCount } from "@/lib/contracts/queue.ts";
 import { callWorker, isCronRequest } from "@/lib/contracts/cron.ts";
+import { track } from "@/lib/analytics/server.ts";
 
 export const runtime = "nodejs";
 
@@ -22,6 +23,7 @@ export async function GET(request: NextRequest) {
   }
 
   const reclaimed = await reclaimStale();
+  if (reclaimed > 0) await track("contract_reclaimed", { contracts: reclaimed });
   const waiting = await waitingCount();
 
   if (waiting > 0) callWorker(request.nextUrl.origin);

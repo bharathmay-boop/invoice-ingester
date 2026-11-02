@@ -16,6 +16,7 @@ import { hasTextLayer } from "@/lib/contracts/page-note.ts";
 import { refuseBeforeReading } from "@/lib/contracts/limits.ts";
 import { readPdf } from "@/lib/pdf.ts";
 import { callWorker, isCronRequest } from "@/lib/contracts/cron.ts";
+import { track } from "@/lib/analytics/server.ts";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -62,15 +63,19 @@ export async function POST(request: NextRequest) {
     const facts = await readPdf(bytes);
     if (facts) await recordPages(contract.id, facts.pages);
     const refusal = refuseBeforeReading(facts);
+    const startedAt = Date.now();
     const read = refusal
       ? null
       : await readContract({ data: bytes.toString("base64"), contentType: contract.content_type });
+    const failed = (failure: "refused" | "not_a_contract" | "read_failed") =>
+      track("contract_read_failed", { failure, pages: facts?.pages ?? null, attempt: contract.attempts });
 
     if (!read) {
       await query(
         "UPDATE contract SET status = 'could_not_read', failure = $2, heartbeat_at = NULL WHERE id = $1",
         [contract.id, refusal],
       );
+      await failed("refused");
     } else if (read.ok) {
       // Checked against the document while the bytes are still here. The page
       // a model names is a guess; the page a quote is found on is a fact, and
@@ -91,6 +96,15 @@ export async function POST(request: NextRequest) {
       // tell a scan from quotes that did not match (#135).
       const meta = { ...(read.meta as object), text_layer: pages ? hasTextLayer(pages) : undefined };
       await markReadyForReview(contract.id, { ...read.contract, rates }, meta, terms);
+      const located = rates.filter((rate) => rate.page !== null).length;
+      await track("contract_read", {
+        pages: facts?.pages ?? null,
+        rates: rates.length,
+        located,
+        unlocated: rates.length - located,
+        duration_ms: Date.now() - startedAt,
+        model: typeof (read.meta as { model?: unknown })?.model === "string" ? (read.meta as { model: string }).model : null,
+      });
     } else if (read.notContract) {
       // Read and declined. Not a failure of the system, and never worth
       // another attempt, so it goes straight to terminal with what it is.
@@ -98,6 +112,7 @@ export async function POST(request: NextRequest) {
         "UPDATE contract SET status = 'could_not_read', failure = $2, heartbeat_at = NULL WHERE id = $1",
         [contract.id, `This does not look like a contract. ${read.reason}`],
       );
+      await failed("not_a_contract");
     } else {
       // A retryable failure goes back in the queue by leaving the attempt
       // count to decide; one that will fail the same way again is spent.
@@ -106,6 +121,7 @@ export async function POST(request: NextRequest) {
         read.failure.retryable ? contract.attempts : Number.MAX_SAFE_INTEGER,
         read.failure.message,
       );
+      await failed("read_failed");
     }
   } catch (error) {
     await markFailed(
@@ -113,6 +129,8 @@ export async function POST(request: NextRequest) {
       contract.attempts,
       error instanceof Error ? error.message : "Reading this contract failed.",
     );
+    // A code only: the message can quote what the document said.
+    await track("contract_read_failed", { failure: "crashed", pages: null, attempt: contract.attempts });
   } finally {
     clearInterval(pulse);
   }
