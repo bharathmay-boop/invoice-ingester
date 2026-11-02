@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { STATUS, type InvoiceStatus } from "@/lib/format.ts";
 import { Button } from "@/components/ui/button";
+import { onlyDemoData } from "@/lib/demo/notice.ts";
 
 export function Page({
   title,
@@ -95,15 +96,8 @@ export function Empty({
   );
 }
 
-export function DemoNotice() {
-  return (
-    <p className="mt-8 text-xs opacity-60">
-      These are made up invoices, loaded so the screens have something to show.
-      Nothing here came from a model.{" "}
-      <Link href="https://github.com/bharathmay-boop/invoice-ingester" className="underline">
-        Source
-      </Link>
-      .
-    </p>
-  );
+/** Said while the data is still the seeded demo, and gone once it is not (#158). */
+export async function DemoNotice() {
+  if (!(await onlyDemoData())) return null;
+  return <p className="mt-8 text-xs opacity-60">These are seeded demo invoices, not anyone&rsquo;s real spending.</p>;
 }
