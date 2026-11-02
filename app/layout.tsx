@@ -8,6 +8,7 @@ import { ThemeProvider } from "./theme-provider.tsx";
 import { Analytics } from "./analytics-provider.tsx";
 import { sessionRole, sessionCookie } from "@/lib/auth.ts";
 import { DemoBar } from "./demo-bar.tsx";
+import { ConsentBanner } from "./consent-banner.tsx";
 import { countFindings, countWaitingSuggestions } from "@/lib/queries.ts";
 
 const geistSans = Geist({
@@ -51,6 +52,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
               {role === "demo" && <DemoBar />}
               <Nav role={role} waiting={waiting.n} findings={findings.n} />
               {children}
+              <ConsentBanner />
             </Analytics>
           </Suspense>
         </ThemeProvider>

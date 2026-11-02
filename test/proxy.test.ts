@@ -37,9 +37,9 @@ async function redirectTo(path: string) {
   return `${location.pathname}${location.search}`;
 }
 
-test("only the home page and signing in are public", async () => {
+test("only the home page, signing in and the cookie list are public", async () => {
   for (const method of READ_METHODS) {
-    for (const path of ["/", "/login"]) {
+    for (const path of ["/", "/login", "/cookies"]) {
       assert.equal(await status(path, method), 200, `${method} ${path}`);
     }
   }

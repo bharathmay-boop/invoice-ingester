@@ -16,7 +16,13 @@ if (typeof window !== "undefined" && key && !posthog.__loaded) {
     // listener would only ever see the first page.
     capture_pageview: false,
     capture_exceptions: true,
-    persistence: "localStorage+cookie",
+    // Nothing is stored on the device until somebody accepts (#175). Until
+    // then, and after a rejection, visits are counted without cookies, by a
+    // hash PostHog works out on its own servers, and nothing is replayed.
+    cookieless_mode: "on_reject",
+    opt_out_capturing_by_default: true,
+    persistence: "memory",
+    disable_session_recording: true,
     // Clicks are still counted, but the text and attributes of what was clicked
     // are vendor names, item names and invoice numbers. See lib/analytics/scrub.ts.
     mask_all_text: true,
@@ -24,6 +30,26 @@ if (typeof window !== "undefined" && key && !posthog.__loaded) {
     before_send: scrubEvent,
     session_recording: replayOptions,
   });
+}
+
+/** What happens on Accept: an identifier that lasts, history across visits, and replay. */
+export function acceptAnalytics(): void {
+  if (!key) return;
+  posthog.opt_in_capturing({ captureEventName: false });
+  posthog.set_config({ persistence: "localStorage+cookie" });
+  posthog.startSessionRecording();
+}
+
+/**
+ * Back to how it started, which is all a rejection or a withdrawal is: the
+ * stored identifier is cleared and nothing more is written.
+ */
+export function rejectAnalytics(): void {
+  if (!key) return;
+  posthog.stopSessionRecording();
+  posthog.opt_out_capturing();
+  posthog.set_config({ persistence: "memory" });
+  posthog.reset();
 }
 
 /**
