@@ -655,3 +655,23 @@ test("a failed re-check does not leave the corrected rate behind", { skip }, asy
   const [row] = await db!.query<{ rate: string }>("SELECT rate::text FROM contract_rate WHERE id = $1", [r]);
   assert.equal(Number(row.rate), 285);
 });
+
+// The tolerance was a constant with a settings lookup in front of it: no screen
+// set it, and nothing re-checked tagged lines when it changed (#122).
+test("changing the tolerance re-checks every supplier's invoices", { skip }, async () => {
+  const i = await item("a4 paper");
+  const lines: string[] = [];
+  for (const name of ["Gupta Traders", "Sharma Paper"]) {
+    const v = await vendor(name);
+    const inv = await invoice(v, `INV-${name}`, "2026-05-01");
+    lines.push(await line(inv, i, 288, 10)); // about 1 percent over 285
+    await rate(await contract(v), v, i, 285, "2026-04-01", null);
+    await recompute!.recomputeVariance(v);
+  }
+  for (const l of lines) assert.equal((await tagOf(l)).variance_tag, "billed_above_contract");
+
+  assert.equal(await recompute!.setToleranceAndRecheck(2), 2, "both suppliers re-checked");
+  for (const l of lines) assert.equal((await tagOf(l)).variance_tag, "matches_contract");
+
+  await assert.rejects(recompute!.setToleranceAndRecheck(40), /stops catching/);
+});
