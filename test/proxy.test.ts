@@ -45,6 +45,11 @@ test("only the home page, signing in and the cookie list are public", async () =
   }
 });
 
+test("only the cookie list itself is public, not anything under it", async () => {
+  // Kimi K2.5 review on #292: a prefix would open any future /cookies/... page.
+  assert.equal(await redirectTo("/cookies/export"), "/login?next=%2Fcookies%2Fexport");
+});
+
 test("every other page sends a signed out visitor to sign in, and remembers where they were going", async () => {
   assert.equal(await redirectTo("/items"), "/login?next=%2Fitems");
   assert.equal(await redirectTo("/vendors/abc"), "/login?next=%2Fvendors%2Fabc");

@@ -54,7 +54,9 @@ export async function proxy(request: NextRequest) {
   // everything. /login keeps its prefix so its own assets come with it.
   // The cookie list has to be readable before anyone signs in, since it is
   // what the consent banner links to (#175).
-  if (pathname === "/" || isUnder(pathname, ["/login", "/cookies"])) return NextResponse.next();
+  if (pathname === "/" || pathname === "/cookies" || isUnder(pathname, ["/login"])) {
+    return NextResponse.next();
+  }
 
   // An API route answers rather than redirects, so a fetch gets a readable
   // error instead of the HTML of the sign in page.
