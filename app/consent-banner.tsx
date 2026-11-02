@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { applyChoice, currentChoice, type Choice } from "@/lib/analytics/consent.ts";
+import { applyChoice, choiceIn, type Choice } from "@/lib/analytics/consent.ts";
 import { acceptAnalytics, rejectAnalytics } from "./analytics-provider.tsx";
 
 const CHANGED = "consent-change";
@@ -20,13 +20,8 @@ function subscribe(onChange: () => void) {
 }
 
 function snapshot(): Choice | "none" {
-  try {
-    const gpc = (navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl === true;
-    return currentChoice(localStorage, gpc) ?? "none";
-  } catch {
-    // Storage blocked: treat as not chosen, which keeps the safe default.
-    return "none";
-  }
+  const gpc = (navigator as Navigator & { globalPrivacyControl?: boolean }).globalPrivacyControl === true;
+  return choiceIn(() => localStorage, gpc) ?? "none";
 }
 
 /** The choice in force, or "server" while rendering where there is no browser. */

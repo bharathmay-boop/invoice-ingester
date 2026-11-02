@@ -81,3 +81,14 @@ test("accepting twice does not opt in twice", () => {
   assert.match(accept.slice(0, 400), /has_opted_in_capturing\(\)/);
   assert.match(readFileSync("app/consent-banner.tsx", "utf8"), /aria-live="polite"/);
 });
+
+// Kimi K2.5 re-review on #292: storage that throws on access used to hide
+// a Global Privacy Control refusal, so the banner asked anyway.
+const { choiceIn } = await import("../lib/analytics/consent.ts");
+
+test("GPC is a refusal even when the browser blocks storage entirely", () => {
+  const blocked = () => { throw new Error("storage blocked"); };
+  assert.equal(choiceIn(blocked, true), "rejected");
+  assert.equal(choiceIn(blocked, false), null, "no storage and no GPC is still a question");
+  assert.equal(choiceIn(() => storage(), false), null);
+});

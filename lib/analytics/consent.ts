@@ -49,3 +49,17 @@ export function applyChoice(
   else if (recorded) effects.accept();
   return recorded;
 }
+
+/**
+ * The choice in force, reaching storage only through `open`, which a browser
+ * that blocks storage makes throw. GPC is read first, so a refusal sent that
+ * way holds even when storage cannot be read at all.
+ */
+export function choiceIn(open: () => Store, gpc: boolean): Choice | null {
+  if (gpc) return "rejected";
+  try {
+    return currentChoice(open(), false);
+  } catch {
+    return null;
+  }
+}
