@@ -9,6 +9,7 @@ import { describeDiscrepancy, isValidityWarning, type Discrepancy } from "@/lib/
 import { ReviewForm } from "./review-form.tsx";
 import { SavedNotice } from "../../saved-notice.tsx";
 import { savedFrom } from "@/lib/save-ack.ts";
+import { readBy } from "@/lib/read-by.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,9 @@ type DraftRow = {
   last_page: number | null;
   /** Drafts from the same file still waiting, this one included. */
   siblings: number;
+  /** Which model read it, among other things; see readBy. */
+  extraction_meta: unknown;
+  is_demo: boolean;
 };
 
 export default async function Review({
@@ -39,7 +43,7 @@ export default async function Review({
 
   const [draft] = await query<DraftRow>(
     `SELECT id, blob_url, file_name, content_type, extracted, discrepancies,
-            first_page, last_page,
+            first_page, last_page, extraction_meta, is_demo,
             (SELECT count(*)::int FROM draft s WHERE s.blob_url = d.blob_url) AS siblings
      FROM draft d WHERE id = $1`,
     [id],
@@ -142,6 +146,9 @@ export default async function Review({
           <p className="text-muted-foreground mt-1 text-xs">
             Everything here is editable. Nothing is stored until you save.
           </p>
+          {readBy(draft.extraction_meta, draft.is_demo) && (
+            <p className="text-muted-foreground mt-1 text-xs">{readBy(draft.extraction_meta, draft.is_demo)}</p>
+          )}
           <div className="mt-3">
             {/* A demo session sees the screen as the owner would, with every
               control disabled rather than left to fail with a 403 (#234). */}

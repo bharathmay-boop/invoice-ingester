@@ -11,6 +11,7 @@ import { getThresholds } from "@/lib/items/match.ts";
 import { nearMissesFor } from "@/lib/items/near.ts";
 import { STATE_ENTER } from "@/lib/reveal.ts";
 import { pageNote } from "@/lib/contracts/page-note.ts";
+import { readBy } from "@/lib/read-by.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +67,9 @@ export default async function Contract({ params }: { params: Promise<{ id: strin
         title={contract.title}
         lead="Check this against the document before it starts counting. Nothing here affects an invoice until you confirm."
       >
+        {readBy(contract.extraction_meta) && (
+          <p className="text-muted-foreground -mt-2 mb-4 text-xs">{readBy(contract.extraction_meta)}</p>
+        )}
         {/* A demo session sees the screen as the owner would, with every
           control disabled rather than left to fail with a 403 (#234). */}
         <fieldset disabled={demo} className="min-w-0">
