@@ -30,7 +30,7 @@ export type FindingCounts = Record<(typeof FINDING_TAGS)[number], number>;
 export function linesByTag(totals: { variance_tag: string; lines: number }[]): FindingCounts {
   const counts = Object.fromEntries(FINDING_TAGS.map((tag) => [tag, 0])) as FindingCounts;
   for (const row of totals) {
-    if (row.variance_tag in counts) counts[row.variance_tag as keyof FindingCounts] += row.lines;
+    if (Object.hasOwn(counts, row.variance_tag)) counts[row.variance_tag as keyof FindingCounts] += row.lines;
   }
   return counts;
 }

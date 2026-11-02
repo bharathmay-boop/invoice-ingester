@@ -22,6 +22,8 @@ test("findings are counted per kind, across currencies", () => {
     { variance_tag: "billed_above_contract", lines: 2 },
     { variance_tag: "not_in_contract", lines: 6 },
     { variance_tag: "something_new", lines: 1 },
+    // Not one of ours, even though it is a property of every object.
+    { variance_tag: "toString", lines: 3 },
   ]);
   assert.deepEqual(counts, {
     billed_above_contract: 8,
