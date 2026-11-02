@@ -5,7 +5,8 @@ import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { InvoiceOriginal } from "../../invoice-original.tsx";
 import { getVendor, listVendorInvoices } from "@/lib/queries.ts";
 import { formatDate, money, moneyRounded } from "@/lib/format.ts";
-import { DemoNotice, Empty, Page, Stat, StatusBadge } from "../../ui.tsx";
+import { Empty, Page, Stat, StatusBadge } from "../../ui.tsx";
+import { DemoNotice } from "../../demo-notice.tsx";
 
 export const dynamic = "force-dynamic";
 

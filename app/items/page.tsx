@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { listItems } from "@/lib/queries.ts";
 import { money } from "@/lib/format.ts";
-import { DemoNotice, Empty, Page } from "../ui.tsx";
+import { Empty, Page } from "../ui.tsx";
 import { LINK_FEEDBACK, rowEnter } from "@/lib/reveal.ts";
+import { DemoNotice } from "../demo-notice.tsx";
 
 export const dynamic = "force-dynamic";
 

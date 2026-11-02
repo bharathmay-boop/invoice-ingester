@@ -15,8 +15,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { DemoNotice, Page, StatusBadge } from "../../ui.tsx";
+import { Page, StatusBadge } from "../../ui.tsx";
 import { InvoiceOriginal } from "../../invoice-original.tsx";
+import { DemoNotice } from "../../demo-notice.tsx";
 
 export const dynamic = "force-dynamic";
 

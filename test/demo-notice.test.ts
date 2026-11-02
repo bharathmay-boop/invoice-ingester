@@ -43,8 +43,9 @@ test("the notice shows over demo data and vanishes once a real invoice is confir
 });
 
 test("the notice is one clause, with no repository link", () => {
-  const ui = readFileSync("app/ui.tsx", "utf8");
-  const component = ui.slice(ui.indexOf("export async function DemoNotice"));
+  const component = readFileSync("app/demo-notice.tsx", "utf8");
+  // The shared ui.tsx stays free of server-only imports (Kimi K2.5, #288).
+  assert.ok(!readFileSync("app/ui.tsx", "utf8").includes("lib/demo/notice"), "ui.tsx imports a server-only read");
   assert.match(component, /onlyDemoData\(\)/);
   assert.ok(!component.slice(0, 600).includes("github.com"), "the link is back");
   assert.ok(!/Nothing here came from a model/.test(component), "the old claim is back");

@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { STATUS, type InvoiceStatus } from "@/lib/format.ts";
 import { Button } from "@/components/ui/button";
-import { onlyDemoData } from "@/lib/demo/notice.ts";
 
 export function Page({
   title,
@@ -96,8 +95,3 @@ export function Empty({
   );
 }
 
-/** Said while the data is still the seeded demo, and gone once it is not (#158). */
-export async function DemoNotice() {
-  if (!(await onlyDemoData())) return null;
-  return <p className="mt-8 text-xs opacity-60">These are seeded demo invoices, not anyone&rsquo;s real spending.</p>;
-}

@@ -15,10 +15,11 @@ import {
 import { cheapestVendorNow, comparePrices } from "@/lib/price.ts";
 import { TriangleAlertIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { DemoNotice, Empty, Page, Stat, StatusBadge } from "../../ui.tsx";
+import { Empty, Page, Stat, StatusBadge } from "../../ui.tsx";
 import { PriceChart } from "./chart.tsx";
 import { MergeItem } from "./merge-item.tsx";
 import { ItemAliases } from "./item-aliases.tsx";
+import { DemoNotice } from "../../demo-notice.tsx";
 
 export const dynamic = "force-dynamic";
 

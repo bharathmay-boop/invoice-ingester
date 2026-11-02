@@ -5,10 +5,11 @@ import { listVendorChoices } from "@/lib/queries.ts";
 import { listInvoices } from "@/lib/invoices/queries.ts";
 import { INVOICE_PAGE, parseInvoiceFilter } from "@/lib/invoices/filter.ts";
 import { formatDate, money } from "@/lib/format.ts";
-import { DemoNotice, Empty, Page, StatusBadge } from "../ui.tsx";
+import { Empty, Page, StatusBadge } from "../ui.tsx";
 import { InvoiceOriginal } from "../invoice-original.tsx";
 import { InvoiceFilters } from "./invoice-filters.tsx";
 import { LINK_FEEDBACK, rowEnter } from "@/lib/reveal.ts";
+import { DemoNotice } from "../demo-notice.tsx";
 
 export const dynamic = "force-dynamic";
 
