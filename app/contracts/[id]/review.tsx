@@ -36,7 +36,7 @@ type NearMiss = { itemId: string; name: string; score: number };
 type Props = {
   contractId: string;
   blobUrl: string;
-  scanned: boolean;
+  pageNote: "scan" | "unmatched" | null;
   vendors: { id: string; name: string }[];
   suggested: { name: string; address: string | null; taxId: string | null; taxIdKind: string | null };
   period: { from: string | null; to: string | null };
@@ -61,7 +61,7 @@ type Props = {
 export function ContractReview({
   contractId,
   blobUrl,
-  scanned,
+  pageNote,
   vendors,
   suggested,
   period,
@@ -91,10 +91,17 @@ export function ContractReview({
           title="The contract"
           className="h-[70vh] w-full rounded-lg border border-black/10 dark:border-white/15"
         />
-        {scanned && (
+        {pageNote === "scan" && (
           <p className="text-muted-foreground mt-2 text-xs">
             This is a scan with no text in it, so nothing can be located on a
             page. The rates below have no page to jump to.
+          </p>
+        )}
+        {pageNote === "unmatched" && (
+          <p className="text-muted-foreground mt-2 text-xs">
+            None of the quoted lines below were found word for word in the
+            document&rsquo;s text, so the rates have no page to jump to. Check
+            each one against the document.
           </p>
         )}
       </div>

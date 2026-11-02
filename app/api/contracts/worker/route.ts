@@ -12,6 +12,7 @@ import {
 } from "@/lib/contracts/queue.ts";
 import { readContract } from "@/lib/contracts/read.ts";
 import { locate, readPages } from "@/lib/contracts/locate.ts";
+import { hasTextLayer } from "@/lib/contracts/page-note.ts";
 import { refuseBeforeReading } from "@/lib/contracts/limits.ts";
 import { readPdf } from "@/lib/pdf.ts";
 import { callWorker, isCronRequest } from "@/lib/contracts/cron.ts";
@@ -74,18 +75,22 @@ export async function POST(request: NextRequest) {
       // Checked against the document while the bytes are still here. The page
       // a model names is a guess; the page a quote is found on is a fact, and
       // a jump that lands nowhere costs more trust than no jump at all.
-      const pages = await readPages(bytes).catch(() => []);
+      // Null when the text could not be read, so no claim is made about it.
+      const pages = await readPages(bytes).catch(() => null);
       const rates = read.contract.rates.map((rate) => ({
         ...rate,
-        page: locate(pages, rate.quote).page,
+        page: locate(pages ?? [], rate.quote).page,
       }));
       const terms = read.contract.other_terms.map((term) => ({
         ...term,
-        page: locate(pages, term.quote).page,
+        page: locate(pages ?? [], term.quote).page,
       }));
 
       await recordRates(contract.id, read.contract.currency, rates);
-      await markReadyForReview(contract.id, { ...read.contract, rates }, read.meta, terms);
+      // Whether the document has text at all, kept so the review screen can
+      // tell a scan from quotes that did not match (#135).
+      const meta = { ...(read.meta as object), text_layer: pages ? hasTextLayer(pages) : undefined };
+      await markReadyForReview(contract.id, { ...read.contract, rates }, meta, terms);
     } else if (read.notContract) {
       // Read and declined. Not a failure of the system, and never worth
       // another attempt, so it goes straight to terminal with what it is.

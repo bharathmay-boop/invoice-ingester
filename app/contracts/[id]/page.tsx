@@ -10,6 +10,7 @@ import { pool } from "@/lib/db.ts";
 import { getThresholds } from "@/lib/items/match.ts";
 import { nearMissesFor } from "@/lib/items/near.ts";
 import { STATE_ENTER } from "@/lib/reveal.ts";
+import { pageNote } from "@/lib/contracts/page-note.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +72,7 @@ export default async function Contract({ params }: { params: Promise<{ id: strin
         <ContractReview
           contractId={contract.id}
           blobUrl={contract.blob_url}
-          scanned={contract.rates.length > 0 && contract.rates.every((r) => r.source_page === null)}
+          pageNote={pageNote(contract.extraction_meta?.text_layer, contract.rates)}
           vendors={vendors}
           suggested={{
             name: read.vendor_name ?? contract.title,

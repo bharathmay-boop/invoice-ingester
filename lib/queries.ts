@@ -303,6 +303,8 @@ export type ContractDetail = {
   blob_url: string;
   content_type: string;
   extraction: unknown;
+  /** Model, tokens, cost, and since #135 whether the document has text. */
+  extraction_meta: { text_layer?: boolean } | null;
   other_terms: { kind: string; label: string; summary: string; page: number | null; quote: string | null }[];
   // The period a reviewer confirmed. Null before review, and for contracts
   // reviewed before it was stored, which are covered by their rates alone.
@@ -314,7 +316,7 @@ export type ContractDetail = {
 export async function getContract(id: string) {
   const rows = await query<ContractDetail>(
     `SELECT c.id, c.title, c.status, c.failure, v.name AS vendor_name,
-            c.blob_url, c.content_type, c.extraction, c.other_terms, c.created_at,
+            c.blob_url, c.content_type, c.extraction, c.extraction_meta, c.other_terms, c.created_at,
             c.effective_from, c.effective_to
      FROM contract c LEFT JOIN vendor v ON v.id = c.vendor_id
      WHERE c.id = $1`,
