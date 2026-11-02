@@ -75,5 +75,42 @@ export function locate(pages: PageText[], quote: string | null): Located {
     if (partial) return { page: partial.page, scanned: false };
   }
 
+  // A table row the model tidied up: cells joined with pipes or tabs that
+  // never appear in the document (#136). Found by its cells, in order.
+  const row = findRow(pages, quote);
+  if (row !== null) return { page: row, scanned: false };
+
   return { page: null, scanned: false };
+}
+
+/** How far apart two neighbouring cells of one row can be, in characters. */
+const CELL_GAP = 60;
+
+/**
+ * The page a reformatted table row is on: every cell present, in the order
+ * quoted, each starting within CELL_GAP of where the last ended, so the cells
+ * have to share a row rather than merely appear on the same page. Needs two
+ * or more cells and at least 12 characters between them, the same floor as a
+ * whole quote, below which a match is not worth trusting.
+ */
+function findRow(pages: PageText[], quote: string): number | null {
+  const cells = quote
+    .split(/\s*\|\s*|\t+|\s{2,}/)
+    .map(flatten)
+    .filter(Boolean);
+  if (cells.length < 2 || cells.join("").length < 12) return null;
+
+  for (const { page, flat } of pages) {
+    for (let start = flat.indexOf(cells[0]); start !== -1; start = flat.indexOf(cells[0], start + 1)) {
+      let end = start + cells[0].length;
+      const inRow = cells.slice(1).every((cell) => {
+        const at = flat.indexOf(cell, end);
+        if (at === -1 || at - end > CELL_GAP) return false;
+        end = at + cell.length;
+        return true;
+      });
+      if (inRow) return page;
+    }
+  }
+  return null;
 }

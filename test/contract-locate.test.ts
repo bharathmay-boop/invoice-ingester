@@ -54,3 +54,29 @@ test("a scan with no text layer says so rather than failing to find things", () 
 test("a rate with no quote is not a failure", () => {
   assert.deepEqual(locate(pages, null), { page: null, scanned: false });
 });
+
+// A table row comes back tidied up with pipes between its cells, which never
+// appear in the document, so not one rate on a text PDF got a page (#136).
+// The cells are matched in order, close together, instead.
+/** A page as readPages leaves it: lower case, whitespace collapsed. */
+const page = (n: number, text: string): PageText => ({ page: n, flat: text.toLowerCase().replace(/\s+/g, " ").trim() });
+const ROW = "Item Unit Rate\nA4 Paper 80 GSM White    ream    245.00\nStapler HD-45    pc    165.00";
+
+test("a table row quoted with pipes still finds its page", () => {
+  const pages = [page(1, "Supply agreement between the parties"), page(2, ROW)];
+  assert.equal(locate(pages, "A4 Paper 80 GSM White | ream | 245.00").page, 2);
+  assert.equal(locate(pages, "Stapler HD-45\tpc\t165.00").page, 2);
+});
+
+test("cells from different rows, or a figure the row does not have, find nothing", () => {
+  const far = page(1, `A4 Paper 80 GSM White ream ${"x".repeat(300)} 245.00`);
+  assert.equal(locate([far], "A4 Paper 80 GSM White | ream | 245.00").page, null);
+  assert.equal(locate([page(1, ROW)], "A4 Paper 80 GSM White | ream | 999.00").page, null);
+  assert.equal(locate([page(1, ROW)], "ream | 245.00").page, null, "too little to be sure of");
+});
+
+test("a row found on a page numbered 0 is still found", () => {
+  // Pages count from 1 today; the check is on null so it never depends on it.
+  // Kimi K2.5 review on #286.
+  assert.equal(locate([page(0, ROW)], "A4 Paper 80 GSM White | ream | 245.00").page, 0);
+});
