@@ -4,7 +4,7 @@ import { isValidSession, sessionCookie } from "@/lib/auth.ts";
 import { listContracts } from "@/lib/queries.ts";
 import { formatDate } from "@/lib/format.ts";
 import { Empty, Page } from "../ui.tsx";
-import { ContractDropzone } from "./contract-dropzone.tsx";
+import { Button } from "@/components/ui/button";
 import { LINK_FEEDBACK, rowEnter, STATE_ENTER } from "@/lib/reveal.ts";
 import { DemoNotice } from "../demo-notice.tsx";
 
@@ -32,9 +32,10 @@ export default async function Contracts() {
       lead="What you agreed to pay, so an invoice can be checked against it."
     >
       {signedIn && (
-        <div className="mb-8">
-          <ContractDropzone />
-        </div>
+        // Contracts are uploaded on the one upload page, next to invoices (#150).
+        <Button asChild className="mb-8">
+          <Link href="/upload?kind=contract">Upload contracts</Link>
+        </Button>
       )}
 
       {contracts.length === 0 ? (
