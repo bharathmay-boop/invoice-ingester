@@ -307,6 +307,16 @@ test("a read that found no rates writes nothing and says so", { skip }, async ()
   assert.equal((await ratesOf(id)).length, 0);
 });
 
+// The empty case returned before the delete, so a re-read that found no rates
+// left the previous read's rates live while the stored extraction showed none
+// (#111).
+test("a re-read that finds no rates takes the old ones away", { skip }, async () => {
+  const id = await queued("re-read to nothing");
+  assert.equal(await queue!.recordRates(id, "INR", [RATE]), 1);
+  assert.equal(await queue!.recordRates(id, "INR", []), 0);
+  assert.equal((await ratesOf(id)).length, 0);
+});
+
 // contract.pages existed from migration 020 and nothing wrote it, so the page
 // count the limit is checked against was thrown away (#116).
 test("the page count is kept with the contract", { skip }, async () => {

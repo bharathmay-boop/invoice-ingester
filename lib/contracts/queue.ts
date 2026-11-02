@@ -166,8 +166,8 @@ export async function recordRates(
     quote: string | null;
   }[],
 ): Promise<number> {
-  if (!rates.length) return 0;
-
+  // No early return for an empty read: the delete below still has to run, or
+  // a re-read that found nothing leaves the last read's rates live (#111).
   const { pool } = await import("../db.ts");
   const { normalize } = await import("../items/normalize.ts");
   const { findMatch, getThresholds } = await import("../items/match.ts");
