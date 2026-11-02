@@ -59,10 +59,12 @@ export async function getVendor(id: string): Promise<VendorDetail | null> {
                '[]'::jsonb
              )
              FROM (
-               SELECT inner.currency, sum(inner.total)::float AS spend
-               FROM invoice inner
-               WHERE inner.vendor_id = v.id AND inner.status = 'confirmed'
-               GROUP BY inner.currency
+               -- "own", not "inner": INNER is reserved in Postgres, and the
+               -- query failed on every call (#295).
+               SELECT own.currency, sum(own.total)::float AS spend
+               FROM invoice own
+               WHERE own.vendor_id = v.id AND own.status = 'confirmed'
+               GROUP BY own.currency
              ) grouped
            ) AS spends
     FROM vendor v
