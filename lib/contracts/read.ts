@@ -8,7 +8,7 @@ import {
   isTimeout,
   MAX_OUTPUT_TOKENS,
 } from "../extract/failure.ts";
-import { MODEL_SETTING } from "../extract/provider.ts";
+import { MODEL_SETTING, SECRET_FOR } from "../extract/provider.ts";
 import { DEFAULT_OPENROUTER_MODEL, resolveModel } from "../extract/models.ts";
 import { CONTRACT_INSTRUCTIONS } from "./prompt.ts";
 import { contractJsonSchema, parseContractResponse, type ContractParseResult } from "./schema.ts";
@@ -39,11 +39,17 @@ export type ContractRead = ContractParseResult & { meta?: unknown };
  * get to decide anything, and a second try inside the same invocation spends
  * the same sixty seconds twice.
  */
+/**
+ * Contracts are always read through OpenRouter, whichever provider reads
+ * invoices, so this is the key a contract upload has to find saved (#114).
+ */
+export const CONTRACT_READER_SECRET = SECRET_FOR.openrouter;
+
 export async function readContract(source: {
   data: string;
   contentType: string;
 }): Promise<ContractRead> {
-  const key = await getSecret("openrouter_api_key");
+  const key = await getSecret(CONTRACT_READER_SECRET);
   if (!key) {
     return {
       ok: false,
