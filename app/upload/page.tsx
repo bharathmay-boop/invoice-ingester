@@ -48,8 +48,6 @@ export default async function Upload({
       )}
 
       <UploadTabs
-        // Keyed on the kind, so a change of address opens that tab.
-        key={uploadKind(kind)}
         initial={uploadKind(kind)}
         explicit={kind !== undefined}
         invoices={

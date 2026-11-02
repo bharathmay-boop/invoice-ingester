@@ -28,6 +28,14 @@ export function UploadTabs({
 }) {
   const router = useRouter();
   const [kind, setKind] = useState<UploadKind>(initial);
+  // Follows the address when it changes (the remembered tab below, or back and
+  // forward), set during render rather than by remounting, which would take
+  // keyboard focus off the tab just chosen (Kimi K2.5 review on #291).
+  const [shown, setShown] = useState(initial);
+  if (initial !== shown) {
+    setShown(initial);
+    setKind(initial);
+  }
 
   // Only when the address did not say: open the tab chosen last time by
   // putting it in the address, so the server renders it as chosen.

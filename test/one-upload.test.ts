@@ -27,3 +27,9 @@ test("the contracts page lists contracts and sends uploads to the one page", () 
   assert.ok(!contracts.includes("<ContractDropzone"), "a second upload surface is back");
   assert.match(contracts, /href="\/upload\?kind=contract"/);
 });
+
+test("switching tabs does not remount them, so keyboard focus stays", () => {
+  // Kimi K2.5 review on #291: a key on the kind remounted the tabs each time.
+  const page = readFileSync("app/upload/page.tsx", "utf8");
+  assert.ok(!/<UploadTabs[^>]*\bkey=/.test(page), "the tabs are keyed again");
+});
