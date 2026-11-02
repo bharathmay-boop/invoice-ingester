@@ -20,6 +20,8 @@ test("the upload page offers both, and each goes to its own pipeline", () => {
   assert.match(page, /<Dropzone\b/);
   assert.match(page, /<ContractDropzone\b/);
   assert.match(page, /<UploadTabs\b/);
+  // A screen reader hears what the tabs choose between (Kimi K2.5, #291).
+  assert.match(readFileSync("app/upload/upload-tabs.tsx", "utf8"), /<TabsList aria-label=/);
 });
 
 test("the contracts page lists contracts and sends uploads to the one page", () => {

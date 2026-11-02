@@ -63,7 +63,7 @@ export function UploadTabs({
 
   return (
     <Tabs value={kind} onValueChange={choose} className="mt-8">
-      <TabsList>
+      <TabsList aria-label="Kind of document to upload">
         <TabsTrigger value="invoice">Invoices</TabsTrigger>
         <TabsTrigger value="contract">Contracts</TabsTrigger>
       </TabsList>
