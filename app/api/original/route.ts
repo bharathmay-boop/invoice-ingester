@@ -1,8 +1,9 @@
 import { get } from "@vercel/blob";
-import { NextResponse, type NextRequest } from "next/server.js";
+import { after, NextResponse, type NextRequest } from "next/server.js";
 import { cookies } from "next/headers";
 import { canRead, sessionCookie } from "@/lib/auth.ts";
 import { query } from "@/lib/db.ts";
+import { track } from "@/lib/analytics/server.ts";
 
 export const runtime = "nodejs";
 
@@ -41,6 +42,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Could not read the stored file." }, { status: 502 });
   }
 
+  // Opening the source is the whole trust mechanism, so it is worth counting (#202).
+  after(() => track("original_opened"));
   return new NextResponse(stored.stream, {
     headers: {
       "content-type": stored.blob.contentType ?? "application/octet-stream",
