@@ -25,7 +25,7 @@ export default async function Finding({ params }: { params: Promise<{ lineId: st
   const finding = await getFinding(lineId);
   if (!finding) notFound();
   after(() =>
-    track("finding_opened", { tag: finding.variance_tag, impact: impactBucket(finding.variance_impact) }),
+    track("finding_opened", { tag: finding.variance_tag ?? "none", impact: impactBucket(finding.variance_impact) }),
   );
 
   const tag = TAGS[finding.variance_tag as Tag];

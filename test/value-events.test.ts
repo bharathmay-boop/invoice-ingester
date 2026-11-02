@@ -46,3 +46,9 @@ test("each event fires from the screen it belongs to, after the response", () =>
   const items = readFileSync("app/items/page.tsx", "utf8");
   assert.ok(!/search_performed"[^)]*\bq\b/.test(items), "the search term is sent");
 });
+
+test("an opened finding always sends a tag code, even for an untagged line", () => {
+  // getFinding does not filter on the tag, so a typed-in address can open a
+  // line with none. Kimi K2.5 review on #297.
+  assert.match(readFileSync("app/findings/[lineId]/page.tsx", "utf8"), /tag: finding\.variance_tag \?\? "none"/);
+});
